@@ -1,0 +1,2 @@
+Implementacao inicial da V21.0: Meta-Aprendizado, SQLite e Auto-Poda.
+Arquivos criados como base de integracao.

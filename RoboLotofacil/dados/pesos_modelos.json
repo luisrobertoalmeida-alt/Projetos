@@ -1,0 +1,9 @@
+{
+  "estatistico": 0.141043,
+  "markov": 0.137976,
+  "bayesiano": 0.142336,
+  "tendencia": 0.148622,
+  "neural_leve": 0.14103,
+  "cobertura": 0.144826,
+  "pares_trios": 0.144166
+}

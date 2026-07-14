@@ -1,0 +1,9 @@
+
+Sugestão de novos botões na interface:
+
+[Benchmark V19.1]
+[Relatório Estabilidade]
+[Telemetria]
+[Limpar Cache]
+
+Cada botão deve chamar os módulos v19_1_*.

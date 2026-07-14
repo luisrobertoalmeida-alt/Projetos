@@ -1,0 +1,1 @@
+V19.0 adiciona uma camada unificada (pipeline_v19) que centraliza Meta Otimizador, IA Adaptativa, Meta-Ensemble, Monte Carlo e Auditor Científico.

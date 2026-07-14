@@ -1,0 +1,9 @@
+
+RoboLotofacil V21.5 Integrada
+
+Adicionado:
+- Meta Competitivo
+- Monte Carlo Científico
+- Walk-Forward Profissional
+
+Versão de integração inicial para evolução da V21.4.

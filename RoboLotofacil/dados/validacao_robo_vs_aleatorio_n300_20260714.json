@@ -1,0 +1,2102 @@
+[
+  {
+    "concurso_idx": 3410,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.276666666666667,
+    "media_ale": 9.018166666666662
+  },
+  {
+    "concurso_idx": 3411,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.26,
+    "media_ale": 8.965999999999998
+  },
+  {
+    "concurso_idx": 3412,
+    "melhor_robo": 11,
+    "media_robo": 9.2,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 8.980333333333336
+  },
+  {
+    "concurso_idx": 3413,
+    "melhor_robo": 12,
+    "media_robo": 9.3,
+    "melhor_ale": 11.21,
+    "media_ale": 8.968499999999997
+  },
+  {
+    "concurso_idx": 3414,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.176666666666666,
+    "media_ale": 8.988333333333333
+  },
+  {
+    "concurso_idx": 3415,
+    "melhor_robo": 11,
+    "media_robo": 9.4,
+    "melhor_ale": 11.223333333333333,
+    "media_ale": 9.000333333333337
+  },
+  {
+    "concurso_idx": 3416,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 8.988333333333337
+  },
+  {
+    "concurso_idx": 3417,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.196666666666667,
+    "media_ale": 8.998166666666675
+  },
+  {
+    "concurso_idx": 3418,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.24,
+    "media_ale": 9.000500000000002
+  },
+  {
+    "concurso_idx": 3419,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.173333333333334,
+    "media_ale": 8.988000000000007
+  },
+  {
+    "concurso_idx": 3420,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.23,
+    "media_ale": 9.01
+  },
+  {
+    "concurso_idx": 3421,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 8.993666666666668
+  },
+  {
+    "concurso_idx": 3422,
+    "melhor_robo": 11,
+    "media_robo": 9.25,
+    "melhor_ale": 11.19,
+    "media_ale": 8.971500000000006
+  },
+  {
+    "concurso_idx": 3423,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.183333333333334,
+    "media_ale": 8.984000000000002
+  },
+  {
+    "concurso_idx": 3424,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.25,
+    "media_ale": 8.994333333333332
+  },
+  {
+    "concurso_idx": 3425,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.21,
+    "media_ale": 9.028499999999987
+  },
+  {
+    "concurso_idx": 3426,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.23,
+    "media_ale": 9.007833333333329
+  },
+  {
+    "concurso_idx": 3427,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.3,
+    "media_ale": 8.982000000000006
+  },
+  {
+    "concurso_idx": 3428,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 8.998666666666667
+  },
+  {
+    "concurso_idx": 3429,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.17,
+    "media_ale": 8.989500000000003
+  },
+  {
+    "concurso_idx": 3430,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.273333333333333,
+    "media_ale": 8.989333333333331
+  },
+  {
+    "concurso_idx": 3431,
+    "melhor_robo": 11,
+    "media_robo": 9.2,
+    "melhor_ale": 11.173333333333334,
+    "media_ale": 9.008
+  },
+  {
+    "concurso_idx": 3432,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 8.977666666666671
+  },
+  {
+    "concurso_idx": 3433,
+    "melhor_robo": 11,
+    "media_robo": 9.4,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 9.016500000000006
+  },
+  {
+    "concurso_idx": 3434,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 9.021333333333336
+  },
+  {
+    "concurso_idx": 3435,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.22,
+    "media_ale": 8.984
+  },
+  {
+    "concurso_idx": 3436,
+    "melhor_robo": 11,
+    "media_robo": 9.2,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 9.017166666666668
+  },
+  {
+    "concurso_idx": 3437,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.276666666666667,
+    "media_ale": 9.000833333333333
+  },
+  {
+    "concurso_idx": 3438,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.153333333333334,
+    "media_ale": 8.98566666666667
+  },
+  {
+    "concurso_idx": 3439,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 9.020166666666666
+  },
+  {
+    "concurso_idx": 3440,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.026666666666666
+  },
+  {
+    "concurso_idx": 3441,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.26,
+    "media_ale": 9.003000000000002
+  },
+  {
+    "concurso_idx": 3442,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.226666666666667,
+    "media_ale": 9.001166666666661
+  },
+  {
+    "concurso_idx": 3443,
+    "melhor_robo": 13,
+    "media_robo": 9.1,
+    "melhor_ale": 11.19,
+    "media_ale": 8.999666666666664
+  },
+  {
+    "concurso_idx": 3444,
+    "melhor_robo": 12,
+    "media_robo": 9.2,
+    "melhor_ale": 11.23,
+    "media_ale": 9.017500000000005
+  },
+  {
+    "concurso_idx": 3445,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.203333333333333,
+    "media_ale": 9.002166666666657
+  },
+  {
+    "concurso_idx": 3446,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.005333333333331
+  },
+  {
+    "concurso_idx": 3447,
+    "melhor_robo": 10,
+    "media_robo": 8.95,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 8.99633333333333
+  },
+  {
+    "concurso_idx": 3448,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.203333333333333,
+    "media_ale": 9.008833333333332
+  },
+  {
+    "concurso_idx": 3449,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.22,
+    "media_ale": 9.014500000000002
+  },
+  {
+    "concurso_idx": 3450,
+    "melhor_robo": 11,
+    "media_robo": 9.2,
+    "melhor_ale": 11.263333333333334,
+    "media_ale": 9.01116666666667
+  },
+  {
+    "concurso_idx": 3451,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.236666666666666,
+    "media_ale": 9.005333333333327
+  },
+  {
+    "concurso_idx": 3452,
+    "melhor_robo": 12,
+    "media_robo": 8.85,
+    "melhor_ale": 11.27,
+    "media_ale": 9.001833333333332
+  },
+  {
+    "concurso_idx": 3453,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 8.991499999999995
+  },
+  {
+    "concurso_idx": 3454,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 9.000666666666667
+  },
+  {
+    "concurso_idx": 3455,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.19,
+    "media_ale": 8.972333333333328
+  },
+  {
+    "concurso_idx": 3456,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 8.978166666666665
+  },
+  {
+    "concurso_idx": 3457,
+    "melhor_robo": 13,
+    "media_robo": 8.9,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 9.002333333333338
+  },
+  {
+    "concurso_idx": 3458,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.203333333333333,
+    "media_ale": 9.001833333333337
+  },
+  {
+    "concurso_idx": 3459,
+    "melhor_robo": 12,
+    "media_robo": 8.85,
+    "melhor_ale": 11.27,
+    "media_ale": 9.000333333333334
+  },
+  {
+    "concurso_idx": 3460,
+    "melhor_robo": 11,
+    "media_robo": 9.4,
+    "melhor_ale": 11.273333333333333,
+    "media_ale": 9.02683333333334
+  },
+  {
+    "concurso_idx": 3461,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.28,
+    "media_ale": 9.021
+  },
+  {
+    "concurso_idx": 3462,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.266666666666667,
+    "media_ale": 9.028666666666672
+  },
+  {
+    "concurso_idx": 3463,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 8.995166666666666
+  },
+  {
+    "concurso_idx": 3464,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 9.0215
+  },
+  {
+    "concurso_idx": 3465,
+    "melhor_robo": 13,
+    "media_robo": 9.0,
+    "melhor_ale": 11.266666666666667,
+    "media_ale": 8.997666666666666
+  },
+  {
+    "concurso_idx": 3466,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.26,
+    "media_ale": 9.008833333333339
+  },
+  {
+    "concurso_idx": 3467,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.186666666666667,
+    "media_ale": 8.996499999999997
+  },
+  {
+    "concurso_idx": 3468,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.002666666666663
+  },
+  {
+    "concurso_idx": 3469,
+    "melhor_robo": 13,
+    "media_robo": 9.05,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.027166666666666
+  },
+  {
+    "concurso_idx": 3470,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.146666666666667,
+    "media_ale": 8.981166666666669
+  },
+  {
+    "concurso_idx": 3471,
+    "melhor_robo": 11,
+    "media_robo": 9.25,
+    "melhor_ale": 11.236666666666666,
+    "media_ale": 9.013166666666669
+  },
+  {
+    "concurso_idx": 3472,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 9.007166666666665
+  },
+  {
+    "concurso_idx": 3473,
+    "melhor_robo": 11,
+    "media_robo": 9.2,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 8.991499999999991
+  },
+  {
+    "concurso_idx": 3474,
+    "melhor_robo": 11,
+    "media_robo": 8.65,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 8.988000000000003
+  },
+  {
+    "concurso_idx": 3475,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 8.980166666666666
+  },
+  {
+    "concurso_idx": 3476,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.22,
+    "media_ale": 9.011500000000002
+  },
+  {
+    "concurso_idx": 3477,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 8.988666666666678
+  },
+  {
+    "concurso_idx": 3478,
+    "melhor_robo": 12,
+    "media_robo": 8.75,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 8.99416666666666
+  },
+  {
+    "concurso_idx": 3479,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.286666666666667,
+    "media_ale": 9.010166666666665
+  },
+  {
+    "concurso_idx": 3480,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.203333333333333,
+    "media_ale": 9.00516666666666
+  },
+  {
+    "concurso_idx": 3481,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 9.007666666666664
+  },
+  {
+    "concurso_idx": 3482,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.21,
+    "media_ale": 8.995833333333326
+  },
+  {
+    "concurso_idx": 3483,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.176666666666666,
+    "media_ale": 8.998500000000002
+  },
+  {
+    "concurso_idx": 3484,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.193333333333333,
+    "media_ale": 8.998666666666667
+  },
+  {
+    "concurso_idx": 3485,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.25,
+    "media_ale": 9.02966666666666
+  },
+  {
+    "concurso_idx": 3486,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.28,
+    "media_ale": 8.997333333333343
+  },
+  {
+    "concurso_idx": 3487,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 9.019166666666658
+  },
+  {
+    "concurso_idx": 3488,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.23,
+    "media_ale": 9.00383333333333
+  },
+  {
+    "concurso_idx": 3489,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.263333333333334,
+    "media_ale": 9.018166666666662
+  },
+  {
+    "concurso_idx": 3490,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.15,
+    "media_ale": 8.975833333333334
+  },
+  {
+    "concurso_idx": 3491,
+    "melhor_robo": 13,
+    "media_robo": 9.0,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.020666666666667
+  },
+  {
+    "concurso_idx": 3492,
+    "melhor_robo": 10,
+    "media_robo": 8.8,
+    "melhor_ale": 11.25,
+    "media_ale": 9.017333333333335
+  },
+  {
+    "concurso_idx": 3493,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 8.97066666666667
+  },
+  {
+    "concurso_idx": 3494,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 9.005166666666664
+  },
+  {
+    "concurso_idx": 3495,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 9.018333333333343
+  },
+  {
+    "concurso_idx": 3496,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.25,
+    "media_ale": 9.002166666666671
+  },
+  {
+    "concurso_idx": 3497,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.0
+  },
+  {
+    "concurso_idx": 3498,
+    "melhor_robo": 12,
+    "media_robo": 9.15,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 9.031666666666672
+  },
+  {
+    "concurso_idx": 3499,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.283333333333333,
+    "media_ale": 9.022333333333334
+  },
+  {
+    "concurso_idx": 3500,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.293333333333333,
+    "media_ale": 8.991166666666667
+  },
+  {
+    "concurso_idx": 3501,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.193333333333333,
+    "media_ale": 9.002333333333336
+  },
+  {
+    "concurso_idx": 3502,
+    "melhor_robo": 10,
+    "media_robo": 8.85,
+    "melhor_ale": 11.196666666666667,
+    "media_ale": 9.01116666666667
+  },
+  {
+    "concurso_idx": 3503,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.273333333333333,
+    "media_ale": 9.001000000000001
+  },
+  {
+    "concurso_idx": 3504,
+    "melhor_robo": 11,
+    "media_robo": 9.35,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 9.011833333333339
+  },
+  {
+    "concurso_idx": 3505,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.22,
+    "media_ale": 8.995000000000001
+  },
+  {
+    "concurso_idx": 3506,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 9.017833333333323
+  },
+  {
+    "concurso_idx": 3507,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 8.994999999999997
+  },
+  {
+    "concurso_idx": 3508,
+    "melhor_robo": 11,
+    "media_robo": 9.25,
+    "melhor_ale": 11.22,
+    "media_ale": 8.976333333333324
+  },
+  {
+    "concurso_idx": 3509,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.19,
+    "media_ale": 9.004333333333337
+  },
+  {
+    "concurso_idx": 3510,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 9.007499999999997
+  },
+  {
+    "concurso_idx": 3511,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.22,
+    "media_ale": 8.979166666666666
+  },
+  {
+    "concurso_idx": 3512,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.31,
+    "media_ale": 9.023499999999999
+  },
+  {
+    "concurso_idx": 3513,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.146666666666667,
+    "media_ale": 8.9955
+  },
+  {
+    "concurso_idx": 3514,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.29,
+    "media_ale": 8.998499999999995
+  },
+  {
+    "concurso_idx": 3515,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.173333333333334,
+    "media_ale": 9.016833333333329
+  },
+  {
+    "concurso_idx": 3516,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.223333333333333,
+    "media_ale": 8.971499999999997
+  },
+  {
+    "concurso_idx": 3517,
+    "melhor_robo": 12,
+    "media_robo": 9.2,
+    "melhor_ale": 11.31,
+    "media_ale": 8.985000000000007
+  },
+  {
+    "concurso_idx": 3518,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 8.992500000000007
+  },
+  {
+    "concurso_idx": 3519,
+    "melhor_robo": 11,
+    "media_robo": 9.2,
+    "melhor_ale": 11.186666666666667,
+    "media_ale": 8.99133333333333
+  },
+  {
+    "concurso_idx": 3520,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.2,
+    "media_ale": 8.994333333333337
+  },
+  {
+    "concurso_idx": 3521,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 8.988166666666665
+  },
+  {
+    "concurso_idx": 3522,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 9.03
+  },
+  {
+    "concurso_idx": 3523,
+    "melhor_robo": 11,
+    "media_robo": 8.7,
+    "melhor_ale": 11.276666666666667,
+    "media_ale": 8.989166666666668
+  },
+  {
+    "concurso_idx": 3524,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.223333333333333,
+    "media_ale": 8.984499999999997
+  },
+  {
+    "concurso_idx": 3525,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.336666666666666,
+    "media_ale": 9.016833333333336
+  },
+  {
+    "concurso_idx": 3526,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.23,
+    "media_ale": 9.008999999999993
+  },
+  {
+    "concurso_idx": 3527,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.25,
+    "media_ale": 9.030499999999996
+  },
+  {
+    "concurso_idx": 3528,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.276666666666667,
+    "media_ale": 9.006666666666671
+  },
+  {
+    "concurso_idx": 3529,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.23,
+    "media_ale": 9.003000000000007
+  },
+  {
+    "concurso_idx": 3530,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.2,
+    "media_ale": 8.985499999999996
+  },
+  {
+    "concurso_idx": 3531,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.186666666666667,
+    "media_ale": 9.000166666666674
+  },
+  {
+    "concurso_idx": 3532,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.166666666666666,
+    "media_ale": 9.010166666666674
+  },
+  {
+    "concurso_idx": 3533,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 9.00933333333333
+  },
+  {
+    "concurso_idx": 3534,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.263333333333334,
+    "media_ale": 9.00433333333334
+  },
+  {
+    "concurso_idx": 3535,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.007666666666664
+  },
+  {
+    "concurso_idx": 3536,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.226666666666667,
+    "media_ale": 8.996833333333328
+  },
+  {
+    "concurso_idx": 3537,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 8.987666666666676
+  },
+  {
+    "concurso_idx": 3538,
+    "melhor_robo": 11,
+    "media_robo": 8.65,
+    "melhor_ale": 11.25,
+    "media_ale": 8.997499999999992
+  },
+  {
+    "concurso_idx": 3539,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 9.010833333333334
+  },
+  {
+    "concurso_idx": 3540,
+    "melhor_robo": 10,
+    "media_robo": 8.85,
+    "melhor_ale": 11.22,
+    "media_ale": 8.9985
+  },
+  {
+    "concurso_idx": 3541,
+    "melhor_robo": 12,
+    "media_robo": 9.2,
+    "melhor_ale": 11.203333333333333,
+    "media_ale": 8.989666666666666
+  },
+  {
+    "concurso_idx": 3542,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.32,
+    "media_ale": 9.015166666666671
+  },
+  {
+    "concurso_idx": 3543,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.186666666666667,
+    "media_ale": 8.979499999999994
+  },
+  {
+    "concurso_idx": 3544,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.273333333333333,
+    "media_ale": 9.03150000000001
+  },
+  {
+    "concurso_idx": 3545,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.193333333333333,
+    "media_ale": 9.010333333333334
+  },
+  {
+    "concurso_idx": 3546,
+    "melhor_robo": 13,
+    "media_robo": 9.1,
+    "melhor_ale": 11.17,
+    "media_ale": 8.992333333333336
+  },
+  {
+    "concurso_idx": 3547,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.263333333333334,
+    "media_ale": 8.97516666666667
+  },
+  {
+    "concurso_idx": 3548,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 8.992333333333331
+  },
+  {
+    "concurso_idx": 3549,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.176666666666666,
+    "media_ale": 8.997833333333334
+  },
+  {
+    "concurso_idx": 3550,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 8.98683333333333
+  },
+  {
+    "concurso_idx": 3551,
+    "melhor_robo": 11,
+    "media_robo": 9.4,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 9.018666666666661
+  },
+  {
+    "concurso_idx": 3552,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.2,
+    "media_ale": 8.984666666666659
+  },
+  {
+    "concurso_idx": 3553,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.306666666666667,
+    "media_ale": 8.989
+  },
+  {
+    "concurso_idx": 3554,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.25,
+    "media_ale": 8.979166666666668
+  },
+  {
+    "concurso_idx": 3555,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.25,
+    "media_ale": 9.00666666666667
+  },
+  {
+    "concurso_idx": 3556,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.27,
+    "media_ale": 9.028166666666674
+  },
+  {
+    "concurso_idx": 3557,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 8.984833333333336
+  },
+  {
+    "concurso_idx": 3558,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.005499999999994
+  },
+  {
+    "concurso_idx": 3559,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.25,
+    "media_ale": 9.003000000000002
+  },
+  {
+    "concurso_idx": 3560,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.19,
+    "media_ale": 9.025499999999994
+  },
+  {
+    "concurso_idx": 3561,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.196666666666667,
+    "media_ale": 8.996666666666675
+  },
+  {
+    "concurso_idx": 3562,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.283333333333333,
+    "media_ale": 9.03416666666666
+  },
+  {
+    "concurso_idx": 3563,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 8.97049999999999
+  },
+  {
+    "concurso_idx": 3564,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.236666666666666,
+    "media_ale": 9.02866666666666
+  },
+  {
+    "concurso_idx": 3565,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.21,
+    "media_ale": 8.993000000000006
+  },
+  {
+    "concurso_idx": 3566,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.2,
+    "media_ale": 8.990499999999997
+  },
+  {
+    "concurso_idx": 3567,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 9.0045
+  },
+  {
+    "concurso_idx": 3568,
+    "melhor_robo": 11,
+    "media_robo": 8.75,
+    "melhor_ale": 11.306666666666667,
+    "media_ale": 9.028166666666673
+  },
+  {
+    "concurso_idx": 3569,
+    "melhor_robo": 11,
+    "media_robo": 8.75,
+    "melhor_ale": 11.29,
+    "media_ale": 9.008000000000003
+  },
+  {
+    "concurso_idx": 3570,
+    "melhor_robo": 12,
+    "media_robo": 8.85,
+    "melhor_ale": 11.266666666666667,
+    "media_ale": 9.002999999999998
+  },
+  {
+    "concurso_idx": 3571,
+    "melhor_robo": 12,
+    "media_robo": 8.75,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 9.006499999999997
+  },
+  {
+    "concurso_idx": 3572,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 8.996500000000005
+  },
+  {
+    "concurso_idx": 3573,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.24,
+    "media_ale": 8.998999999999999
+  },
+  {
+    "concurso_idx": 3574,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.26,
+    "media_ale": 9.015666666666661
+  },
+  {
+    "concurso_idx": 3575,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.33,
+    "media_ale": 9.040999999999997
+  },
+  {
+    "concurso_idx": 3576,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 8.995833333333335
+  },
+  {
+    "concurso_idx": 3577,
+    "melhor_robo": 11,
+    "media_robo": 8.75,
+    "melhor_ale": 11.186666666666667,
+    "media_ale": 8.989833333333335
+  },
+  {
+    "concurso_idx": 3578,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.28,
+    "media_ale": 8.997000000000005
+  },
+  {
+    "concurso_idx": 3579,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.183333333333334,
+    "media_ale": 8.97383333333334
+  },
+  {
+    "concurso_idx": 3580,
+    "melhor_robo": 10,
+    "media_robo": 8.95,
+    "melhor_ale": 11.28,
+    "media_ale": 9.000666666666671
+  },
+  {
+    "concurso_idx": 3581,
+    "melhor_robo": 10,
+    "media_robo": 9.05,
+    "melhor_ale": 11.296666666666667,
+    "media_ale": 9.011000000000003
+  },
+  {
+    "concurso_idx": 3582,
+    "melhor_robo": 10,
+    "media_robo": 8.6,
+    "melhor_ale": 11.193333333333333,
+    "media_ale": 9.006000000000002
+  },
+  {
+    "concurso_idx": 3583,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.283333333333333,
+    "media_ale": 9.024999999999993
+  },
+  {
+    "concurso_idx": 3584,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.26,
+    "media_ale": 9.003999999999998
+  },
+  {
+    "concurso_idx": 3585,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.266666666666667,
+    "media_ale": 9.018499999999998
+  },
+  {
+    "concurso_idx": 3586,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.183333333333334,
+    "media_ale": 8.983500000000005
+  },
+  {
+    "concurso_idx": 3587,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.273333333333333,
+    "media_ale": 9.011333333333331
+  },
+  {
+    "concurso_idx": 3588,
+    "melhor_robo": 12,
+    "media_robo": 8.85,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 8.975000000000003
+  },
+  {
+    "concurso_idx": 3589,
+    "melhor_robo": 11,
+    "media_robo": 9.4,
+    "melhor_ale": 11.286666666666667,
+    "media_ale": 8.990999999999996
+  },
+  {
+    "concurso_idx": 3590,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.226666666666667,
+    "media_ale": 8.983499999999996
+  },
+  {
+    "concurso_idx": 3591,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 9.007833333333327
+  },
+  {
+    "concurso_idx": 3592,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.193333333333333,
+    "media_ale": 9.004666666666667
+  },
+  {
+    "concurso_idx": 3593,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.23,
+    "media_ale": 8.976833333333335
+  },
+  {
+    "concurso_idx": 3594,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.263333333333334,
+    "media_ale": 9.014666666666672
+  },
+  {
+    "concurso_idx": 3595,
+    "melhor_robo": 11,
+    "media_robo": 9.35,
+    "melhor_ale": 11.193333333333333,
+    "media_ale": 8.985166666666673
+  },
+  {
+    "concurso_idx": 3596,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 8.994166666666661
+  },
+  {
+    "concurso_idx": 3597,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.25,
+    "media_ale": 9.011666666666654
+  },
+  {
+    "concurso_idx": 3598,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 8.988166666666663
+  },
+  {
+    "concurso_idx": 3599,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 8.980999999999998
+  },
+  {
+    "concurso_idx": 3600,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.273333333333333,
+    "media_ale": 9.02516666666667
+  },
+  {
+    "concurso_idx": 3601,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 8.985666666666665
+  },
+  {
+    "concurso_idx": 3602,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 9.002500000000003
+  },
+  {
+    "concurso_idx": 3603,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.26,
+    "media_ale": 8.993333333333325
+  },
+  {
+    "concurso_idx": 3604,
+    "melhor_robo": 12,
+    "media_robo": 9.2,
+    "melhor_ale": 11.226666666666667,
+    "media_ale": 9.001166666666668
+  },
+  {
+    "concurso_idx": 3605,
+    "melhor_robo": 13,
+    "media_robo": 9.25,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 8.977999999999998
+  },
+  {
+    "concurso_idx": 3606,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.22,
+    "media_ale": 8.992666666666667
+  },
+  {
+    "concurso_idx": 3607,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.226666666666667,
+    "media_ale": 9.004666666666663
+  },
+  {
+    "concurso_idx": 3608,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.21,
+    "media_ale": 8.965166666666663
+  },
+  {
+    "concurso_idx": 3609,
+    "melhor_robo": 12,
+    "media_robo": 8.75,
+    "melhor_ale": 11.21,
+    "media_ale": 8.978833333333334
+  },
+  {
+    "concurso_idx": 3610,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.176666666666666,
+    "media_ale": 8.99099999999999
+  },
+  {
+    "concurso_idx": 3611,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 8.989999999999993
+  },
+  {
+    "concurso_idx": 3612,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 8.989166666666666
+  },
+  {
+    "concurso_idx": 3613,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.23,
+    "media_ale": 8.990500000000006
+  },
+  {
+    "concurso_idx": 3614,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.21,
+    "media_ale": 8.984166666666663
+  },
+  {
+    "concurso_idx": 3615,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.236666666666666,
+    "media_ale": 8.998500000000002
+  },
+  {
+    "concurso_idx": 3616,
+    "melhor_robo": 10,
+    "media_robo": 9.2,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 8.99366666666668
+  },
+  {
+    "concurso_idx": 3617,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.24,
+    "media_ale": 8.993833333333333
+  },
+  {
+    "concurso_idx": 3618,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 8.989166666666668
+  },
+  {
+    "concurso_idx": 3619,
+    "melhor_robo": 11,
+    "media_robo": 9.2,
+    "melhor_ale": 11.27,
+    "media_ale": 9.024000000000006
+  },
+  {
+    "concurso_idx": 3620,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.3,
+    "media_ale": 9.011333333333338
+  },
+  {
+    "concurso_idx": 3621,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.23,
+    "media_ale": 9.003666666666664
+  },
+  {
+    "concurso_idx": 3622,
+    "melhor_robo": 10,
+    "media_robo": 8.8,
+    "melhor_ale": 11.24,
+    "media_ale": 8.977500000000003
+  },
+  {
+    "concurso_idx": 3623,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 8.988666666666662
+  },
+  {
+    "concurso_idx": 3624,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.226666666666667,
+    "media_ale": 9.002666666666665
+  },
+  {
+    "concurso_idx": 3625,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.193333333333333,
+    "media_ale": 8.980999999999995
+  },
+  {
+    "concurso_idx": 3626,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.276666666666667,
+    "media_ale": 8.985833333333337
+  },
+  {
+    "concurso_idx": 3627,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.25,
+    "media_ale": 8.9835
+  },
+  {
+    "concurso_idx": 3628,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.176666666666666,
+    "media_ale": 9.008999999999999
+  },
+  {
+    "concurso_idx": 3629,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.29,
+    "media_ale": 9.011666666666668
+  },
+  {
+    "concurso_idx": 3630,
+    "melhor_robo": 13,
+    "media_robo": 9.0,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 8.993499999999996
+  },
+  {
+    "concurso_idx": 3631,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.263333333333334,
+    "media_ale": 9.01
+  },
+  {
+    "concurso_idx": 3632,
+    "melhor_robo": 10,
+    "media_robo": 8.95,
+    "melhor_ale": 11.273333333333333,
+    "media_ale": 8.98716666666666
+  },
+  {
+    "concurso_idx": 3633,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.23,
+    "media_ale": 9.008666666666661
+  },
+  {
+    "concurso_idx": 3634,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.23,
+    "media_ale": 9.018333333333333
+  },
+  {
+    "concurso_idx": 3635,
+    "melhor_robo": 10,
+    "media_robo": 9.15,
+    "melhor_ale": 11.27,
+    "media_ale": 9.00083333333333
+  },
+  {
+    "concurso_idx": 3636,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.166666666666666,
+    "media_ale": 8.992666666666668
+  },
+  {
+    "concurso_idx": 3637,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.21,
+    "media_ale": 8.980166666666662
+  },
+  {
+    "concurso_idx": 3638,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 8.98516666666667
+  },
+  {
+    "concurso_idx": 3639,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.126666666666667,
+    "media_ale": 8.980499999999997
+  },
+  {
+    "concurso_idx": 3640,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 8.999666666666666
+  },
+  {
+    "concurso_idx": 3641,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.123333333333333,
+    "media_ale": 9.01016666666667
+  },
+  {
+    "concurso_idx": 3642,
+    "melhor_robo": 12,
+    "media_robo": 9.15,
+    "melhor_ale": 11.266666666666667,
+    "media_ale": 9.016500000000004
+  },
+  {
+    "concurso_idx": 3643,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.146666666666667,
+    "media_ale": 8.965833333333336
+  },
+  {
+    "concurso_idx": 3644,
+    "melhor_robo": 10,
+    "media_robo": 9.1,
+    "melhor_ale": 11.346666666666666,
+    "media_ale": 9.000500000000013
+  },
+  {
+    "concurso_idx": 3645,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 8.990499999999994
+  },
+  {
+    "concurso_idx": 3646,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.24,
+    "media_ale": 9.012666666666668
+  },
+  {
+    "concurso_idx": 3647,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.223333333333333,
+    "media_ale": 8.995333333333337
+  },
+  {
+    "concurso_idx": 3648,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.236666666666666,
+    "media_ale": 8.995500000000003
+  },
+  {
+    "concurso_idx": 3649,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.223333333333333,
+    "media_ale": 9.000833333333333
+  },
+  {
+    "concurso_idx": 3650,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.24,
+    "media_ale": 9.00666666666666
+  },
+  {
+    "concurso_idx": 3651,
+    "melhor_robo": 11,
+    "media_robo": 8.7,
+    "melhor_ale": 11.24,
+    "media_ale": 8.979000000000006
+  },
+  {
+    "concurso_idx": 3652,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.21,
+    "media_ale": 8.995333333333331
+  },
+  {
+    "concurso_idx": 3653,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.15,
+    "media_ale": 8.969499999999995
+  },
+  {
+    "concurso_idx": 3654,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.286666666666667,
+    "media_ale": 9.004333333333332
+  },
+  {
+    "concurso_idx": 3655,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.23,
+    "media_ale": 9.021833333333332
+  },
+  {
+    "concurso_idx": 3656,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.27,
+    "media_ale": 9.017999999999994
+  },
+  {
+    "concurso_idx": 3657,
+    "melhor_robo": 12,
+    "media_robo": 8.9,
+    "melhor_ale": 11.24,
+    "media_ale": 9.01766666666667
+  },
+  {
+    "concurso_idx": 3658,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.183333333333334,
+    "media_ale": 8.971333333333336
+  },
+  {
+    "concurso_idx": 3659,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 8.999833333333335
+  },
+  {
+    "concurso_idx": 3660,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.256666666666666,
+    "media_ale": 9.006666666666677
+  },
+  {
+    "concurso_idx": 3661,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 9.004666666666658
+  },
+  {
+    "concurso_idx": 3662,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.163333333333334,
+    "media_ale": 8.988499999999995
+  },
+  {
+    "concurso_idx": 3663,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.25,
+    "media_ale": 9.034166666666668
+  },
+  {
+    "concurso_idx": 3664,
+    "melhor_robo": 12,
+    "media_robo": 9.2,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 8.99483333333333
+  },
+  {
+    "concurso_idx": 3665,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.276666666666667,
+    "media_ale": 8.989833333333332
+  },
+  {
+    "concurso_idx": 3666,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 9.006166666666667
+  },
+  {
+    "concurso_idx": 3667,
+    "melhor_robo": 10,
+    "media_robo": 8.85,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 8.999166666666671
+  },
+  {
+    "concurso_idx": 3668,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.263333333333334,
+    "media_ale": 8.981500000000008
+  },
+  {
+    "concurso_idx": 3669,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.19,
+    "media_ale": 8.977833333333331
+  },
+  {
+    "concurso_idx": 3670,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.236666666666666,
+    "media_ale": 9.017499999999997
+  },
+  {
+    "concurso_idx": 3671,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.203333333333333,
+    "media_ale": 8.99516666666667
+  },
+  {
+    "concurso_idx": 3672,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.143333333333333,
+    "media_ale": 8.978499999999999
+  },
+  {
+    "concurso_idx": 3673,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.226666666666667,
+    "media_ale": 8.999000000000006
+  },
+  {
+    "concurso_idx": 3674,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.266666666666667,
+    "media_ale": 9.026499999999999
+  },
+  {
+    "concurso_idx": 3675,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.22,
+    "media_ale": 9.011500000000007
+  },
+  {
+    "concurso_idx": 3676,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.23,
+    "media_ale": 8.972500000000002
+  },
+  {
+    "concurso_idx": 3677,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.166666666666666,
+    "media_ale": 8.994000000000002
+  },
+  {
+    "concurso_idx": 3678,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.24,
+    "media_ale": 8.996000000000004
+  },
+  {
+    "concurso_idx": 3679,
+    "melhor_robo": 11,
+    "media_robo": 9.05,
+    "melhor_ale": 11.303333333333333,
+    "media_ale": 9.036999999999999
+  },
+  {
+    "concurso_idx": 3680,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 9.016166666666669
+  },
+  {
+    "concurso_idx": 3681,
+    "melhor_robo": 12,
+    "media_robo": 8.85,
+    "melhor_ale": 11.216666666666667,
+    "media_ale": 8.98966666666667
+  },
+  {
+    "concurso_idx": 3682,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.176666666666666,
+    "media_ale": 9.004500000000004
+  },
+  {
+    "concurso_idx": 3683,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 9.019499999999994
+  },
+  {
+    "concurso_idx": 3684,
+    "melhor_robo": 11,
+    "media_robo": 9.15,
+    "melhor_ale": 11.173333333333334,
+    "media_ale": 9.024166666666668
+  },
+  {
+    "concurso_idx": 3685,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.223333333333333,
+    "media_ale": 8.996666666666668
+  },
+  {
+    "concurso_idx": 3686,
+    "melhor_robo": 11,
+    "media_robo": 9.35,
+    "melhor_ale": 11.27,
+    "media_ale": 9.0095
+  },
+  {
+    "concurso_idx": 3687,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.25,
+    "media_ale": 8.991666666666667
+  },
+  {
+    "concurso_idx": 3688,
+    "melhor_robo": 12,
+    "media_robo": 8.7,
+    "melhor_ale": 11.206666666666667,
+    "media_ale": 9.013166666666677
+  },
+  {
+    "concurso_idx": 3689,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.22,
+    "media_ale": 8.9985
+  },
+  {
+    "concurso_idx": 3690,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.15,
+    "media_ale": 8.975333333333335
+  },
+  {
+    "concurso_idx": 3691,
+    "melhor_robo": 12,
+    "media_robo": 9.05,
+    "melhor_ale": 11.24,
+    "media_ale": 9.009833333333335
+  },
+  {
+    "concurso_idx": 3692,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.246666666666666,
+    "media_ale": 9.036666666666669
+  },
+  {
+    "concurso_idx": 3693,
+    "melhor_robo": 12,
+    "media_robo": 9.1,
+    "melhor_ale": 11.21,
+    "media_ale": 8.99233333333333
+  },
+  {
+    "concurso_idx": 3694,
+    "melhor_robo": 11,
+    "media_robo": 8.85,
+    "melhor_ale": 11.133333333333333,
+    "media_ale": 8.984166666666672
+  },
+  {
+    "concurso_idx": 3695,
+    "melhor_robo": 11,
+    "media_robo": 8.8,
+    "melhor_ale": 11.213333333333333,
+    "media_ale": 8.996666666666673
+  },
+  {
+    "concurso_idx": 3696,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.253333333333334,
+    "media_ale": 9.037833333333333
+  },
+  {
+    "concurso_idx": 3697,
+    "melhor_robo": 12,
+    "media_robo": 8.95,
+    "melhor_ale": 11.16,
+    "media_ale": 8.984833333333333
+  },
+  {
+    "concurso_idx": 3698,
+    "melhor_robo": 11,
+    "media_robo": 9.1,
+    "melhor_ale": 11.31,
+    "media_ale": 9.001333333333331
+  },
+  {
+    "concurso_idx": 3699,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 9.002999999999998
+  },
+  {
+    "concurso_idx": 3700,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.25,
+    "media_ale": 9.013833333333332
+  },
+  {
+    "concurso_idx": 3701,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.223333333333333,
+    "media_ale": 9.011833333333332
+  },
+  {
+    "concurso_idx": 3702,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.276666666666667,
+    "media_ale": 8.987000000000002
+  },
+  {
+    "concurso_idx": 3703,
+    "melhor_robo": 11,
+    "media_robo": 8.95,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 8.993999999999998
+  },
+  {
+    "concurso_idx": 3704,
+    "melhor_robo": 10,
+    "media_robo": 9.05,
+    "melhor_ale": 11.236666666666666,
+    "media_ale": 9.015500000000005
+  },
+  {
+    "concurso_idx": 3705,
+    "melhor_robo": 11,
+    "media_robo": 9.0,
+    "melhor_ale": 11.243333333333334,
+    "media_ale": 9.020333333333332
+  },
+  {
+    "concurso_idx": 3706,
+    "melhor_robo": 11,
+    "media_robo": 8.9,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 8.998499999999995
+  },
+  {
+    "concurso_idx": 3707,
+    "melhor_robo": 12,
+    "media_robo": 9.0,
+    "melhor_ale": 11.32,
+    "media_ale": 8.988666666666676
+  },
+  {
+    "concurso_idx": 3708,
+    "melhor_robo": 11,
+    "media_robo": 9.3,
+    "melhor_ale": 11.233333333333333,
+    "media_ale": 8.998333333333319
+  },
+  {
+    "concurso_idx": 3709,
+    "melhor_robo": 11,
+    "media_robo": 9.35,
+    "melhor_ale": 11.21,
+    "media_ale": 8.982000000000001
+  }
+]

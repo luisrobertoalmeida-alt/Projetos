@@ -1,0 +1,71 @@
+# ============================================================
+# RoboLotofacilPro — Configuração Central V22
+# ============================================================
+# Edite este arquivo para ajustar parâmetros sem tocar no código.
+# Após editar, reinicie o robô para aplicar as mudanças.
+
+versao: "V22.0"
+
+# ── Parâmetros do algoritmo genético ────────────────────────
+genetico:
+  geracoes: 88          # G validado: 88 (57.1% vitória em 5 rodadas)
+  populacao: 79         # P validado
+  janela: 188           # Janela histórica ativa
+  passos_calibracao: 70 # Padrão de validação
+  jogos: 20             # Jogos por pacote
+  modo_turbo: false     # Desligado — usar histórico completo
+  seed: null            # null = aleatório verdadeiro
+
+# ── Critério de aprovação de configurações ──────────────────
+validacao:
+  limiar_vitoria: 0.55         # Taxa mínima para aprovar (55%)
+  passos_calibracao: 70        # Passos para calibração oficial
+  rodadas_minimas: 2           # Mínimo de rodadas para confirmar
+  p_valor_alvo: 0.05           # Significância estatística alvo
+
+# ── Pipeline automático ─────────────────────────────────────
+pipeline:
+  ativo: true
+  etapas:
+    - atualizar_historico    # → iniciar_atualizar_resultados
+    - aprendizado_continuo   # → iniciar_aprendizado_continuo
+    - calibracao             # → iniciar_calibracao_vs_aleatorio
+    - walkforward            # → iniciar_walkforward
+    - backtest_v11           # → iniciar_backtest_cientifico_v11
+    - relatorio_cientifico   # implementado no pipeline
+    - gerar_jogos            # → iniciar_gerar_jogos
+  passos_aprendizado: 50       # Passos do aprendizado automático
+  passos_walkforward: 20       # Passo do walk-forward
+
+# ── Dashboard ───────────────────────────────────────────────
+dashboard:
+  max_historico_versoes: 20    # Versões a exibir no ranking
+  janela_tendencia: 30         # Concursos para calcular tendência
+  atualizar_automatico: true
+
+# ── Relatório científico ────────────────────────────────────
+relatorio:
+  gerar_automatico: true
+  incluir_graficos: true
+  formato: "txt"               # txt | json | ambos
+  salvar_historico: true
+
+# ── Plugins ─────────────────────────────────────────────────
+plugins:
+  diretorio: "plugins"
+  ativos:
+    - frequencia
+    - impopularidade
+    - ensemble
+  desativados:
+    - rede_neural               # experimental
+
+# ── Caminhos ────────────────────────────────────────────────
+caminhos:
+  base: "~/Documents/RoboLotofacilPro"
+  dados: "dados"
+  backup: "backup"
+  exportacoes: "exportacoes"
+  logs: "logs"
+  plugins: "plugins"
+  relatorios: "relatorios_v22"

@@ -1,0 +1,1 @@
+V17.4 engenharia: decay aprendizado, split temporal, ranking ensemble, diversidade genetica.
