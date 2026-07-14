@@ -92,6 +92,15 @@ funções estatísticas de `v20_6_bootstrap.py`/`v21_5_melhorias_cientificas.py`
 Ver também `VALIDACAO_MAPA_GP_2026-07-14.md`: a alegação "G=88 validado
 (57,1% em 5 rodadas)" do `config_v22.yaml` **também não se sustentou** em
 n=300 — G=16/P=40, G=35/P=70 e G=88/P=79 são estatisticamente
-equivalentes entre si. Recomendação: usar G=16/P=40 (mais barato, sem
-perda de qualidade esperada).
+equivalentes entre si (confirmado com TOST pareado, não só ausência de
+significância). Recomendação: usar G=16/P=40 (mais barato, sem perda de
+qualidade esperada).
+
+**⚠️ `mapear_vale_gp()` (botão "🗺️ Mapa G×P") NÃO faz teste estatístico
+formal** — decide "vale confirmado" por um score heurístico comparado a
+uma margem fixa de 2%, sem p-value/IC/tamanho de efeito. Rodar com mais
+`passos` não corrige isso. Tratar como triagem exploratória rápida
+apenas; qualquer configuração candidata encontrada ali precisa passar
+por `validacao_gp.py` + `reanalise_pareada.py` antes de virar produção.
+
 Reexecutar `validacao_escala_real.py` reproduz este resultado.

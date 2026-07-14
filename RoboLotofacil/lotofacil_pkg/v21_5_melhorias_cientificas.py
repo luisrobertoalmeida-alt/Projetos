@@ -327,6 +327,21 @@ def mapear_vale_gp(
     Roda cada configuração de G/P em `passos` backtest steps e coleta
     média do melhor jogo, 12+% e vantagem vs aleatório.
 
+    ⚠️ TRIAGEM EXPLORATÓRIA — NÃO É VALIDAÇÃO ESTATÍSTICA.
+    `vale_confirmado` compara um "score" composto heurístico entre
+    extremos e intermediários com uma margem fixa arbitrária de 2%
+    (`score_extremos > score_medio * 1.02`) — sem p-value, sem intervalo
+    de confiança, sem tamanho de efeito. Aumentar `passos` reduz o ruído
+    da média, mas NÃO torna essa comparação estatisticamente válida: uma
+    margem de 2% sem teste de significância não distingue sinal de ruído
+    amostral, o mesmo problema que já invalidou o "G=88 validado" do
+    `config_v22.yaml` (ver VALIDACAO_MAPA_GP_2026-07-14.md no repositório
+    do robô). Para decidir configuração de produção, use os scripts
+    `validacao_gp.py` + `reanalise_pareada.py` (Cohen's d pareado, teste
+    sign-flip, bootstrap pareado, TOST com margem definida a priori) —
+    este método aqui serve só para explorar rapidamente o espaço G×P e
+    decidir quais pontos vale a pena levar para validação de verdade.
+
     Args:
         concursos:  histórico completo de concursos.
         fn_gerar:   função(hist, ger, pop, qtd) -> list[list[int]]
@@ -342,7 +357,8 @@ def mapear_vale_gp(
         Dict com:
           - resultados: lista de dicts por configuração G/P
           - melhor_config: configuração com maior score
-          - vale_confirmado: bool — True se G intermediário realmente piora
+          - vale_confirmado: bool — heurística, ver aviso acima (não é
+            teste estatístico)
           - analise: texto descritivo
     """
     numeros = list(range(1, 26))
@@ -452,20 +468,28 @@ def mapear_vale_gp(
         score_extremos = 0.0
 
     # Análise textual
+    _AVISO_TRIAGEM = (
+        "⚠️ Isto é triagem heurística (score composto vs. margem fixa de 2%), "
+        "não validação estatística — sem p-value, IC ou tamanho de efeito. "
+        "Antes de mudar a configuração de produção, valide a comparação "
+        "final com validacao_gp.py + reanalise_pareada.py (Cohen's d "
+        "pareado, sign-flip, bootstrap pareado, TOST)."
+    )
     if vale_confirmado:
         analise = (
-            f"Vale G×P CONFIRMADO: os extremos (G{g_vals[0]} e G{g_vals[-1]}) "
+            f"Vale G×P CONFIRMADO (heurística): os extremos (G{g_vals[0]} e G{g_vals[-1]}) "
             f"têm score médio {score_extremos:.3f} vs intermediários {score_medio:.3f}. "
-            f"O algoritmo genético sofre de 'zona morta' nesses G/P intermediários — "
+            f"Hipótese: o algoritmo genético sofre de 'zona morta' nesses G/P intermediários — "
             f"população grande o suficiente para criar pressão seletiva mas gerações "
-            f"insuficientes para convergir. Recomenda-se usar G≤{g_vals[0]} ou G≥{g_vals[-1]}."
+            f"insuficientes para convergir. Candidatos a testar de verdade: G≤{g_vals[0]} ou G≥{g_vals[-1]}. "
+            f"{_AVISO_TRIAGEM}"
         )
     else:
         analise = (
-            f"Vale G×P NÃO CONFIRMADO com {passos} passos. "
+            f"Vale G×P NÃO CONFIRMADO (heurística) com {passos} passos. "
             f"A diferença entre extremos e intermediários pode ser variância estatística. "
-            f"Melhor configuração encontrada: {melhor['nome']} (score={melhor['score']:.3f}). "
-            f"Aumente passos ou repita para confirmar."
+            f"Melhor configuração encontrada nesta triagem: {melhor['nome']} (score={melhor['score']:.3f}). "
+            f"{_AVISO_TRIAGEM}"
         )
 
     return {

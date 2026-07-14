@@ -515,7 +515,9 @@ class RoboLotofacilUltraApp:
             "🔬 Laboratório":    "Gera apostas no modo Laboratório Inteligente: testa múltiplas configurações e escolhe a melhor.",
             "📊 Backtest":       "Testa o robô em concursos passados e mede a taxa de acertos. (F6)",
             "🤖 BT Automático": "Walk-forward detalhado: gera e confere jogos concurso a concurso, salva relatório.",
-            "🗺️ Mapa G×P":     "Mapeia o espaço G×P para identificar o vale estrutural e encontrar a melhor configuração de gerações/população.",
+            "🗺️ Mapa G×P":     "Triagem RÁPIDA e heurística do espaço G×P (sem teste estatístico formal — score composto vs. margem fixa). "
+                                "Use só para explorar candidatos; a decisão de configuração de produção deve passar por validacao_gp.py + "
+                                "reanalise_pareada.py (Cohen's d pareado, TOST) — ver VALIDACAO_MAPA_GP_2026-07-14.md.",
             "🎯 Dual-Perfil":   "Gera pacote misto: 70% otimizado para 11+/12+ e 30% exploração para 13+ (Pares/Trios + Cobertura).",
             "⚡ Otimizador V22": "Gera múltiplos pacotes candidatos e seleciona automaticamente o com maior % de 11+ na simulação.",
             "🔒 Fechamento":    "Fechamento combinatório: escolhe um pool de dezenas (campo 'Pool Fecht.', 16-20) pelo ranking do "
