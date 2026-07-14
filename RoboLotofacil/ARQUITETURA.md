@@ -28,6 +28,7 @@ a suite de testes completa antes de liberar.
 | `ui.py` | Interface gráfica principal (Tkinter) |
 | `fechamento.py` | Fechamento combinatório de garantia total (wheeling). Botão "🔒 Fechamento" na UI (linha "Operação principal"), campo "Pool Fecht." (16-20). Garantia matemática condicional — ver docstring do módulo e `VALIDACAO_ESCALA_REAL_2026-07-14.md`. |
 | `auditoria_cientifica.py` | Auditoria científica contínua para scripts de validação (`auditoria_experimento`, `corrigir_multiplas_comparacoes`, `consolidar_rodada_experimentos`). Não tem botão de UI (é infraestrutura de validação, não feature de produto) — mesmo status de `v20_6_bootstrap.py`, do qual depende. Ver seção "Decisão de arquitetura" abaixo e `test_auditoria_cientifica.py`. |
+| `execucao_paralela.py` | Execução paralela por PROCESSOS (não threads) do walk-forward para scripts de validação standalone — `ThreadPoolExecutor` não acelera o algoritmo genético (GIL, Python puro); `ProcessPoolExecutor` dá speedup real (medido: 3,77x com 4 processos). Uso restrito a scripts standalone, NÃO à UI. Requisito não-negociável (testado): mesma seed_base ⇒ resultado idêntico entre `modo="processos"` e `modo="sequencial"`. `fn_gerar` precisa ser função top-level (não closure) — ver docstring do módulo. Ver `test_execucao_paralela.py`. |
 
 ## 🟡 MÓDULOS EXPERIMENTAIS (usar com cuidado)
 | Módulo | Status | Observação |
