@@ -12,13 +12,20 @@ Por que Bootstrap?
   - Funciona bem com amostras pequenas (característico de backtests de loteria).
   - É o método padrão quando não se conhece a distribuição subjacente.
 
-Funções exportadas:
+Funções exportadas (amostras independentes):
   bootstrap_media             — IC da média de acertos por reamostragem
   bootstrap_comparacao        — IC da diferença entre dois conjuntos de resultados
   teste_significancia         — p-value bootstrap para H0: delta <= 0
   tamanho_efeito_cohen_d      — Cohen's d entre robô e baseline
   intervalo_confianca_taxa    — IC para taxas (ex.: taxa de 11+ acertos)
   relatorio_inferencial       — consolida todas as métricas em um único dict
+
+Funções exportadas (dados PAREADOS — mesma unidade nos dois conjuntos,
+ex.: mesmos sorteios reais testando duas configurações G/P):
+  cohen_d_pareado             — Cohen's d pareado (d_z) das diferenças
+  teste_significancia_pareado — p-value por permutação sign-flip
+  bootstrap_pareado           — IC bootstrap da diferença pareada
+  tost_equivalencia           — teste de equivalência (TOST) com margem a priori
 
 Notas de design:
   - Todas as funções são puras (sem I/O, sem estado global).
@@ -466,3 +473,188 @@ def salvar_relatorio_inferencial(
     """
     with open(arquivo, "w", encoding="utf-8") as f:
         json.dump(relatorio, f, indent=2, ensure_ascii=False)
+
+
+# =========================================================
+# ESTATÍSTICA PAREADA (V22.1)
+# =========================================================
+# As funções acima (bootstrap_comparacao, teste_significancia,
+# tamanho_efeito_cohen_d) tratam os dois grupos como AMOSTRAS
+# INDEPENDENTES. Use-as quando resultados_a e resultados_b vêm de
+# unidades diferentes (ex.: dois grupos de usuários).
+#
+# Quando os dois conjuntos vêm da MESMA unidade medida duas vezes (ex.:
+# mesmos 300 sorteios reais, testando duas configurações G/P), o desenho
+# é PAREADO — usar as funções independentes acima nesse caso ignora a
+# correlação entre os pares e é metodologicamente incorreto (foi
+# exatamente o erro corrigido em VALIDACAO_MAPA_GP_2026-07-14.md).
+#
+# Use as funções desta seção sempre que resultados_a[i] e resultados_b[i]
+# correspondem à MESMA unidade/sorteio (mesmo índice).
+
+def _diferencas_pareadas(resultados_a: list[dict], resultados_b: list[dict]) -> list[float]:
+    vals_a = _extrair_acertos(resultados_a)
+    vals_b = _extrair_acertos(resultados_b)
+    if len(vals_a) != len(vals_b):
+        raise ValueError(
+            f"resultados_a e resultados_b precisam ter o mesmo tamanho para "
+            f"comparação pareada (recebido: {len(vals_a)} e {len(vals_b)})."
+        )
+    return [a - b for a, b in zip(vals_a, vals_b)]
+
+
+def cohen_d_pareado(resultados_a: list[dict], resultados_b: list[dict]) -> dict[str, Any]:
+    """
+    Cohen's d PAREADO (d_z) entre dois conjuntos medidos nas mesmas
+    unidades: d_z = média(diferenças) / desvio(diferenças).
+
+    Args:
+        resultados_a, resultados_b: listas de dicts com 'acertos', na
+            MESMA ordem/unidade (resultados_a[i] e resultados_b[i] devem
+            se referir ao mesmo sorteio/passo).
+
+    Returns:
+        Dict com cohen_d_pareado, magnitude, média/desvio da diferença, n.
+    """
+    diffs = _diferencas_pareadas(resultados_a, resultados_b)
+    if not diffs:
+        return {"cohen_d_pareado": 0.0, "magnitude": "SEM_DADOS", "media_diferenca": 0.0, "desvio_diferenca": 0.0, "n": 0}
+    media_diff = mean(diffs)
+    dp_diff = stdev(diffs) if len(diffs) >= 2 else 0.0
+    if dp_diff > 0:
+        dz = media_diff / dp_diff
+    else:
+        dz = 0.0 if media_diff == 0 else math.copysign(99.0, media_diff)
+    abs_dz = abs(dz)
+    if abs_dz < 0.2:
+        magnitude = "DESPREZIVEL"
+    elif abs_dz < 0.5:
+        magnitude = "PEQUENO"
+    elif abs_dz < 0.8:
+        magnitude = "MEDIO"
+    else:
+        magnitude = "GRANDE"
+    return {
+        "cohen_d_pareado": round(dz, 4),
+        "magnitude": magnitude,
+        "media_diferenca": round(media_diff, 4),
+        "desvio_diferenca": round(dp_diff, 4),
+        "n": len(diffs),
+    }
+
+
+def teste_significancia_pareado(
+    resultados_a: list[dict],
+    resultados_b: list[dict],
+    n_reamostras: int = 2000,
+    seed: int | None = 42,
+) -> dict[str, Any]:
+    """
+    Teste de permutação por TROCA DE SINAL (sign-flip) para dados
+    pareados — o equivalente correto do teste de permutação por
+    embaralhamento de grupo (teste_significancia) quando as unidades são
+    as mesmas nos dois conjuntos.
+
+    H0: média(a - b) <= 0.  H1 (unilateral): média(a - b) > 0.
+    """
+    diffs = _diferencas_pareadas(resultados_a, resultados_b)
+    if not diffs:
+        return {"p_value": 1.0, "delta_obs": 0.0, "rejeita_h0": False, "nivel_significancia": "SEM_DADOS"}
+
+    obs = mean(diffs)
+    rng = random.Random(seed)
+    contagem_extremos = 0
+    for _ in range(n_reamostras):
+        invertidas = [d if rng.random() < 0.5 else -d for d in diffs]
+        if mean(invertidas) >= obs:
+            contagem_extremos += 1
+
+    p_value = round(contagem_extremos / n_reamostras, 4)
+    rejeita = p_value < 0.05
+    if p_value < 0.01:
+        nivel = "p<0.01"
+    elif p_value < 0.05:
+        nivel = "p<0.05"
+    elif p_value < 0.10:
+        nivel = "p<0.10"
+    else:
+        nivel = "NS"
+
+    return {
+        "p_value": p_value,
+        "delta_obs": round(obs, 4),
+        "rejeita_h0": rejeita,
+        "nivel_significancia": nivel,
+    }
+
+
+def bootstrap_pareado(
+    resultados_a: list[dict],
+    resultados_b: list[dict],
+    n_reamostras: int = 2000,
+    niveis_confianca: tuple[float, ...] = (0.90, 0.95),
+    seed: int | None = 42,
+) -> dict[str, Any]:
+    """
+    IC bootstrap da diferença pareada (a - b): reamostra as DIFERENÇAS
+    com reposição, não os dois grupos separadamente — o correto para
+    dados pareados (ver bootstrap_comparacao() para amostras independentes).
+    """
+    diffs = _diferencas_pareadas(resultados_a, resultados_b)
+    if not diffs:
+        return {"delta_observado": 0.0, "intervalos": {}, "n": 0}
+
+    n = len(diffs)
+    rng = random.Random(seed)
+    medias_boot = [mean(rng.choice(diffs) for _ in range(n)) for _ in range(n_reamostras)]
+
+    intervalos = {}
+    for nivel in niveis_confianca:
+        alfa = 1.0 - nivel
+        p_inf = (alfa / 2.0) * 100
+        p_sup = (1.0 - alfa / 2.0) * 100
+        intervalos[f"{int(nivel * 100)}%"] = {
+            "inferior": round(_percentil(medias_boot, p_inf), 4),
+            "superior": round(_percentil(medias_boot, p_sup), 4),
+        }
+
+    return {
+        "delta_observado": round(mean(diffs), 4),
+        "intervalos": intervalos,
+        "n": n,
+    }
+
+
+def tost_equivalencia(
+    resultados_a: list[dict],
+    resultados_b: list[dict],
+    margem: float,
+    n_reamostras: int = 2000,
+    seed: int | None = 42,
+) -> dict[str, Any]:
+    """
+    TOST (Two One-Sided Tests) via bootstrap pareado: a e b são
+    consideradas equivalentes dentro de ±margem se o IC 90% da diferença
+    (a - b) estiver inteiramente contido em [-margem, +margem].
+
+    Diferente de "não rejeitar H0" (ausência de evidência de diferença),
+    isto é uma afirmação positiva de equivalência prática, condicionada
+    à margem escolhida — a margem deve ser definida a priori, antes de
+    ver os dados, como a menor diferença que teria relevância prática.
+
+    Args:
+        margem: margem de indiferença (mesma unidade dos dados, ex.:
+            pontos de acerto). Não deve ser escolhida depois de ver o
+            resultado.
+    """
+    boot = bootstrap_pareado(resultados_a, resultados_b, n_reamostras=n_reamostras, niveis_confianca=(0.90,), seed=seed)
+    ic90 = boot["intervalos"].get("90%", {"inferior": 0.0, "superior": 0.0})
+    lo, hi = ic90["inferior"], ic90["superior"]
+    equivalente = (lo > -margem) and (hi < margem)
+    return {
+        "equivalente": equivalente,
+        "margem": margem,
+        "ic_90": [lo, hi],
+        "delta_observado": boot["delta_observado"],
+        "n": boot["n"],
+    }

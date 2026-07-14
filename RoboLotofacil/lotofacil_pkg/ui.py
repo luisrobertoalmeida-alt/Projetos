@@ -515,9 +515,10 @@ class RoboLotofacilUltraApp:
             "🔬 Laboratório":    "Gera apostas no modo Laboratório Inteligente: testa múltiplas configurações e escolhe a melhor.",
             "📊 Backtest":       "Testa o robô em concursos passados e mede a taxa de acertos. (F6)",
             "🤖 BT Automático": "Walk-forward detalhado: gera e confere jogos concurso a concurso, salva relatório.",
-            "🗺️ Mapa G×P":     "Triagem RÁPIDA e heurística do espaço G×P (sem teste estatístico formal — score composto vs. margem fixa). "
-                                "Use só para explorar candidatos; a decisão de configuração de produção deve passar por validacao_gp.py + "
-                                "reanalise_pareada.py (Cohen's d pareado, TOST) — ver VALIDACAO_MAPA_GP_2026-07-14.md.",
+            "🗺️ Mapa G×P":     "Mapeia o espaço G×P e testa os extremos contra os intermediários com estatística PAREADA "
+                                "(Cohen's d pareado, sign-flip, TOST) — mesma metodologia de reanalise_pareada.py. "
+                                "'Vale confirmado' agora reflete um teste estatístico real, não heurística. Com poucos "
+                                "passos o resultado pode ficar INCONCLUSIVO — aumente 'Passos BT' para mais poder.",
             "🎯 Dual-Perfil":   "Gera pacote misto: 70% otimizado para 11+/12+ e 30% exploração para 13+ (Pares/Trios + Cobertura).",
             "⚡ Otimizador V22": "Gera múltiplos pacotes candidatos e seleciona automaticamente o com maior % de 11+ na simulação.",
             "🔒 Fechamento":    "Fechamento combinatório: escolhe um pool de dezenas (campo 'Pool Fecht.', 16-20) pelo ranking do "
@@ -4049,11 +4050,24 @@ class RoboLotofacilUltraApp:
                     f"vantagem={melhor.get('vantagem_pct')}%"
                 )
 
-            self.log_async(f"   Vale confirmado : {'✅ SIM' if resultado.get('vale_confirmado') else '❌ NÃO'}")
+            self.log_async(f"   Vale confirmado : {'✅ SIM' if resultado.get('vale_confirmado') else '❌ NÃO'} (teste estatístico pareado, não heurística)")
             self.log_async(f"   Análise         : {resultado.get('analise', '')}")
 
+            comparacoes = resultado.get("comparacoes_pareadas") or []
+            if comparacoes:
+                self.log_async("")
+                self.log_async(f"🔬 Comparações pareadas vs. referência G={resultado.get('referencia_extremo')}:")
+                for c in comparacoes:
+                    if c.get("veredito") == "INCONCLUSIVO" and "cohen_d_pareado" not in c:
+                        self.log_async(f"   G={c['g']}: INCONCLUSIVO ({c.get('motivo', '')})")
+                        continue
+                    self.log_async(
+                        f"   G={c['g']}: {c['veredito']} | d_z={c['cohen_d_pareado']:.3f} ({c.get('magnitude','')}) | "
+                        f"p={c['p_value']:.4f} | IC90%={c['ic_90']} | n={c['n']}"
+                    )
+
             self.log_async("")
-            self.log_async("📊 Ranking completo:")
+            self.log_async("📊 Ranking completo (score heurístico — só triagem, ver Vale confirmado acima para o veredito estatístico):")
             for r in resultado.get("resultados", []):
                 self.log_async(
                     f"   {r['nome']:12s} | score={r['score']:.4f} | "

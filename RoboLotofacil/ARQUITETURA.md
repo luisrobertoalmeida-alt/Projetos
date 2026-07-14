@@ -96,11 +96,16 @@ equivalentes entre si (confirmado com TOST pareado, não só ausência de
 significância). Recomendação: usar G=16/P=40 (mais barato, sem perda de
 qualidade esperada).
 
-**⚠️ `mapear_vale_gp()` (botão "🗺️ Mapa G×P") NÃO faz teste estatístico
-formal** — decide "vale confirmado" por um score heurístico comparado a
-uma margem fixa de 2%, sem p-value/IC/tamanho de efeito. Rodar com mais
-`passos` não corrige isso. Tratar como triagem exploratória rápida
-apenas; qualquer configuração candidata encontrada ali precisa passar
-por `validacao_gp.py` + `reanalise_pareada.py` antes de virar produção.
+**✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
+pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,
+teste de permutação sign-flip e TOST (`v20_6_bootstrap.py`: `cohen_d_pareado`,
+`teste_significancia_pareado`, `tost_equivalencia`), comparando o extremo de
+melhor média contra cada configuração intermediária nos mesmos sorteios reais.
+O "score" heurístico antigo continua existindo só para ranking/triagem rápida
+entre configurações, não decide mais `vale_confirmado`. Vereditos possíveis
+por comparação: `POSSIVEL_VALE` (diferença real, TOST rejeita equivalência),
+`EQUIVALENTE` (TOST confirma equivalência) ou `INCONCLUSIVO` (nem uma coisa
+nem outra — amostra insuficiente, aumentar `passos`). Testes em
+`test_estatistica_pareada.py`.
 
 Reexecutar `validacao_escala_real.py` reproduz este resultado.

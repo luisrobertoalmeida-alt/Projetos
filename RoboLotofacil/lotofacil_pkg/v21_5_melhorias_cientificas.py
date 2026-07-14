@@ -318,29 +318,30 @@ def mapear_vale_gp(
     passos: int = 30,
     qtd_jogos: int = 20,
     pontos_g: list[int] | None = None,
+    margem_equivalencia: float = 0.3,
     status_cb: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """
-    Mapeia o espaço G×P em passos finos para identificar se o 'vale'
-    observado entre G80/P80 e G300/P230 é estrutural ou variância estatística.
+    Mapeia o espaço G×P para identificar se o 'vale' observado entre G
+    baixo/alto e G intermediário é estrutural ou variância estatística.
 
-    Roda cada configuração de G/P em `passos` backtest steps e coleta
-    média do melhor jogo, 12+% e vantagem vs aleatório.
+    Roda cada configuração de G/P em `passos` backtest steps (mesmos
+    sorteios reais para todas as configurações — walk-forward sem
+    vazamento) e testa estatisticamente os extremos contra cada
+    intermediário com estatística PAREADA (Cohen's d pareado, teste de
+    permutação sign-flip, bootstrap pareado, TOST) — as mesmas funções
+    de `v20_6_bootstrap.py` usadas em `reanalise_pareada.py` para validar
+    a decisão de configuração de produção (ver
+    VALIDACAO_MAPA_GP_2026-07-14.md).
 
-    ⚠️ TRIAGEM EXPLORATÓRIA — NÃO É VALIDAÇÃO ESTATÍSTICA.
-    `vale_confirmado` compara um "score" composto heurístico entre
-    extremos e intermediários com uma margem fixa arbitrária de 2%
-    (`score_extremos > score_medio * 1.02`) — sem p-value, sem intervalo
-    de confiança, sem tamanho de efeito. Aumentar `passos` reduz o ruído
-    da média, mas NÃO torna essa comparação estatisticamente válida: uma
-    margem de 2% sem teste de significância não distingue sinal de ruído
-    amostral, o mesmo problema que já invalidou o "G=88 validado" do
-    `config_v22.yaml` (ver VALIDACAO_MAPA_GP_2026-07-14.md no repositório
-    do robô). Para decidir configuração de produção, use os scripts
-    `validacao_gp.py` + `reanalise_pareada.py` (Cohen's d pareado, teste
-    sign-flip, bootstrap pareado, TOST com margem definida a priori) —
-    este método aqui serve só para explorar rapidamente o espaço G×P e
-    decidir quais pontos vale a pena levar para validação de verdade.
+    `vale_confirmado` só é True se pelo menos um intermediário mostrar
+    uma diferença estatisticamente significativa (p<0.05, sign-flip),
+    não-equivalente ao extremo de referência dentro de `margem_equivalencia`
+    (TOST) e com tamanho de efeito pareado de pelo menos "pequeno"
+    (|d_z|>=0.2). Configurações que não atingem esse padrão, mas também
+    não passam no TOST, ficam marcadas como "INCONCLUSIVO" — não force
+    uma conclusão binária quando a amostra não tem poder suficiente para
+    nenhuma das duas alternativas.
 
     Args:
         concursos:  histórico completo de concursos.
@@ -351,16 +352,31 @@ def mapear_vale_gp(
         qtd_jogos:  jogos por pacote.
         pontos_g:   lista de valores de G a testar. Padrão: grade fina
                     entre 80 e 300. P é calculado proporcionalmente.
+        margem_equivalencia: margem do TOST (mesma unidade de "melhor
+                    jogo do pacote", ex.: pontos de acerto). Deve ser
+                    definida a priori — não ajuste depois de ver o
+                    resultado. Padrão 0.3, mesma usada em
+                    reanalise_pareada.py.
         status_cb:  callback de progresso (opcional).
 
     Returns:
         Dict com:
-          - resultados: lista de dicts por configuração G/P
-          - melhor_config: configuração com maior score
-          - vale_confirmado: bool — heurística, ver aviso acima (não é
-            teste estatístico)
+          - resultados: lista de dicts por configuração G/P (inclui o
+            "score" heurístico de triagem, mantido só para ranking rápido)
+          - melhor_config: configuração com maior score heurístico
+          - referencia_extremo: qual extremo (G mínimo ou máximo) foi
+            usado como referência nas comparações pareadas
+          - comparacoes_pareadas: lista de comparações estatísticas
+            (referência vs. cada outra configuração), cada uma com
+            cohen_d_pareado, p_value, tost_equivalente, ic_90 e veredito
+            em {"POSSIVEL_VALE", "EQUIVALENTE", "INCONCLUSIVO"}
+          - vale_confirmado: bool — True apenas se alguma comparação
+            tiver veredito "POSSIVEL_VALE" (teste estatístico real, não
+            heurística)
           - analise: texto descritivo
     """
+    from .v20_6_bootstrap import cohen_d_pareado, teste_significancia_pareado, tost_equivalencia
+
     numeros = list(range(1, 26))
 
     if pontos_g is None:
@@ -371,6 +387,7 @@ def mapear_vale_gp(
     inicio = max(janela, total - passos)
 
     resultados = []
+    linhas_por_g = {}  # g -> {concurso_idx: melhor_robo}, para as comparacoes pareadas
 
     for idx_g, g in enumerate(pontos_g):
         # P proporcional ao G com o mesmo ratio de G300/P230 ≈ 0.767
@@ -381,6 +398,7 @@ def mapear_vale_gp(
             status_cb(f"[{idx_g+1}/{len(pontos_g)}] Mapeando {nome}...")
 
         linhas_cfg = []
+        por_concurso = {}
         for i in range(inicio, total):
             base = concursos[:i]
             real = sorted(concursos[i])
@@ -407,9 +425,12 @@ def mapear_vale_gp(
                 "qtd_12_ale": qtd_12_ale,
                 "vantagem": melhor_robo - melhor_ale,
             })
+            por_concurso[i] = melhor_robo
 
         if not linhas_cfg:
             continue
+
+        linhas_por_g[g] = por_concurso
 
         n = len(linhas_cfg)
         media_melhor = round(mean(r["melhor_robo"] for r in linhas_cfg), 4)
@@ -430,7 +451,8 @@ def mapear_vale_gp(
             "vit_robo": vit_robo,
             "vit_ale": vit_ale,
             "vantagem_pct": vantagem_pct,
-            # score composto para ranking
+            # score composto heurístico — só para ranking/triagem rápida,
+            # não usado para decidir vale_confirmado (ver comparacoes_pareadas)
             "score": round(
                 media_melhor * 1.0
                 + pct_12 * 0.10
@@ -449,61 +471,109 @@ def mapear_vale_gp(
     if not resultados:
         return {"resultados": [], "erro": "Nenhuma configuração executada."}
 
-    # Ordenar por score
+    # Ordenar por score heurístico (só para triagem/ranking rápido)
     resultados_ord = sorted(resultados, key=lambda r: r["score"], reverse=True)
     melhor = resultados_ord[0]
 
-    # Detectar vale: score dos extremos (G80 e G300) vs intermediários
-    scores_por_g = {r["g"]: r["score"] for r in resultados}
-    g_vals = sorted(scores_por_g.keys())
-    if len(g_vals) >= 3:
-        score_min_g = scores_por_g[g_vals[0]]
-        score_max_g = scores_por_g[g_vals[-1]]
-        score_medio = mean(scores_por_g[g] for g in g_vals[1:-1])
-        score_extremos = mean([score_min_g, score_max_g])
-        vale_confirmado = score_extremos > score_medio * 1.02  # 2% de margem
-    else:
-        vale_confirmado = False
-        score_medio = 0.0
-        score_extremos = 0.0
+    # ── Comparações estatísticas PAREADAS: extremo de referência vs. demais ──
+    g_vals = sorted(linhas_por_g.keys())
+    comparacoes_pareadas = []
+    referencia_extremo = None
+
+    if len(g_vals) >= 2:
+        g_min, g_max = g_vals[0], g_vals[-1]
+        media_por_g = {r["g"]: r["media_melhor"] for r in resultados}
+        # referência = o extremo com maior média observada (o "candidato a vencer")
+        referencia_extremo = g_max if media_por_g[g_max] >= media_por_g[g_min] else g_min
+
+        ref_por_concurso = linhas_por_g[referencia_extremo]
+        for g in g_vals:
+            if g == referencia_extremo:
+                continue
+            outro_por_concurso = linhas_por_g[g]
+            indices_comuns = sorted(set(ref_por_concurso) & set(outro_por_concurso))
+            if len(indices_comuns) < 10:
+                comparacoes_pareadas.append({
+                    "g": g, "referencia": referencia_extremo, "n": len(indices_comuns),
+                    "veredito": "INCONCLUSIVO",
+                    "motivo": "menos de 10 passos em comum entre as duas configurações",
+                })
+                continue
+
+            ref_dados = [{"acertos": ref_por_concurso[i]} for i in indices_comuns]
+            outro_dados = [{"acertos": outro_por_concurso[i]} for i in indices_comuns]
+
+            cohen = cohen_d_pareado(ref_dados, outro_dados)
+            sig = teste_significancia_pareado(ref_dados, outro_dados, n_reamostras=3000)
+            tost = tost_equivalencia(ref_dados, outro_dados, margem=margem_equivalencia, n_reamostras=3000)
+
+            if tost["equivalente"]:
+                veredito = "EQUIVALENTE"
+            elif sig["rejeita_h0"] and abs(cohen["cohen_d_pareado"]) >= 0.2 and sig["delta_obs"] > 0:
+                veredito = "POSSIVEL_VALE"
+            else:
+                veredito = "INCONCLUSIVO"
+
+            comparacoes_pareadas.append({
+                "g": g,
+                "referencia": referencia_extremo,
+                "n": len(indices_comuns),
+                "cohen_d_pareado": cohen["cohen_d_pareado"],
+                "magnitude": cohen["magnitude"],
+                "p_value": sig["p_value"],
+                "delta_obs": sig["delta_obs"],
+                "tost_equivalente": tost["equivalente"],
+                "ic_90": tost["ic_90"],
+                "veredito": veredito,
+            })
+
+    vale_confirmado = any(c.get("veredito") == "POSSIVEL_VALE" for c in comparacoes_pareadas)
+    todas_equivalentes = bool(comparacoes_pareadas) and all(
+        c.get("veredito") == "EQUIVALENTE" for c in comparacoes_pareadas
+    )
 
     # Análise textual
-    _AVISO_TRIAGEM = (
-        "⚠️ Isto é triagem heurística (score composto vs. margem fixa de 2%), "
-        "não validação estatística — sem p-value, IC ou tamanho de efeito. "
-        "Antes de mudar a configuração de produção, valide a comparação "
-        "final com validacao_gp.py + reanalise_pareada.py (Cohen's d "
-        "pareado, sign-flip, bootstrap pareado, TOST)."
-    )
     if vale_confirmado:
+        candidatos = [c["g"] for c in comparacoes_pareadas if c["veredito"] == "POSSIVEL_VALE"]
         analise = (
-            f"Vale G×P CONFIRMADO (heurística): os extremos (G{g_vals[0]} e G{g_vals[-1]}) "
-            f"têm score médio {score_extremos:.3f} vs intermediários {score_medio:.3f}. "
-            f"Hipótese: o algoritmo genético sofre de 'zona morta' nesses G/P intermediários — "
-            f"população grande o suficiente para criar pressão seletiva mas gerações "
-            f"insuficientes para convergir. Candidatos a testar de verdade: G≤{g_vals[0]} ou G≥{g_vals[-1]}. "
-            f"{_AVISO_TRIAGEM}"
+            f"Vale G×P POSSÍVEL: G={referencia_extremo} supera estatisticamente "
+            f"(p<0.05, TOST rejeita equivalência, efeito >= pequeno) as configurações "
+            f"G={candidatos} num teste pareado (mesmos {passos} sorteios reais em todas). "
+            f"Recomenda-se validar essa comparação específica com mais passos antes de mudar "
+            f"a configuração de produção — ver reanalise_pareada.py."
+        )
+    elif todas_equivalentes:
+        analise = (
+            f"Vale G×P NÃO CONFIRMADO: TOST (margem=±{margem_equivalencia}) confirma "
+            f"equivalência prática entre G={referencia_extremo} e todas as demais "
+            f"configurações testadas — não apenas ausência de significância. "
+            f"Melhor configuração por score heurístico: {melhor['nome']}, mas qualquer "
+            f"configuração testada tem desempenho estatisticamente equivalente."
         )
     else:
         analise = (
-            f"Vale G×P NÃO CONFIRMADO (heurística) com {passos} passos. "
-            f"A diferença entre extremos e intermediários pode ser variância estatística. "
-            f"Melhor configuração encontrada nesta triagem: {melhor['nome']} (score={melhor['score']:.3f}). "
-            f"{_AVISO_TRIAGEM}"
+            f"Vale G×P INCONCLUSIVO com {passos} passos: nem significância nem "
+            f"equivalência (TOST) foram estabelecidas para todas as comparações — "
+            f"amostra insuficiente para concluir nessa escala. Aumentar `passos` "
+            f"(ideal n>=300, ver VALIDACAO_MAPA_GP_2026-07-14.md) antes de decidir. "
+            f"Melhor configuração por score heurístico nesta triagem: {melhor['nome']} "
+            f"(score={melhor['score']:.3f})."
         )
 
     return {
         "resultados": resultados_ord,
         "melhor_config": melhor,
+        "referencia_extremo": referencia_extremo,
+        "comparacoes_pareadas": comparacoes_pareadas,
         "vale_confirmado": vale_confirmado,
-        "score_extremos": round(score_extremos, 4),
-        "score_intermediarios": round(score_medio, 4),
+        "todas_equivalentes": todas_equivalentes,
         "analise": analise,
         "parametros": {
             "janela": janela,
             "passos": passos,
             "qtd_jogos": qtd_jogos,
             "pontos_g_testados": pontos_g,
+            "margem_equivalencia": margem_equivalencia,
         },
     }
 
