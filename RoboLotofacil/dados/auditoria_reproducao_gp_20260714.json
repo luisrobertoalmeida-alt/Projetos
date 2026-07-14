@@ -1,0 +1,145 @@
+{
+  "nome_rodada": "Reproducao Mapa GxP 2026-07-14 via auditoria_cientifica",
+  "metodo_correcao": "holm",
+  "alpha": 0.05,
+  "n_comparacoes": 4,
+  "comparacoes": [
+    {
+      "nome": "G88/P79 vs Aleatorio",
+      "nome_a": "G88/P79",
+      "nome_b": "Aleatorio",
+      "n": 300,
+      "cohen_d_pareado": 0.1048,
+      "magnitude": "DESPREZIVEL",
+      "p_value_bruto": 0.0367,
+      "delta_observado": 0.0678,
+      "ic_95": {
+        "inferior": -0.0009,
+        "superior": 0.1398
+      },
+      "tost_equivalente": true,
+      "tost_margem": 0.3,
+      "tost_ic_90": [
+        0.0085,
+        0.1304
+      ],
+      "poder_observado": 0.5676,
+      "metadados": {
+        "n_concursos": 300,
+        "range_concursos": "3410-3709",
+        "fonte_dados": "real",
+        "walkforward_sem_vazamento": true
+      },
+      "avisos": [],
+      "p_original": 0.0367,
+      "p_ajustado": 0.1468,
+      "significativo_corrigido": false,
+      "veredito_final": "EQUIVALENTE"
+    },
+    {
+      "nome": "G16/P40 vs Aleatorio",
+      "nome_a": "G16/P40",
+      "nome_b": "Aleatorio",
+      "n": 300,
+      "cohen_d_pareado": 0.0973,
+      "magnitude": "DESPREZIVEL",
+      "p_value_bruto": 0.0477,
+      "delta_observado": 0.0578,
+      "ic_95": {
+        "inferior": -0.0075,
+        "superior": 0.1266
+      },
+      "tost_equivalente": true,
+      "tost_margem": 0.3,
+      "tost_ic_90": [
+        0.0032,
+        0.1155
+      ],
+      "poder_observado": 0.5161,
+      "metadados": {
+        "n_concursos": 300,
+        "range_concursos": "3410-3709",
+        "fonte_dados": "real",
+        "walkforward_sem_vazamento": true
+      },
+      "avisos": [],
+      "p_original": 0.0477,
+      "p_ajustado": 0.1468,
+      "significativo_corrigido": false,
+      "veredito_final": "EQUIVALENTE"
+    },
+    {
+      "nome": "G35/P70 vs Aleatorio",
+      "nome_a": "G35/P70",
+      "nome_b": "Aleatorio",
+      "n": 300,
+      "cohen_d_pareado": 0.0749,
+      "magnitude": "DESPREZIVEL",
+      "p_value_bruto": 0.0933,
+      "delta_observado": 0.0444,
+      "ic_95": {
+        "inferior": -0.0249,
+        "superior": 0.1112
+      },
+      "tost_equivalente": true,
+      "tost_margem": 0.3,
+      "tost_ic_90": [
+        -0.0129,
+        0.1001
+      ],
+      "poder_observado": 0.364,
+      "metadados": {
+        "n_concursos": 300,
+        "range_concursos": "3410-3709",
+        "fonte_dados": "real",
+        "walkforward_sem_vazamento": true
+      },
+      "avisos": [
+        "⚠️ poder=36% < 50%: resultado inconclusivo para o tamanho de efeito observado (d_z=0.075) — amostra pode ser pequena demais para detectar esse efeito, não confirma ausência de diferença."
+      ],
+      "p_original": 0.0933,
+      "p_ajustado": 0.1866,
+      "significativo_corrigido": false,
+      "veredito_final": "EQUIVALENTE"
+    },
+    {
+      "nome": "G88/P79 vs G16/P40",
+      "nome_a": "G88/P79",
+      "nome_b": "G16/P40",
+      "n": 300,
+      "cohen_d_pareado": 0.0116,
+      "magnitude": "DESPREZIVEL",
+      "p_value_bruto": 0.4437,
+      "delta_observado": 0.01,
+      "ic_95": {
+        "inferior": -0.09,
+        "superior": 0.1067
+      },
+      "tost_equivalente": true,
+      "tost_margem": 0.3,
+      "tost_ic_90": [
+        -0.07,
+        0.09
+      ],
+      "poder_observado": 0.0744,
+      "metadados": {
+        "n_concursos": 300,
+        "range_concursos": "3410-3709",
+        "fonte_dados": "real",
+        "walkforward_sem_vazamento": true
+      },
+      "avisos": [
+        "⚠️ poder=7% < 50%: resultado inconclusivo para o tamanho de efeito observado (d_z=0.012) — amostra pode ser pequena demais para detectar esse efeito, não confirma ausência de diferença."
+      ],
+      "p_original": 0.4437,
+      "p_ajustado": 0.4437,
+      "significativo_corrigido": false,
+      "veredito_final": "EQUIVALENTE"
+    }
+  ],
+  "avisos": [
+    "⚠️ poder=36% < 50%: resultado inconclusivo para o tamanho de efeito observado (d_z=0.075) — amostra pode ser pequena demais para detectar esse efeito, não confirma ausência de diferença.",
+    "⚠️ poder=7% < 50%: resultado inconclusivo para o tamanho de efeito observado (d_z=0.012) — amostra pode ser pequena demais para detectar esse efeito, não confirma ausência de diferença."
+  ],
+  "gerado_em": "2026-07-14T18:44:46.163104+00:00"
+}

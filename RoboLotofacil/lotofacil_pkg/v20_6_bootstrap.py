@@ -26,6 +26,8 @@ ex.: mesmos sorteios reais testando duas configurações G/P):
   teste_significancia_pareado — p-value por permutação sign-flip
   bootstrap_pareado           — IC bootstrap da diferença pareada
   tost_equivalencia           — teste de equivalência (TOST) com margem a priori
+  poder_observado_pareado     — poder estatístico (aproximação normal) do d_z observado
+  n_necessario_poder_pareado  — n necessário para atingir poder-alvo num d_z alvo
 
 Notas de design:
   - Todas as funções são puras (sem I/O, sem estado global).
@@ -658,3 +660,59 @@ def tost_equivalencia(
         "delta_observado": boot["delta_observado"],
         "n": boot["n"],
     }
+
+
+def _cdf_normal_padrao(z: float) -> float:
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2)))
+
+
+def poder_observado_pareado(resultados_a: list[dict], resultados_b: list[dict], alpha: float = 0.05) -> dict[str, Any]:
+    """
+    Poder estatístico aproximado (normal) do teste pareado unilateral,
+    dado o d_z e n observados nos dados fornecidos.
+
+    Não confundir com "não achamos diferença ⇒ não há diferença": poder
+    baixo (<50%, convenção comum) significa que, mesmo que exista um
+    efeito pequeno real, esta amostra provavelmente não teria conseguido
+    detectá-lo — o resultado é inconclusivo para esse tamanho de efeito,
+    não uma confirmação de ausência de efeito.
+    """
+    cohen = cohen_d_pareado(resultados_a, resultados_b)
+    n = cohen["n"]
+    dz = cohen["cohen_d_pareado"]
+    if n == 0:
+        return {"poder": 0.0, "n": 0, "cohen_d_pareado": 0.0, "aviso": "Sem dados."}
+
+    z_alpha_map = {0.10: 1.2816, 0.05: 1.645, 0.01: 2.326}
+    z_alpha = z_alpha_map.get(round(alpha, 2), 1.645)
+    ncp = dz * math.sqrt(n)
+    poder = round(_cdf_normal_padrao(ncp - z_alpha), 4)
+
+    aviso = None
+    if poder < 0.50:
+        aviso = (
+            f"⚠️ poder={poder:.0%} < 50%: resultado inconclusivo para o tamanho de "
+            f"efeito observado (d_z={dz:.3f}) — amostra pode ser pequena demais "
+            f"para detectar esse efeito, não confirma ausência de diferença."
+        )
+
+    return {
+        "poder": poder,
+        "n": n,
+        "cohen_d_pareado": dz,
+        "alpha": alpha,
+        "aviso": aviso,
+    }
+
+
+def n_necessario_poder_pareado(dz_alvo: float, poder_alvo: float = 0.80, alpha: float = 0.05) -> int:
+    """
+    n (pareado) necessário para atingir `poder_alvo` detectando um efeito
+    de tamanho `dz_alvo`, teste unilateral a `alpha`.
+    """
+    z_alpha = 1.645 if alpha == 0.05 else 1.96
+    z_beta_map = {0.80: 0.8416, 0.90: 1.2816, 0.95: 1.6449}
+    z_beta = z_beta_map.get(round(poder_alvo, 2), 0.8416)
+    if dz_alvo == 0:
+        return 10**9
+    return math.ceil(((z_alpha + z_beta) / dz_alvo) ** 2)

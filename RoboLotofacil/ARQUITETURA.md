@@ -27,6 +27,7 @@ a suite de testes completa antes de liberar.
 | `v21_6_impopularidade.py` | Estratégia de impopularidade de dezenas |
 | `ui.py` | Interface gráfica principal (Tkinter) |
 | `fechamento.py` | Fechamento combinatório de garantia total (wheeling). Botão "🔒 Fechamento" na UI (linha "Operação principal"), campo "Pool Fecht." (16-20). Garantia matemática condicional — ver docstring do módulo e `VALIDACAO_ESCALA_REAL_2026-07-14.md`. |
+| `auditoria_cientifica.py` | Auditoria científica contínua para scripts de validação (`auditoria_experimento`, `corrigir_multiplas_comparacoes`, `consolidar_rodada_experimentos`). Não tem botão de UI (é infraestrutura de validação, não feature de produto) — mesmo status de `v20_6_bootstrap.py`, do qual depende. Ver seção "Decisão de arquitetura" abaixo e `test_auditoria_cientifica.py`. |
 
 ## 🟡 MÓDULOS EXPERIMENTAIS (usar com cuidado)
 | Módulo | Status | Observação |
@@ -73,6 +74,29 @@ a suite de testes completa antes de liberar.
 cd RoboLotofacil
 python -m unittest discover -s lotofacil_pkg/tests -p "test_*.py" -v
 ```
+
+## 🔬 Auditoria científica contínua — decisão de arquitetura
+
+`auditoria_cientifica.py` existe para que qualquer validação nova (config,
+comparação G/P, feature nova) gere automaticamente o pacote estatístico
+completo — pareado, TOST, correção para múltiplas comparações, poder —
+sem depender de alguém lembrar de pedir revisão manual (foi assim que os
+dois erros do Mapa G×P original passaram despercebidos).
+
+**Decisão: função de uso explícito (`auditoria_experimento` +
+`consolidar_rodada_experimentos`), não classe base/decorator herdado por
+padrão.** Este é um projeto de desenvolvimento solo, orientado a scripts,
+não uma base de código com múltiplos contribuidores e pontos de entrada —
+uma classe base ou decorator não impede ninguém de escrever a análise na
+mão por fora (nada força o uso em Python). O que evita o erro de fato é
+uma função pronta ser mais rápida de chamar do que reimplementar a
+análise — foi a ausência dessa função, não a ausência de "enforcement",
+que causou o erro original.
+
+**Regra:** `dados_a`/`dados_b` de `auditoria_experimento` devem vir de
+concursos reais (`dados/lotofacil_resultados_reais.csv`) para qualquer
+conclusão de mérito — `metadados["fonte_dados"]` deve ser `"real"`;
+sintéticos só para testar mecânica (ex.: paralelo vs. sequencial).
 
 ## 📊 Validação de desempenho vs. aleatório — referência oficial
 
