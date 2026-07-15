@@ -10,6 +10,14 @@ from math import comb
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+# Isola v18_1b_ia_adaptativa/v20_2_poda_inteligente do dados/ real do
+# repositorio durante os testes (ver lotofacil_pkg/tests/__init__.py e
+# ARQUITETURA.md -- 'unittest discover' com caminho de arquivo nao
+# executa esse __init__.py de forma confiavel, entao o isolamento
+# tambem precisa estar aqui, no proprio arquivo de teste).
+import tempfile as _tempfile
+os.environ.setdefault("ROBOLOTOFACIL_DADOS_DIR", _tempfile.mkdtemp(prefix="robolotofacil_testes_"))
+
 from lotofacil_pkg.fechamento import (
     qtd_jogos_fechamento,
     garantia_minima,

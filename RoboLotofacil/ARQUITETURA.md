@@ -44,22 +44,32 @@ a suite de testes completa antes de liberar.
 | `v21_0_meta_aprendizado.py` | Experimental | Não integrado à UI |
 
 ## 🔴 MÓDULOS LEGADOS (candidatos à remoção futura)
+
+**Removidos em 2026-07-15** (confirmado por `grep` em todo o repositório
+— zero referências reais fora de comentários/docstrings — e suíte
+completa rodada depois, sem regressão): `analise_old.py`,
+`v19_0_arquitetura_cientifica.py` (tinha ainda um bug latente: flags
+`meta_otimizador`/`ia_adaptativa`/etc. hardcoded em `True` no dict de
+retorno, nunca setadas para `False` nos `except` — mesma falha silenciosa
+já corrigida em outros módulos; não importa mais, ficava sem efeito por
+o módulo nunca ser chamado), `v18_3_parallel.py` (wrapper genérico de
+`ProcessPoolExecutor`, também sem nenhum uso real — funcionalidade
+superada por `execucao_paralela.py`, que tem garantia de reprodutibilidade
+testada).
+
 | Módulo | Motivo |
 |--------|--------|
-| `analise_old.py` | Substituído pelo analise.py |
-| `v17_4_features.py` | Features da V17, absorvidas pelo núcleo |
-| `v18_1b_ia_adaptativa.py` | Substituído pelos modelos do analise.py |
+| `v17_4_features.py` | ⚠️ Ainda importado por `backtest.py` e `genetico.py` (núcleo) — viola a regra 1 abaixo, não remover sem primeiro migrar esses imports |
+| `v18_1b_ia_adaptativa.py` | ⚠️ Ainda importado por `analise.py` (núcleo) e `backtest.py` — viola a regra 1 abaixo, não remover sem primeiro migrar esses imports |
 | `v18_1c_meta_ensemble.py` | Substituído pelo ensemble do apostas.py |
 | `v18_2_montecarlo.py` | Substituído pelo v21_5_montecarlo_cientifico |
 | `v18_2b_auditor_cientifico.py` | Funcionalidade absorvida pelo backtest.py |
-| `v18_3_parallel.py` | Paralelismo absorvido pelo backtest_massivo |
 | `v18_meta_otimizador.py` | Substituído pelo genético atual |
-| `v19_0_arquitetura_cientifica.py` | Base da V19, absorvida pelo núcleo V20+ |
 | `v19_1_benchmark.py` | Substituído pelo v20_5_validacao_cientifica |
 | `v19_1_cache_inteligente.py` | Cache não utilizado na V21 |
 | `v19_1_estabilidade.py` | Absorvido pelo v20_5 |
 | `v19_1_telemetria.py` | Telemetria não utilizada na V21 |
-| `v20_2_poda_inteligente.py` | Substituído pelo v21_5_auto_poda_full |
+| `v20_2_poda_inteligente.py` | ⚠️ Ainda importado por `backtest.py` e `v21_0_sqlite.py` — viola a regra 1 abaixo, não remover sem primeiro migrar esses imports |
 | `v20_3_ablation.py` | Ablation não integrado à UI |
 | `v20_4_backtest_massivo.py` | Absorvido pelo backtest.py |
 
@@ -75,6 +85,21 @@ a suite de testes completa antes de liberar.
 cd RoboLotofacil
 python -m unittest discover -s lotofacil_pkg/tests -p "test_*.py" -v
 ```
+
+## 🧹 Auditoria estática (pyflakes) — 2026-07-15
+
+Rodado `python -m pyflakes lotofacil_pkg/*.py`: 174 imports não usados
+(a maioria debris de refatorações antigas, sem impacto funcional — não
+recomendado limpar manualmente linha a linha agora) e 32 avisos de outra
+natureza, todos verificados individualmente e confirmados **sem bug
+funcional**: f-strings sem necessidade de interpolação (mensagens
+corretas, só desnecessariamente prefixadas com `f`), variáveis locais
+não usadas, e nomes de módulo re-importados localmente (redundante, não
+quebra nada). Nenhum caso de variável sombreando um import de forma que
+quebrasse o comportamento esperado.
+
+**Sugestão para não acumular mais isso**: adicionar `pyflakes` (ou
+`vulture`) como check de CI/pre-commit.
 
 ## 🔬 Auditoria científica contínua — decisão de arquitetura
 

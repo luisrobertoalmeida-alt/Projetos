@@ -1,9 +1,16 @@
 
 import json
+import os
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent / "dados"
-BASE.mkdir(exist_ok=True)
+# ROBOLOTOFACIL_DADOS_DIR: override usado pela suíte de testes (ver
+# lotofacil_pkg/tests/__init__.py) para isolar os testes do dados/ real
+# do repositório -- checado no momento do import, não depende de qual
+# "cópia" do módulo está em memória (mais robusto que monkeypatch de
+# atributo, que falhou em alguns cenários de setUpClass).
+_DIR_OVERRIDE = os.environ.get("ROBOLOTOFACIL_DADOS_DIR")
+BASE = Path(_DIR_OVERRIDE) if _DIR_OVERRIDE else Path(__file__).resolve().parent.parent / "dados"
+BASE.mkdir(parents=True, exist_ok=True)
 
 ARQ_PESOS = BASE / "pesos_modelos.json"
 ARQ_HIST = BASE / "historico_modelos.json"

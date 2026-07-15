@@ -20,15 +20,16 @@ Estrutura:
   v18_1c_meta_ensemble      — meta-ensemble por cenário
   v18_2_montecarlo          — simulação Monte Carlo e heatmap
   v18_2b_auditor_cientifico — auditoria de overfitting e pesos
-  v18_3_parallel            — execução paralela
-  v19_0_arquitetura_cientifica — pipeline V19 unificado
   v19_1_benchmark           — comparação e ranking de modelos
   v19_1_cache_inteligente   — cache persistente de backtest
   v19_1_estabilidade        — score composto de estabilidade
   v19_1_telemetria          — medição de tempo por etapa
   v20_5_validacao_cientifica — benchmarks e ganho estatístico (z-score)
-  v20_6_bootstrap           — IC bootstrap, Cohen's d, p-value por permutação
+  v20_6_bootstrap           — IC bootstrap, Cohen's d, p-value por permutação, estatística pareada, TOST
   v20_8_walkforward         — walk-forward validation, robustez e overfitting
+  fechamento                — fechamento combinatório de garantia total
+  auditoria_cientifica      — auditoria estatística contínua para validações
+  execucao_paralela         — execução paralela por processos para validações
 
 Uso rápido:
   from lotofacil_pkg.apostas import gerar_apostas

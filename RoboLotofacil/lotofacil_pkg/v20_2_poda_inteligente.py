@@ -19,13 +19,18 @@ Fatores de penalidade:
   PESO_MIN_ABSOLUTO = 0.05   -- nunca zera um modelo completamente
 """
 import json
+import os
 import threading
 from pathlib import Path
 from statistics import mean, stdev
 
 # -- Caminhos ------------------------------------------------------------------
-_BASE = Path(__file__).resolve().parent.parent / "dados"
-_BASE.mkdir(exist_ok=True)
+# ROBOLOTOFACIL_DADOS_DIR: override usado pela suíte de testes (ver
+# lotofacil_pkg/tests/__init__.py) para isolar os testes do dados/ real
+# do repositório -- checado no momento do import.
+_DIR_OVERRIDE = os.environ.get("ROBOLOTOFACIL_DADOS_DIR")
+_BASE = Path(_DIR_OVERRIDE) if _DIR_OVERRIDE else Path(__file__).resolve().parent.parent / "dados"
+_BASE.mkdir(parents=True, exist_ok=True)
 _ARQ_PESOS = _BASE / "pesos_modelos.json"
 _ARQ_HIST  = _BASE / "historico_modelos.json"
 
