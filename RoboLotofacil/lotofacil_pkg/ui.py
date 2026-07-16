@@ -183,8 +183,14 @@ class RoboLotofacilUltraApp:
         self.caminho_csv = tk.StringVar(value=ARQUIVO_CSV_PADRAO)
         self.qtd_jogos = tk.IntVar(value=20)
         self.janela_hist = tk.IntVar(value=120)
+        # G=35/P=27: fixo desde 2026-07-16 -- Mapa G x P (n=300, TOST
+        # margem=0.3) confirmou equivalencia estatistica na faixa G=16-300;
+        # nao ha vale estrutural, entao nao faz sentido expor como ajuste
+        # manual na tela principal (ver ARQUITETURA.md). Ainda pode ser
+        # sobrescrito via estrategia_override/mapa_gp_custom.py para quem
+        # quiser reabrir essa investigacao.
         self.geracoes = tk.IntVar(value=35)
-        self.pop_size = tk.IntVar(value=70)
+        self.pop_size = tk.IntVar(value=27)
         self.passos_backtest = tk.IntVar(value=50)
         self.tamanho_jogo = tk.IntVar(value=TAMANHO_JOGO)
         # Fechamento combinatório (V22.1 experimental) — tamanho do pool (16-20)
@@ -446,8 +452,6 @@ class RoboLotofacilUltraApp:
             self.criar_botao_colorido(linha1, str(v),
                 lambda vv=v: self.definir_janela_rapida(vv),
                 cor=TEMA["btn_atalho"], largura=3).pack(side="left", padx=2)
-        campo(linha1, "  Gerações",   self.geracoes)
-        campo(linha1, "População",    self.pop_size)
         campo(linha1, "Passos BT",    self.passos_backtest)
         campo(linha1, "  Pool Fecht.", self.tamanho_pool_fechamento, w=3)
         # ── Campo Dezenas destacado ───────────────────────────

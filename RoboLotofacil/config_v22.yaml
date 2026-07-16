@@ -8,8 +8,16 @@ versao: "V22.0"
 
 # ── Parâmetros do algoritmo genético ────────────────────────
 genetico:
-  geracoes: 88          # G validado: 88 (57.1% vitória em 5 rodadas)
-  populacao: 79         # P validado
+  # G=35/P=27: fixo desde 2026-07-16. Mapa G x P (n=300, TOST margem=0.3)
+  # confirmou equivalência estatística entre G=16 e G=300 -- não há vale
+  # estrutural (a alegação anterior "G=88 validado com 5 rodadas" não se
+  # sustentou em amostra maior, ver ARQUITETURA.md e
+  # VALIDACAO_MAPA_GP_2026-07-14.md). Removido da tela principal por não
+  # ter efeito prático mensurável; ainda ajustável via
+  # estrategia_override/mapa_gp_custom.py para quem quiser reabrir a
+  # investigação.
+  geracoes: 35
+  populacao: 27
   janela: 188           # Janela histórica ativa
   passos_calibracao: 70 # Padrão de validação
   jogos: 20             # Jogos por pacote

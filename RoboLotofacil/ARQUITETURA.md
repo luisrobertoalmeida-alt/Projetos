@@ -143,8 +143,38 @@ Ver também `VALIDACAO_MAPA_GP_2026-07-14.md`: a alegação "G=88 validado
 (57,1% em 5 rodadas)" do `config_v22.yaml` **também não se sustentou** em
 n=300 — G=16/P=40, G=35/P=70 e G=88/P=79 são estatisticamente
 equivalentes entre si (confirmado com TOST pareado, não só ausência de
-significância). Recomendação: usar G=16/P=40 (mais barato, sem perda de
-qualidade esperada).
+significância).
+
+**Mapa G×P ampliado (2026-07-16, janela=194, passos=300):** grade
+estendida de G=16 a G=300 (`mapa_gp_custom.py`, ver seção própria abaixo)
+confirma o mesmo padrão em toda a faixa — `média_melhor` varia só entre
+11.24 e 11.35 (spread de ~0.11), bem dentro da margem de equivalência do
+TOST (±0.3). Não há vale estrutural em nenhum ponto testado.
+
+**Decisão: G=35/P=27 fixo, removido da tela principal.** Como G/P não
+tem efeito prático mensurável nessa faixa, expor como parâmetro manual só
+cria a falsa impressão de que vale a pena ajustar. `ui.py` fixa
+`self.geracoes`/`self.pop_size` em 35/27 (margem de segurança sobre o
+ponto mais barato testado, G=16) e não exibe mais os campos na tela
+(`config_v22.yaml` atualizado com os mesmos valores). Continua ajustável
+por quem quiser reabrir a investigação, via `estrategia_override` ou
+rodando `mapa_gp_custom.py` diretamente.
+
+## 🗺️ Mapa G×P com grade customizada — `mapa_gp_custom.py`
+
+A tela principal sempre chamava `mapear_vale_gp()` sem passar `pontos_g`,
+então a grade ficava presa no default hardcoded da função (G=80 a G=300)
+— não havia como testar valores de G menores pela UI. `mapa_gp_custom.py`
+(raiz do projeto) chama a mesma função com `pontos_g` livre via linha de
+comando:
+
+```
+python mapa_gp_custom.py <janela> <passos> <qtd_jogos> <g1,g2,g3,...>
+```
+
+Mesmos dados reais, mesma metodologia pareada de `mapear_vale_gp()`
+(`v20_6_bootstrap.py`). Foi assim que a faixa G=16-65 foi testada e usada
+na decisão acima.
 
 **✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
 pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,
