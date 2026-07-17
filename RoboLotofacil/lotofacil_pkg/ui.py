@@ -1155,8 +1155,9 @@ class RoboLotofacilUltraApp:
             )
             self.qtd_jogos.set(cfg["qtd_jogos"])
             self.janela_hist.set(cfg["janela"])
-            self.geracoes.set(cfg["geracoes"])
-            self.pop_size.set(cfg["pop_size"])
+            # Gerações/população NÃO são mais tocadas aqui (2026-07-17): ficam
+            # fixas em 35/27, Mapa G x P provou que ajustar esses dois não
+            # muda o resultado.
             self.passos_backtest.set(cfg["passos_backtest"])
             if "modo_turbo" in cfg:  # FIX: chave opcional — assistente respeita escolha do usuário
                 self.modo_turbo.set(bool(cfg["modo_turbo"]))
@@ -1216,13 +1217,13 @@ class RoboLotofacilUltraApp:
                 )
                 self.qtd_jogos.set(cfg_auto["qtd_jogos"])
                 self.janela_hist.set(cfg_auto["janela"])
-                self.geracoes.set(cfg_auto["geracoes"])
-                self.pop_size.set(cfg_auto["pop_size"])
                 self.passos_backtest.set(cfg_auto["passos_backtest"])
+                # Gerações/população NÃO são mais tocadas aqui (2026-07-17):
+                # ficam fixas em 35/27 (ver self.geracoes/self.pop_size),
+                # Mapa G x P provou que ajustar esses dois não muda o resultado.
                 # modo_turbo NAO e tocado aqui — respeita a escolha manual do usuario.
                 # O assistente nao tem autoridade para reativar o Turbo.
                 self.modo_laboratorio.set(False)
-                cfg_auto["usar_laboratorio"] = False
 
             # Atualiza TAMANHO_JOGO globalmente conforme campo da UI (15–18)
             _config_module.TAMANHO_JOGO = min(max(15, int(self.tamanho_jogo.get())), 18)

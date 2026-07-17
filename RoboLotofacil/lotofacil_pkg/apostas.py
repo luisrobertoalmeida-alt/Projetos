@@ -364,9 +364,9 @@ def registrar_performance_geracao(jogos: list, analise: dict, geracoes: int, pop
 def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: int = 20, janela_atual: int = 120, geracoes_atual: int = 35, pop_atual: int = 70, perfil: str = "auto") -> dict:
     """
     Sugere uma configuração técnica segura para reduzir tentativa manual.
-    Usa três fontes: tamanho do histórico carregado, memória de desempenho real
-    e banco técnico de gerações anteriores. Não promete previsão; apenas escolhe
-    parâmetros coerentes para velocidade, diversidade e estabilidade.
+    Ajusta janela e passos de backtest conforme tamanho do histórico. Gerações/
+    população NÃO são mais ajustadas aqui (ver nota abaixo) — apenas repassadas
+    fixas. Não promete previsão; apenas escolhe parâmetros coerentes.
     """
     total_hist = len(concursos or [])
     qtd_jogos = min(max(5, int(qtd_jogos or 20)), 100)
@@ -377,7 +377,6 @@ def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: in
     memoria = carregar_memoria_aprendizado()
     ajustes = calcular_bonus_aprendizado(memoria)
     registros_reais = memoria.get("registros", [])[-80:]
-    performance = carregar_performance_estrategias().get("geracoes", [])[-120:]
 
     # Janela: se houver histórico suficiente, prefere 120-200; se o desempenho real
     # estiver fraco, abre um pouco a janela para reduzir ruído recente.
@@ -394,52 +393,22 @@ def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: in
         media_melhor = mean([float(r.get("melhor_acerto", 0) or 0) for r in registros_reais])
         taxa_12 = sum(1 for r in registros_reais if float(r.get("melhor_acerto", 0) or 0) >= 12) / max(1, len(registros_reais))
         taxa_13 = sum(1 for r in registros_reais if float(r.get("melhor_acerto", 0) or 0) >= 13) / max(1, len(registros_reais))
+        motivo_desempenho = "desempenho recente registrado (não influencia geração/população — ver nota abaixo)"
     else:
         media_melhor, taxa_12, taxa_13 = 0.0, 0.0, 0.0
+        motivo_desempenho = "sem registros reais suficientes"
 
-    # Base equilibrada: aumenta conforme quantidade de jogos, mas sem exagerar.
-    geracoes = 120 if qtd_jogos <= 10 else 160 if qtd_jogos <= 20 else 220
-    pop_size = 110 if qtd_jogos <= 10 else 150 if qtd_jogos <= 20 else 210
+    # geracoes/pop_size: FIXOS em 35/27 desde 2026-07-16 (Mapa G x P, n=300,
+    # TOST margem=0.3) confirmou equivalência estatística na faixa G=16-300 —
+    # não há vale estrutural, então nem quantidade de jogos, nem desempenho
+    # recente, nem histórico técnico anterior devem reajustar esses dois
+    # parâmetros. `perfil` segue aceito por compatibilidade de assinatura,
+    # mas não afeta mais G/P.
+    geracoes = 35
+    pop_size = 27
 
-    # Se já existe histórico real bom, preserva estabilidade; se está baixo, aumenta exploração.
-    motivo_desempenho = "sem registros reais suficientes"
-    if registros_reais:
-        if media_melhor >= 12.2 or taxa_13 >= 0.08:
-            geracoes = max(100, int(geracoes * 0.90))
-            pop_size = max(100, int(pop_size * 0.95))
-            motivo_desempenho = "desempenho recente bom; preservando estabilidade"
-        elif media_melhor < 11.2 and len(registros_reais) >= 5:
-            geracoes = int(geracoes * 1.25)
-            pop_size = int(pop_size * 1.20)
-            janela = min(max(janela, 200), total_hist or janela)
-            motivo_desempenho = "desempenho recente baixo; aumentando exploração e janela"
-        elif taxa_12 < 0.25 and len(registros_reais) >= 8:
-            geracoes = int(geracoes * 1.15)
-            pop_size = int(pop_size * 1.10)
-            motivo_desempenho = "poucos pacotes com 12+; reforçando busca"
-        else:
-            motivo_desempenho = "desempenho estável; configuração equilibrada"
-
-    # Usa desempenho técnico anterior para evitar configurações que geraram pacote muito parecido.
-    if performance:
-        tecnicos_validos = [r for r in performance if float(r.get("media_sobreposicao", 99) or 99) <= 11.8 and int(r.get("estruturas_fracas", 0) or 0) == 0]
-        if tecnicos_validos:
-            melhor = max(tecnicos_validos, key=lambda r: float(r.get("score_estrutural_medio", 0) or 0) - max(0, float(r.get("media_sobreposicao", 0) or 0)-10.5))
-            geracoes = int(round((geracoes + int(melhor.get("geracoes", geracoes))) / 2))
-            pop_size = int(round((pop_size + int(melhor.get("pop_size", pop_size))) / 2))
-
-    if perfil == "rapido":
-        geracoes = int(geracoes * 0.65); pop_size = int(pop_size * 0.70)
-    elif perfil == "forte":
-        geracoes = int(geracoes * 1.30); pop_size = int(pop_size * 1.25)
-
-    # Travas para não pesar demais o computador.
-    geracoes = min(max(40, geracoes), 450)
-    pop_size = min(max(70, pop_size), 300)
     janela = min(max(MIN_HIST, janela), max(MIN_HIST, total_hist or janela))
-
     passos_bt = 50 if qtd_jogos <= 20 else 35
-    usar_laboratorio = bool(qtd_jogos >= 15 and geracoes >= 140)
 
     cfg = {
         "qtd_jogos": qtd_jogos,
@@ -447,7 +416,7 @@ def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: in
         "geracoes": int(geracoes),
         "pop_size": int(pop_size),
         "passos_backtest": int(passos_bt),
-        "usar_laboratorio": usar_laboratorio,
+        "usar_laboratorio": False,
         # modo_turbo NAO e definido aqui — o assistente respeita a escolha do usuario.
         # A UI preserva o estado atual do checkbox ao aplicar esta configuracao.
         "motivo": motivo_desempenho,
@@ -457,8 +426,7 @@ def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: in
         "registros_reais": len(registros_reais),
         "ajustes_memoria": ajustes,
     }
-    from .backtest import aplicar_conhecimento_cientifico_na_configuracao
-    return aplicar_conhecimento_cientifico_na_configuracao(cfg)
+    return cfg
 
 
 def explicar_configuracao_assistida(cfg: dict) -> str:

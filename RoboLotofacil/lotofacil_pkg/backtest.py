@@ -1484,22 +1484,27 @@ def _resumo_cientifico(nome: str, tipo: str, registros: list, extra: dict | None
 
 
 def montar_configuracoes_cientificas(geracoes_base: int, pop_base: int) -> list[dict]:
-    geracoes_base = max(10, int(geracoes_base or 80))
-    pop_base = max(30, int(pop_base or 80))
+    """
+    Configurações testadas pelo Backtest Científico V11.
+
+    Até 2026-07-16 esta função testava 4 variantes que só diferiam por
+    escala de gerações/população ("Rápida robusta", "Equilibrada
+    científica", "Exploratória forte", além da base) — o Mapa G x P
+    (n=300, TOST margem=0.3) confirmou equivalência estatística entre
+    G=16 e G=300, então essa busca comparava configurações que já
+    sabemos indistinguíveis, custando tempo à toa. `geracoes_base`/
+    `pop_base` (parâmetros da função) seguem aceitos por compatibilidade
+    de assinatura, mas não são mais usados para gerar variantes de G/P.
+
+    Mantém só a comparação que ainda faz sentido: G/P fixo (35/27) vs.
+    a mesma config com diversidade ampliada (parâmetro não testado até
+    agora).
+    """
     candidatos = [
-        {"nome": "Atual do usuário", "geracoes": geracoes_base, "pop_size": pop_base},
-        {"nome": "Rápida robusta", "geracoes": max(35, int(geracoes_base * 0.55)), "pop_size": max(60, int(pop_base * 0.65))},
-        {"nome": "Equilibrada científica", "geracoes": max(80, int(geracoes_base * 0.95)), "pop_size": max(100, int(pop_base * 0.95))},
-        {"nome": "Exploratória forte", "geracoes": min(450, max(120, int(geracoes_base * 1.35))), "pop_size": min(320, max(130, int(pop_base * 1.25)))},
-        {"nome": "Diversidade ampliada", "geracoes": min(380, max(100, int(geracoes_base * 1.10))), "pop_size": min(300, max(120, int(pop_base * 1.15))), "override": {"diversidade": 0.86, "limite_intersecao": 11}},
+        {"nome": "Configuração validada (G=35/P=27)", "geracoes": 35, "pop_size": 27},
+        {"nome": "Diversidade ampliada", "geracoes": 35, "pop_size": 27, "override": {"diversidade": 0.86, "limite_intersecao": 11}},
     ]
-    vistos, saida = set(), []
-    for c in candidatos:
-        chave = (int(c["geracoes"]), int(c["pop_size"]), str(c.get("override", {})))
-        if chave not in vistos:
-            vistos.add(chave)
-            saida.append(c)
-    return saida
+    return candidatos
 
 
 def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 80, geracoes=120, pop_size=120, status_cb=None):
@@ -1674,26 +1679,6 @@ def salvar_relatorio_backtest_cientifico(resultado: dict) -> str:
         f.write("\n".join(linhas))
     return caminho
 
-
-def aplicar_conhecimento_cientifico_na_configuracao(cfg: dict) -> dict:
-    """Usa a última autocalibração científica como reforço do Auto Ajuste."""
-    try:
-        conhecimento = carregar_conhecimento_cientifico()
-        rec = conhecimento.get("recomendacao_atual") or {}
-        if not rec:
-            return cfg
-        score = float(rec.get("score_configuracao", 0) or 0)
-        if score <= 0:
-            return cfg
-        cfg = dict(cfg)
-        cfg["janela"] = int(round((int(cfg.get("janela", rec.get("janela", MIN_HIST))) + int(rec.get("janela", MIN_HIST))) / 2))
-        cfg["geracoes"] = int(round((int(cfg.get("geracoes", rec.get("geracoes", 120))) + int(rec.get("geracoes", 120))) / 2))
-        cfg["pop_size"] = int(round((int(cfg.get("pop_size", rec.get("pop_size", 120))) + int(rec.get("pop_size", 120))) / 2))
-        cfg["motivo"] = str(cfg.get("motivo", "")) + f" | reforçado pelo Backtest Científico V11 ({rec.get('estrategia_base', '')})"
-        cfg["conhecimento_cientifico"] = rec
-        return cfg
-    except Exception:
-        return cfg
 
 # =========================================================
 # RELATÓRIOS

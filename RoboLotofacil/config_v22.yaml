@@ -19,7 +19,6 @@ genetico:
   geracoes: 35
   populacao: 27
   janela: 188           # Janela histórica ativa
-  passos_calibracao: 70 # Padrão de validação
   jogos: 20             # Jogos por pacote
   modo_turbo: false     # Desligado — usar histórico completo
   seed: null            # null = aleatório verdadeiro
