@@ -1,2 +1,3 @@
 __pycache__/
 *.pyc
+dados/zona_morta_checkpoint.json
