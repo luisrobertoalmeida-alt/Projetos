@@ -309,13 +309,6 @@ class RoboLotofacilUltraApp:
             # os próprios métodos já registram os detalhes no painel
             pass
 
-    def definir_janela_rapida(self, valor: int | str) -> None:
-        try:
-            self.janela_hist.set(int(valor))
-            self.log(f"Janela de análise ajustada para {int(valor)} concursos.")
-        except Exception:
-            pass
-
     def criar_botao_colorido(self, master: tk.Widget, texto: str, comando, cor: str = "#2f80ed", largura: int | None = None) -> tk.Button:
         """Botão colorido com hover effect para o tema escuro."""
         btn = tk.Button(
@@ -447,11 +440,6 @@ class RoboLotofacilUltraApp:
 
         campo(linha1, "Qtd. jogos",       self.qtd_jogos)
         campo(linha1, "Janela histórica", self.janela_hist)
-        tk.Label(linha1, text="  Atalhos:", bg=bg, fg=fg2, font=("Segoe UI", 9)).pack(side="left", padx=(8, 2))
-        for v in (60, 100, 150, 200):
-            self.criar_botao_colorido(linha1, str(v),
-                lambda vv=v: self.definir_janela_rapida(vv),
-                cor=TEMA["btn_atalho"], largura=3).pack(side="left", padx=2)
         campo(linha1, "Passos BT",    self.passos_backtest)
         campo(linha1, "  Pool Fecht.", self.tamanho_pool_fechamento, w=3)
         # ── Campo Dezenas destacado ───────────────────────────
@@ -516,15 +504,10 @@ class RoboLotofacilUltraApp:
             "⬆ Atualizar":      "Baixa os últimos resultados da API da CAIXA e atualiza o CSV.",
             "📂 Carregar":       "Lê o CSV do disco e carrega o histórico em memória.",
             "🎲 Gerar Jogos":    "Gera o pacote de apostas usando ensemble multi-IA + algoritmo genético. (F5)",
-            "🔬 Laboratório":    "Gera apostas no modo Laboratório Inteligente: testa múltiplas configurações e escolhe a melhor.",
+            "🔬 Laboratório":    "Gera apostas com a configuração G/P validada (35/27, ver Mapa G×P).",
             "📊 Backtest":       "Testa o robô em concursos passados e mede a taxa de acertos. (F6)",
             "🤖 BT Automático": "Walk-forward detalhado: gera e confere jogos concurso a concurso, salva relatório.",
-            "🗺️ Mapa G×P":     "Mapeia o espaço G×P e testa os extremos contra os intermediários com estatística PAREADA "
-                                "(Cohen's d pareado, sign-flip, TOST) — mesma metodologia de reanalise_pareada.py. "
-                                "'Vale confirmado' agora reflete um teste estatístico real, não heurística. Com poucos "
-                                "passos o resultado pode ficar INCONCLUSIVO — aumente 'Passos BT' para mais poder.",
             "🎯 Dual-Perfil":   "Gera pacote misto: 70% otimizado para 11+/12+ e 30% exploração para 13+ (Pares/Trios + Cobertura).",
-            "⚡ Otimizador V22": "Gera múltiplos pacotes candidatos e seleciona automaticamente o com maior % de 11+ na simulação.",
             "🔒 Fechamento":    "Fechamento combinatório: escolhe um pool de dezenas (campo 'Pool Fecht.', 16-20) pelo ranking do "
                                 "ensemble e joga TODAS as combinações de 15 dentro dele. Garantia matemática (não estatística) "
                                 "condicionada às 15 sorteadas estarem dentro do pool escolhido — ver VALIDACAO_ESCALA_REAL "
@@ -539,8 +522,6 @@ class RoboLotofacilUltraApp:
             ("🔒 Fechamento",     self.iniciar_fechamento,           TEMA["btn_pacote"]),
             ("📊 Backtest",       self.iniciar_rodar_backtest,       TEMA["btn_backtest"]),
             ("🤖 BT Automático", self.iniciar_backtest_automatico,   TEMA["btn_backauto"]),
-            ("🗺️ Mapa G×P",     self.iniciar_mapa_gp,                   TEMA["btn_backauto"]),
-            ("⚡ Otimizador V22", self.iniciar_otimizador_v22,            TEMA["btn_aprender"]),
         ]:
             btn = self.criar_botao_colorido(linha3, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
@@ -557,7 +538,6 @@ class RoboLotofacilUltraApp:
             "🎯 Calibrar IA":          "Compara o robô contra pacotes aleatórios em concursos passados.",
             "🏆 Lab Histórico":        "Calibra o robô vs. aleatório usando o modo Laboratório Inteligente.",
             "🧭 Auto Ajuste":          "Calcula e aplica automaticamente a melhor configuração para o histórico atual.",
-            "🧪 Científico V11":       "Backtest científico massivo com múltiplas variantes e análise estatística.",
             "🔀 Walk-Forward":         "Validação walk-forward deslizante: avalia robustez em múltiplas janelas e detecta overfitting.",
             "📐 Bootstrap IC":         "Inferência estatística: IC de 95%/99%, p-value e Cohen's d sobre os resultados do último backtest.",
             "🔬 Análise Cient. V2":    "Teste binomial de significância + Walk-Forward com métrica corrigida (melhor do pacote). Rode Calibrar IA e Walk-Forward antes.",
@@ -569,7 +549,6 @@ class RoboLotofacilUltraApp:
             ("🎯 Calibrar IA",         self.iniciar_calibracao_vs_aleatorio,    TEMA["btn_backtest"]),
             ("🏆 Lab Histórico",       self.iniciar_laboratorio_historico,      TEMA["btn_lab"]),
             ("🧭 Auto Ajuste",         self.iniciar_autoajuste,                 TEMA["btn_atalho"]),
-            ("🧪 Científico V11",      self.iniciar_backtest_cientifico_v11,    TEMA["btn_relatorio"]),
             ("🔀 Walk-Forward",        self.iniciar_walkforward,                TEMA["btn_backauto"]),
             ("📐 Bootstrap IC",        self.iniciar_bootstrap_ic,               TEMA["btn_relatorio"]),
             ("🔬 Análise Cient. V2",   self.iniciar_analise_cientifica_v2,      TEMA["btn_relatorio"]),
@@ -614,6 +593,34 @@ class RoboLotofacilUltraApp:
             linha5, "✖ Encerrar",
             self.encerrar_aplicativo, cor=TEMA["btn_encerrar"],
         ).pack(side="right", padx=3)
+
+        # ── Linha 6: investigação avançada (uso pontual, não dia a dia) ──
+        # Movidos para cá em 2026-07-17: testam/exploram parâmetros que já
+        # têm resposta validada (G×P equivalente de 16 a 300 — Mapa G×P,
+        # zona morta derrubada, ver ARQUITETURA.md) ou geram variantes por
+        # repetição de semente — úteis para investigar, não para uso
+        # recorrente. Ficavam misturados com os botões de operação diária.
+        tk.Label(topo, text="🔬 Investigação avançada (uso pontual)", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
+        linha6 = tk.Frame(topo, bg=bg)
+        linha6.pack(fill="x", pady=(4, 6))
+        _tips_linha6 = {
+            "🗺️ Mapa G×P":     "Mapeia o espaço G×P e testa os extremos contra os intermediários com estatística PAREADA "
+                                "(Cohen's d pareado, sign-flip, TOST) — mesma metodologia de reanalise_pareada.py. "
+                                "Já confirmado equivalente de G=16 a G=300 (ver ARQUITETURA.md) — use só para reabrir "
+                                "a investigação, não é necessário no uso normal.",
+            "⚡ Otimizador V22": "Gera múltiplos pacotes candidatos com a mesma configuração e seleciona automaticamente "
+                                "o com maior % de 11+ na simulação — investigação, não muda a config validada.",
+            "🧪 Científico V11": "Backtest científico massivo (configuração validada vs. diversidade ampliada) e "
+                                "campeonato de modelos do ensemble.",
+        }
+        for txt, cmd, cor in [
+            ("🗺️ Mapa G×P",      self.iniciar_mapa_gp,                TEMA["btn_backauto"]),
+            ("⚡ Otimizador V22", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
+            ("🧪 Científico V11", self.iniciar_backtest_cientifico_v11, TEMA["btn_relatorio"]),
+        ]:
+            btn = self.criar_botao_colorido(linha6, txt, cmd, cor=cor)
+            btn.pack(side="left", padx=3)
+            tooltip(btn, _tips_linha6.get(txt, ""))
 
         # ── Barra de progresso ────────────────────────────────
         barra_frame = tk.Frame(topo, bg=bg)
