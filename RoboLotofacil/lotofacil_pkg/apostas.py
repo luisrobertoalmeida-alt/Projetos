@@ -3,11 +3,11 @@ lotofacil_pkg/apostas.py
 -------------------------
 Orquestração da geração de apostas:
   - gerar_apostas — pipeline completo (análise → ensemble → genético → cobertura)
-  - Modo Laboratório Inteligente — testa configurações evolutivas
+  - Modo Laboratório Inteligente — gera com a configuração G/P validada (não
+    testa mais variantes de G/P, ver montar_configuracoes_laboratorio)
   - Assistente de configuração, Simulador "e se", Pacote mínimo
   - Relatório de evolução do aprendizado
 """
-import time
 from collections import Counter
 from datetime import datetime
 from statistics import mean
@@ -151,71 +151,29 @@ def montar_configuracoes_laboratorio(
     janela_analise: int = 150,
 ) -> list[dict]:
     """
-    Monta uma bateria de testes respeitando os limites digitados pelo usuário.
+    Até 2026-07-17 esta função montava uma bateria de até 5 configurações
+    que só variavam gerações/população (com uma guarda de "zona morta"
+    para ratio G/P alto + janela pequena, descoberta em calibração de
+    25/06/2026 — antes da metodologia pareada/TOST deste projeto).
 
-    Aplica a guarda janela×G/P descoberta em 25/06/2026:
-    - Janela pequena (< 140) + ratio G/P alto (> 1.30) = zona morta (52.3% robo)
-    - Janela grande (>=140) compensa ratio ruim; janela pequena exige ratio <= 1.30
-    - Regra: se janela < 140, P e recalculado para forcar ratio <= 1.30
+    Reavaliada com estatística pareada (`validacao_zona_morta.py`, n=150,
+    janela=120, ratio 1.64 vs. 1.30): Cohen's d pareado = -0.04
+    (desprezível), TOST (margem=±0.3) confirma equivalência. A "zona
+    morta" não se sustentou — é o mesmo tipo de conclusão de amostra
+    pequena já derrubada no Mapa G×P (ver ARQUITETURA.md). A guarda foi
+    removida.
 
-    Historico de ratios seguros (calibracao experimental):
-      ratio ~1.00 (Leve)        -> vantagem +0.59 a +0.63  OK
-      ratio ~1.30 (Lab. pesado) -> vantagem +0.53           OK (qualquer janela)
-      ratio ~1.45 (Equilibrado) -> seguro apenas com jan>=140
-      ratio ~1.52 (Profissional)-> seguro apenas com jan>=140
-      ratio ~1.64 + jan<140     -> zona morta (52.3%)       EVITAR
+    `geracoes_max`/`pop_size_max`/`janela_analise` seguem aceitos por
+    compatibilidade de assinatura, mas não influenciam mais o resultado:
+    retorna sempre a configuração validada (G=35/P=27).
     """
-    geracoes_max   = min(max(5,  int(geracoes_max)),  2000)
-    pop_size_max   = min(max(20, int(pop_size_max)),  1000)
-    janela_analise = max(30, int(janela_analise))
-
-    # Limite de ratio seguro varia conforme a janela.
-    # Com janela pequena (<140) o amortecimento natural some e apenas ratios
-    # proximos de 1.30 mantem performance > 55%.
-    JANELA_PEQUENA   = janela_analise < 140
-    RATIO_SEGURO_MAX = 1.30 if JANELA_PEQUENA else 1.60
-
-    def _ajustar_pop(ger: int, pop_alvo: int) -> int:
-        """
-        Garante que G/P <= RATIO_SEGURO_MAX; aumenta P (usando ceil) se necessario.
-        Para janela grande, so ajusta se o pop_alvo ja estiver abaixo do minimo seguro.
-        """
-        import math as _math
-        if ger <= 0:
-            return pop_alvo
-        # ceil garante que G/P <= RATIO_SEGURO_MAX sem margem de arredondamento
-        pop_min_seguro = _math.ceil(ger / RATIO_SEGURO_MAX)
-        # Para janela pequena: limita ACIMA (pop nao pode ser menor que pop_min_seguro)
-        # Para janela grande: nao forca reducao; so protege o piso
-        return max(pop_alvo, pop_min_seguro) if JANELA_PEQUENA else pop_alvo
-
-    candidatos_base = [
-        ("Leve inteligente",      min(80,  geracoes_max), min(80,  pop_size_max)),
-        ("Equilibrado",           min(160, geracoes_max), min(110, pop_size_max)),
-        ("Profissional",          min(250, geracoes_max), min(165, pop_size_max)),
-        ("Laboratorio pesado",    min(400, geracoes_max), min(250, pop_size_max)),
-        ("Configuracao digitada", geracoes_max,           pop_size_max),
-    ]
-
-    vistos  = set()
-    configs = []
-    for nome, ger, pop in candidatos_base:
-        ger = max(5,  int(ger))
-        pop = max(20, int(pop))
-        pop = _ajustar_pop(ger, pop)
-        chave = (ger, pop)
-        if chave in vistos:
-            continue
-        vistos.add(chave)
-        ratio = round(ger / pop, 2)
-        configs.append({
-            "nome":     nome,
-            "geracoes": ger,
-            "pop_size": pop,
-            "ratio_gp": ratio,
-            "janela":   janela_analise,
-        })
-    return configs
+    return [{
+        "nome": "Configuração validada (G=35/P=27)",
+        "geracoes": 35,
+        "pop_size": 27,
+        "ratio_gp": round(35 / 27, 2),
+        "janela": max(30, int(janela_analise)),
+    }]
 
 
 def gerar_apostas_laboratorio_inteligente(  # noqa: E501
@@ -227,84 +185,37 @@ def gerar_apostas_laboratorio_inteligente(  # noqa: E501
     status_cb=None,
 ):
     """
-    Testa configurações evolutivas, escolhe a melhor por score técnico e
-    gera o pacote final com a configuração vencedora.
-    """
-    configs = montar_configuracoes_laboratorio(geracoes_max, pop_size_max, janela_analise)
-    qtd_teste = min(max(8, qtd_jogos // 2), min(qtd_jogos, 12))
-    resultados = []
+    Gera o pacote com a configuração G/P validada (35/27).
 
+    Até 2026-07-17 esta função testava várias configurações de G/P numa
+    amostra pequena e escolhia uma "vencedora" — desde que o Mapa G×P e a
+    reavaliação da "zona morta" confirmaram equivalência estatística em
+    toda a faixa de G/P testada, não há mais nada para comparar aqui, só
+    overhead (rodar duas vezes: teste + geração final). Mantido só o
+    passo de geração final.
+    """
     def avisar(msg: str) -> None:
         if status_cb:
             status_cb(msg)
 
-    avisar(f"Modo Laboratorio Inteligente: {len(configs)} configuracao(oes) em teste.")
-    avisar(f"Teste amostral: {qtd_teste} jogos por configuracao.")
-    # Informa se a guarda janela x G/P foi ativada
-    if janela_analise < 140:
-        avisar(
-            f"[Guarda janela x G/P ATIVA] Janela={janela_analise} < 140 -> "
-            f"ratio maximo forcado em 1.30 para evitar zona morta."
-        )
-    for cfg in configs:
-        avisar(
-            f"  Perfil '{cfg['nome']}': G={cfg['geracoes']} P={cfg['pop_size']} "
-            f"ratio={cfg.get('ratio_gp', '?')}"
-        )
-
-    for i, cfg in enumerate(configs, start=1):
-        nome = cfg["nome"]
-        ger = cfg["geracoes"]
-        pop = cfg["pop_size"]
-        inicio = time.time()
-        avisar(f"[{i}/{len(configs)}] Testando {nome}: gerações={ger}, população={pop}...")
-        jogos_teste, analise_teste, pesos_teste = gerar_apostas(
-            concursos_completos,
-            qtd_jogos=qtd_teste,
-            janela_analise=janela_analise,
-            geracoes=ger,
-            pop_size=pop,
-        )
-        score_lab = score_pacote_laboratorio(jogos_teste, analise_teste, pesos_teste)
-        cobertura = analise_teste.get("cobertura_global") or {}
-        tempo = round(time.time() - inicio, 2)
-        resultado = {
-            "nome": nome,
-            "geracoes": ger,
-            "pop_size": pop,
-            "ratio_gp": cfg.get("ratio_gp", round(ger / pop, 2)),
-            "score_laboratorio": score_lab,
-            "media_sobreposicao": cobertura.get("media_sobreposicao", 0),
-            "max_sobreposicao": cobertura.get("max_sobreposicao", 0),
-            "media_soma": cobertura.get("media_soma", 0),
-            "media_pares": cobertura.get("media_pares", 0),
-            "tempo_segundos": tempo,
-        }
-        resultados.append(resultado)
-        avisar(
-            f"Resultado {nome}: score={score_lab} | sobreposição média={resultado['media_sobreposicao']} | tempo={tempo}s"
-        )
-
-    melhor = max(resultados, key=lambda r: r["score_laboratorio"])
-    avisar("-" * 72)
+    cfg = montar_configuracoes_laboratorio(geracoes_max, pop_size_max, janela_analise)[0]
     avisar(
-        f"Configuracao vencedora: {melhor['nome']} | "
-        f"G={melhor['geracoes']} P={melhor['pop_size']} ratio={melhor.get('ratio_gp', '?')} | "
-        f"Score={melhor['score_laboratorio']}"
+        "Modo Laboratório Inteligente: G/P já validado (Mapa G×P + reavaliação "
+        "de zona morta) — gerando direto com a configuração fixa, sem testar variantes."
     )
-    avisar("Gerando pacote final com a configuracao vencedora...")
+    avisar(f"Configuração: G={cfg['geracoes']} P={cfg['pop_size']}")
 
     jogos, analise, pesos = gerar_apostas(
         concursos_completos,
         qtd_jogos=qtd_jogos,
         janela_analise=janela_analise,
-        geracoes=melhor["geracoes"],
-        pop_size=melhor["pop_size"],
+        geracoes=cfg["geracoes"],
+        pop_size=cfg["pop_size"],
     )
     analise["laboratorio_inteligente"] = {
-        "ativo": True,
-        "configuracao_vencedora": melhor,
-        "resultados_testados": resultados,
+        "ativo": False,
+        "motivo": "G/P fixo e validado (Mapa G×P + zona morta reavaliada) — sem variantes para testar.",
+        "configuracao_usada": cfg,
     }
     return jogos, analise, pesos
 

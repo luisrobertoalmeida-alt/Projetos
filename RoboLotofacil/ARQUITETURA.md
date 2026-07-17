@@ -176,6 +176,42 @@ Mesmos dados reais, mesma metodologia pareada de `mapear_vale_gp()`
 (`v20_6_bootstrap.py`). Foi assim que a faixa G=16-65 foi testada e usada
 na decisão acima.
 
+## 🧹 Limpeza pós Mapa G×P — 2026-07-17
+
+Auditoria dos botões/telas da UI encontrou mecanismos que ainda
+reajustavam G/P silenciosamente ou testavam configurações já provadas
+equivalentes, desfazendo o benefício do fix de G=35/P=27:
+
+- **`calcular_configuracao_assistida()`** (`apostas.py`) não recalcula
+  mais gerações/população a partir de quantidade de jogos, desempenho
+  recente ou banco técnico — repassa os valores fixos. Consequência: o
+  checkbox **"🧭 Assistente Auto Config"** (ligado por padrão) e o botão
+  **"🧭 Auto Ajuste"** pararam de sobrescrever `self.geracoes`/
+  `self.pop_size` a cada geração de jogos.
+- **`aplicar_conhecimento_cientifico_na_configuracao()`** (`backtest.py`)
+  removida — ficou órfã (só existia para blendar a recomendação do
+  Científico V11 na configuração do assistente).
+- **`montar_configuracoes_cientificas()`** (Científico V11) reduzida de
+  5 para 2 configurações: as 3 que só variavam escala de G/P foram
+  removidas; mantida a comparação G/P fixo vs. diversidade ampliada
+  (parâmetro ainda não validado).
+- **Alegação de "zona morta"** (`montar_configuracoes_laboratorio()`,
+  calibração de 25/06/2026, anterior à metodologia pareada do projeto):
+  reavaliada com `validacao_zona_morta.py` (n=150, janela=120, ratio
+  G/P 1.64 vs. 1.30 — a condição exata da alegação). Resultado: Cohen's
+  d pareado = -0.042 (desprezível), TOST (margem=±0.3) confirma
+  equivalência. **A alegação não se sustentou** — mesmo padrão do
+  "G=88 validado com 5 rodadas" já derrubado. A guarda de ratio foi
+  removida.
+- **`montar_configuracoes_laboratorio()`/`gerar_apostas_laboratorio_inteligente()`**
+  simplificadas: não testam mais variantes de G/P (não há mais nada
+  para comparar), geram direto com a configuração fixa (35/27). O botão
+  "🔬 Laboratório" continua funcionando, mas não roda mais a bateria de
+  configurações nem exibe "resultado do laboratório" no log (campo
+  `analise["laboratorio_inteligente"]["ativo"]` passa a `False`).
+- `config_v22.yaml`: removida a chave duplicada e nunca lida por
+  nenhum código, `genetico.passos_calibracao`.
+
 **✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
 pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,
 teste de permutação sign-flip e TOST (`v20_6_bootstrap.py`: `cohen_d_pareado`,
