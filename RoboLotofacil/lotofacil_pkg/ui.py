@@ -183,14 +183,14 @@ class RoboLotofacilUltraApp:
         self.caminho_csv = tk.StringVar(value=ARQUIVO_CSV_PADRAO)
         self.qtd_jogos = tk.IntVar(value=20)
         self.janela_hist = tk.IntVar(value=120)
-        # G=35/P=27: fixo desde 2026-07-16 -- Mapa G x P (n=300, TOST
+        # G=16/P=40: fixo desde 2026-07-18 -- Mapa G x P (n=300, TOST
         # margem=0.3) confirmou equivalencia estatistica na faixa G=16-300;
         # nao ha vale estrutural, entao nao faz sentido expor como ajuste
         # manual na tela principal (ver ARQUITETURA.md). Ainda pode ser
         # sobrescrito via estrategia_override/mapa_gp_custom.py para quem
         # quiser reabrir essa investigacao.
-        self.geracoes = tk.IntVar(value=35)
-        self.pop_size = tk.IntVar(value=27)
+        self.geracoes = tk.IntVar(value=16)
+        self.pop_size = tk.IntVar(value=40)
         self.passos_backtest = tk.IntVar(value=50)
         self.tamanho_jogo = tk.IntVar(value=TAMANHO_JOGO)
         # Fechamento combinatório (V22.1 experimental) — tamanho do pool (16-20)
@@ -201,7 +201,7 @@ class RoboLotofacilUltraApp:
         self.auto_aprender_on_open = tk.BooleanVar(value=True)
         self.usar_seed_fixo = tk.BooleanVar(value=False)
         self.seed_valor = tk.IntVar(value=42)
-        self.assistente_config_auto = tk.BooleanVar(value=True)
+        self.assistente_config_auto = tk.BooleanVar(value=False)
         # V21.6 — controle de impopularidade (0 = desligado, 100 = máximo)
         self.peso_impopularidade = tk.IntVar(value=30)
 
@@ -442,6 +442,14 @@ class RoboLotofacilUltraApp:
         campo(linha1, "Janela histórica", self.janela_hist)
         campo(linha1, "Passos BT",    self.passos_backtest)
         campo(linha1, "  Pool Fecht.", self.tamanho_pool_fechamento, w=3)
+        # ── Seed (antes do campo Dezenas) ─────────────────────
+        tk.Label(linha1, text="  Seed:", bg=bg, fg=fg2, font=("Segoe UI", 9)).pack(side="left", padx=(8, 2))
+        tk.Checkbutton(linha1, text="fixo", variable=self.usar_seed_fixo,
+                       bg=bg, fg=fg2, activebackground=bg, selectcolor=bg3,
+                       font=("Segoe UI", 9)).pack(side="left")
+        tk.Entry(linha1, textvariable=self.seed_valor, width=5,
+                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
+                 font=("Segoe UI", 9)).pack(side="left", padx=(2, 0))
         # ── Campo Dezenas destacado ───────────────────────────
         _acc = TEMA["accent"]
         _dez_frame = tk.Frame(linha1, bg=_acc, padx=1, pady=1)
@@ -453,13 +461,28 @@ class RoboLotofacilUltraApp:
         tk.Entry(_dez_inner, textvariable=self.tamanho_jogo, width=4,
                  bg=bg2, fg=_acc, insertbackground=_acc,
                  relief="flat", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 4))
-        tk.Label(linha1, text="  Seed:", bg=bg, fg=fg2, font=("Segoe UI", 9)).pack(side="left", padx=(8, 2))
-        tk.Checkbutton(linha1, text="fixo", variable=self.usar_seed_fixo,
-                       bg=bg, fg=fg2, activebackground=bg, selectcolor=bg3,
-                       font=("Segoe UI", 9)).pack(side="left")
-        tk.Entry(linha1, textvariable=self.seed_valor, width=5,
-                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
-                 font=("Segoe UI", 9)).pack(side="left", padx=(2, 0))
+
+        # ── Impopularidade (mesma linha, logo após Dezenas) ───
+        tk.Label(linha1, text="  📊 Impopularidade:", bg=bg, fg=TEMA["ciano"],
+                 font=("Segoe UI", 9, "bold")).pack(side="left", padx=(12, 2))
+        _imp_val_lbl = tk.Label(linha1, text="30%", bg=bg, fg=TEMA["ciano"],
+                                font=("Segoe UI", 9, "bold"), width=4)
+        _imp_val_lbl.pack(side="left")
+
+        def _atualizar_lbl_imp(val):
+            _imp_val_lbl.config(text=f"{int(float(val))}%")
+
+        tk.Scale(
+            linha1,
+            from_=0, to=100,
+            orient="horizontal",
+            variable=self.peso_impopularidade,
+            command=_atualizar_lbl_imp,
+            bg=bg, fg=TEMA["ciano"], troughcolor=bg3,
+            highlightthickness=0, showvalue=False,
+            length=110, width=10,
+        ).pack(side="left", padx=(2, 6))
+
         # ── Linha 2: checkboxes ───────────────────────────────
         linha2 = tk.Frame(topo, bg=bg)
         linha2.pack(fill="x", pady=2)
@@ -475,27 +498,6 @@ class RoboLotofacilUltraApp:
         chk(linha2, "Auto Aprender ao carregar",    self.auto_aprender_on_open)
         chk(linha2, "🧭 Assistente Auto Config",      self.assistente_config_auto)
 
-        # V21.6 — Slider de impopularidade
-        tk.Label(linha2, text="  📊 Impopularidade:", bg=bg, fg=TEMA["ciano"],
-                 font=("Segoe UI", 9, "bold")).pack(side="left", padx=(12, 2))
-        _imp_val_lbl = tk.Label(linha2, text="30%", bg=bg, fg=TEMA["ciano"],
-                                font=("Segoe UI", 9, "bold"), width=4)
-        _imp_val_lbl.pack(side="left")
-
-        def _atualizar_lbl_imp(val):
-            _imp_val_lbl.config(text=f"{int(float(val))}%")
-
-        tk.Scale(
-            linha2,
-            from_=0, to=100,
-            orient="horizontal",
-            variable=self.peso_impopularidade,
-            command=_atualizar_lbl_imp,
-            bg=bg, fg=TEMA["ciano"], troughcolor=bg3,
-            highlightthickness=0, showvalue=False,
-            length=110, width=10,
-        ).pack(side="left", padx=(2, 6))
-
         # ── Linha 3: operação principal ───────────────────────
         tk.Label(topo, text="▶ Operação principal", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
         linha3 = tk.Frame(topo, bg=bg)
@@ -504,7 +506,7 @@ class RoboLotofacilUltraApp:
             "⬆ Atualizar":      "Baixa os últimos resultados da API da CAIXA e atualiza o CSV.",
             "📂 Carregar":       "Lê o CSV do disco e carrega o histórico em memória.",
             "🎲 Gerar Jogos":    "Gera o pacote de apostas usando ensemble multi-IA + algoritmo genético. (F5)",
-            "🔬 Laboratório":    "Gera apostas com a configuração G/P validada (35/27, ver Mapa G×P).",
+            "🔬 Laboratório":    "Gera apostas com a configuração G/P validada (16/40, ver Mapa G×P).",
             "📊 Backtest":       "Testa o robô em concursos passados e mede a taxa de acertos. (F6)",
             "🤖 BT Automático": "Walk-forward detalhado: gera e confere jogos concurso a concurso, salva relatório.",
             "🎯 Dual-Perfil":   "Gera pacote misto: 70% otimizado para 11+/12+ e 30% exploração para 13+ (Pares/Trios + Cobertura).",
@@ -541,7 +543,7 @@ class RoboLotofacilUltraApp:
             "🔀 Walk-Forward":         "Validação walk-forward deslizante: avalia robustez em múltiplas janelas e detecta overfitting.",
             "📐 Bootstrap IC":         "IC 95%/99% e erro padrão (bootstrap) sobre a série de acertos do último backtest. "
                                 "Não compara contra aleatório (sem p-value/Cohen's d aqui) — para isso use 🎯 Calibrar IA ou 🗺️ Mapa G×P.",
-            "🔬 Análise Cient. V2":    "Teste binomial de significância + Walk-Forward com métrica corrigida (melhor do pacote). Rode Calibrar IA e Walk-Forward antes.",
+            "🔬 Análise Científica":    "Teste binomial de significância + Walk-Forward com métrica corrigida (melhor do pacote). Rode Calibrar IA e Walk-Forward antes.",
         }
         for txt, cmd, cor in [
             ("⚡ Aprender",            self.forcar_aprendizado_continuo_seguro, TEMA["btn_aprender"]),
@@ -552,7 +554,7 @@ class RoboLotofacilUltraApp:
             ("🧭 Auto Ajuste",         self.iniciar_autoajuste,                 TEMA["btn_atalho"]),
             ("🔀 Walk-Forward",        self.iniciar_walkforward,                TEMA["btn_backauto"]),
             ("📐 Bootstrap IC",        self.iniciar_bootstrap_ic,               TEMA["btn_relatorio"]),
-            ("🔬 Análise Cient. V2",   self.iniciar_analise_cientifica_v2,      TEMA["btn_relatorio"]),
+            ("🔬 Análise Científica",   self.iniciar_analise_cientifica_v2,      TEMA["btn_relatorio"]),
         ]:
             btn = self.criar_botao_colorido(linha4, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
@@ -564,7 +566,7 @@ class RoboLotofacilUltraApp:
         linha5.pack(fill="x", pady=(4, 6))
         _tips_linha5 = {
             "📈 Dashboard":      "Abre o painel analítico completo com análise do pacote e relatório.",
-            "📊 Dashboard V22":  "Exibe ranking histórico, evolução por versão, tendência de acertos e comparação entre modelos.",
+            "📊 Dashboard Comparativo":  "Exibe ranking histórico, evolução por versão, tendência de acertos e comparação entre modelos.",
             "📊 Desempenho":     "Exibe o banco histórico de acertos reais registrados.",
             "✅ Conferir Jogos": "Confere os jogos gerados contra o último sorteio real.",
             "🧪 Simulador":      "Audita a qualidade estrutural do pacote com simulações artificiais.",
@@ -575,9 +577,9 @@ class RoboLotofacilUltraApp:
         }
         for txt, cmd, cor in [
             ("📈 Dashboard",     self.abrir_dashboard,                       TEMA["btn_dash"]),
-            ("📊 Dashboard V22",  self.iniciar_dashboard_v22,                 TEMA["btn_dash"]),
+            ("📊 Dashboard Comparativo",  self.iniciar_dashboard_v22,                 TEMA["btn_dash"]),
             ("📊 Desempenho",    self.abrir_dashboard_desempenho,            TEMA["btn_relatorio"]),
-            ("⚗️ Científico V21", self.abrir_dashboard_cientifico_v21,       TEMA["btn_backauto"]),
+            ("⚗️ Painel Científico", self.abrir_dashboard_cientifico_v21,       TEMA["btn_backauto"]),
             ("✅ Conferir Jogos",self.conferir_jogos_gerados,                TEMA["btn_conferir"]),
             ("🧪 Simulador",     self.rodar_simulador_pacote,                TEMA["btn_simulador"]),
             ("💾 Salvar TXT",    self.salvar_txt,                            TEMA["btn_salvar"]),
@@ -609,15 +611,15 @@ class RoboLotofacilUltraApp:
                                 "(Cohen's d pareado, sign-flip, TOST) — mesma metodologia de reanalise_pareada.py. "
                                 "Já confirmado equivalente de G=16 a G=300 (ver ARQUITETURA.md) — use só para reabrir "
                                 "a investigação, não é necessário no uso normal.",
-            "⚡ Otimizador V22": "Gera múltiplos pacotes candidatos com a mesma configuração e seleciona automaticamente "
+            "⚡ Otimizador": "Gera múltiplos pacotes candidatos com a mesma configuração e seleciona automaticamente "
                                 "o com maior % de 11+ na simulação — investigação, não muda a config validada.",
-            "🧪 Científico V11": "Backtest científico massivo (configuração validada vs. diversidade ampliada) e "
+            "🧪 Backtest Científico": "Backtest científico massivo (configuração validada vs. diversidade ampliada) e "
                                 "campeonato de modelos do ensemble.",
         }
         for txt, cmd, cor in [
             ("🗺️ Mapa G×P",      self.iniciar_mapa_gp,                TEMA["btn_backauto"]),
-            ("⚡ Otimizador V22", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
-            ("🧪 Científico V11", self.iniciar_backtest_cientifico_v11, TEMA["btn_relatorio"]),
+            ("⚡ Otimizador", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
+            ("🧪 Backtest Científico", self.iniciar_backtest_cientifico_v11, TEMA["btn_relatorio"]),
         ]:
             btn = self.criar_botao_colorido(linha6, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
@@ -728,6 +730,12 @@ class RoboLotofacilUltraApp:
         bg = TEMA["bg"]
         self._canvas_acertos = tk.Canvas(parent, bg=bg, highlightthickness=0)
         self._canvas_acertos.pack(fill="both", expand=True)
+        # Redesenha quando o canvas ganha seu tamanho real: logo após a criação
+        # (ou ao trocar de aba, quando o notebook mapeia o frame pela primeira
+        # vez) winfo_width()/height() retornam 1, não 0 — o fallback "or 900"
+        # não entra em ação e o gráfico é desenhado numa área de 1x1 (invisível).
+        # <Configure> dispara assim que o canvas recebe as dimensões reais.
+        self._canvas_acertos.bind("<Configure>", lambda e: self._atualizar_grafico_acertos())
         self._lbl_acertos_vazio = tk.Label(parent,
             text="Registre resultados usando 'Conferir Jogos' para ver o histórico aqui.",
             bg=bg, fg=TEMA["fg2"], font=("Segoe UI", 10))
@@ -1164,7 +1172,7 @@ class RoboLotofacilUltraApp:
             self.qtd_jogos.set(cfg["qtd_jogos"])
             self.janela_hist.set(cfg["janela"])
             # Gerações/população NÃO são mais tocadas aqui (2026-07-17): ficam
-            # fixas em 35/27, Mapa G x P provou que ajustar esses dois não
+            # fixas em 16/40, Mapa G x P provou que ajustar esses dois não
             # muda o resultado.
             self.passos_backtest.set(cfg["passos_backtest"])
             if "modo_turbo" in cfg:  # FIX: chave opcional — assistente respeita escolha do usuário
@@ -1227,7 +1235,7 @@ class RoboLotofacilUltraApp:
                 self.janela_hist.set(cfg_auto["janela"])
                 self.passos_backtest.set(cfg_auto["passos_backtest"])
                 # Gerações/população NÃO são mais tocadas aqui (2026-07-17):
-                # ficam fixas em 35/27 (ver self.geracoes/self.pop_size),
+                # ficam fixas em 16/40 (ver self.geracoes/self.pop_size),
                 # Mapa G x P provou que ajustar esses dois não muda o resultado.
                 # modo_turbo NAO e tocado aqui — respeita a escolha manual do usuario.
                 # O assistente nao tem autoridade para reativar o Turbo.
@@ -1794,13 +1802,13 @@ class RoboLotofacilUltraApp:
         """Executa a camada científica V11 em thread para não travar a interface."""
         try:
             if getattr(self, "backtest_cientifico_ativo", False):
-                self.log("⚠️ O Backtest Científico V11 já está em execução.")
+                self.log("⚠️ O Backtest Científico já está em execução.")
                 self.set_status("Backtest Científico já em execução.", "blue")
                 return
             self.backtest_cientifico_ativo = True
-            self.set_status("Iniciando Backtest Científico V11...", "blue")
+            self.set_status("Iniciando Backtest Científico...", "blue")
             self.log("=" * 72)
-            self.log("🧪 BACKTEST CIENTÍFICO V11 INICIADO")
+            self.log("🧪 BACKTEST CIENTÍFICO INICIADO")
             self.log("Inclui: backtest massivo, competição de modelos, autocalibração e banco de conhecimento.")
             th = threading.Thread(target=self.executar_backtest_cientifico_v11, daemon=True)
             self.thread_backtest_cientifico = th
@@ -1841,16 +1849,16 @@ class RoboLotofacilUltraApp:
             )
             self.info_backtest_cientifico = resultado
             rec = resultado.get("recomendacao") or {}
-            self.log_async("✅ Backtest Científico V11 concluído.")
+            self.log_async("✅ Backtest Científico concluído.")
             self.log_async(f"Configuração campeã: {rec.get('estrategia_base')} | G={rec.get('geracoes')} | P={rec.get('pop_size')}")
             self.log_async(f"Modelo campeão: {rec.get('modelo_campeao')}")
             self.log_async(f"Relatório TXT salvo em: {resultado.get('arquivo_relatorio', '')}")
             self.log_async(f"Conhecimento salvo em: {resultado.get('arquivo_conhecimento', '')}")
-            self.set_status_async("Backtest Científico V11 concluído.", "green")
+            self.set_status_async("Backtest Científico concluído.", "green")
             try:
                 messagebox.showinfo(
-                    "Backtest Científico V11",
-                    "Backtest Científico V11 concluído!\n\n"
+                    "Backtest Científico",
+                    "Backtest Científico concluído!\n\n"
                     f"Configuração campeã: {rec.get('estrategia_base')}\n"
                     f"G={rec.get('geracoes')} | P={rec.get('pop_size')}\n\n"
                     f"Relatório:\n{resultado.get('arquivo_relatorio', '')}"
@@ -1858,8 +1866,8 @@ class RoboLotofacilUltraApp:
             except Exception:
                 pass
         except Exception as e:
-            self.set_status_async("Erro no Backtest Científico V11.", "red")
-            self.log_async("❌ Erro no Backtest Científico V11:")
+            self.set_status_async("Erro no Backtest Científico.", "red")
+            self.log_async("❌ Erro no Backtest Científico:")
             self.log_async(str(e))
             self.log_async(traceback.format_exc())
         finally:
@@ -2882,7 +2890,7 @@ class RoboLotofacilUltraApp:
                 "",
             ]
         except Exception as ex:
-            linhas_hf = [f"  (sem dados — rode o Backtest Científico V11)\n  {ex}"]
+            linhas_hf = [f"  (sem dados — rode o Backtest Científico)\n  {ex}"]
 
         txt_hf.insert("end", "\n".join(linhas_hf))
         txt_hf.config(state="disabled")
@@ -4111,13 +4119,13 @@ class RoboLotofacilUltraApp:
             self.log("❌ Módulos V22 não disponíveis.")
             return
         if getattr(self, "_otimizador_v22_ativo", False):
-            self.log("⚠️ Otimizador V22 já está em execução.")
+            self.log("⚠️ Otimizador já está em execução.")
             return
         if not self.concursos:
-            self.log("⚠️ Carregue o histórico antes de usar o Otimizador V22.")
+            self.log("⚠️ Carregue o histórico antes de usar o Otimizador.")
             return
         self._otimizador_v22_ativo = True
-        self.set_status("Otimizador V22 iniciado...", "blue")
+        self.set_status("Otimizador iniciado...", "blue")
         th = threading.Thread(target=self._executar_otimizador_v22, daemon=True)
         th.start()
 
@@ -4132,7 +4140,7 @@ class RoboLotofacilUltraApp:
             tentativas = 10
 
             self.log("=" * 72)
-            self.log("⚡ OTIMIZADOR V22 INICIADO")
+            self.log("⚡ OTIMIZADOR INICIADO")
             self.log(f"Parâmetros: janela={janela} | G={ger} | P={pop} | jogos={qtd} | tentativas={tentativas}")
             self.root.after(0, self._iniciar_progresso)
 
@@ -4160,7 +4168,7 @@ class RoboLotofacilUltraApp:
                 self.jogos_gerados = jogos_otimizados
                 met = relatorio.get("metricas", {})
                 self.log_async("=" * 72)
-                self.log_async("✅ Otimizador V22 concluído")
+                self.log_async("✅ Otimizador concluído")
                 self.log_async(f"   Tentativas realizadas : {relatorio.get('tentativas_realizadas')}")
                 self.log_async(f"   Limiar atingido       : {'✅ SIM' if relatorio.get('limiar_atingido') else '⚠️ NÃO — melhor encontrado'}")
                 self.log_async(f"   11+%                  : {met.get('pct_11_mais')}%")
@@ -4170,14 +4178,14 @@ class RoboLotofacilUltraApp:
                 self.log_async("📋 Jogos otimizados:")
                 for i, jogo in enumerate(jogos_otimizados, 1):
                     self.log_async(f"   Jogo {i:02d}: {' '.join(f'{d:02d}' for d in sorted(jogo))}")
-                self.set_status_async("Otimizador V22 concluído.", "green")
+                self.set_status_async("Otimizador concluído.", "green")
             else:
                 self.log_async("❌ Otimizador não gerou jogos válidos.")
-                self.set_status_async("Erro no Otimizador V22.", "red")
+                self.set_status_async("Erro no Otimizador.", "red")
 
         except Exception as e:
-            self.set_status_async("Erro no Otimizador V22.", "red")
-            self.log_async(f"❌ Erro no Otimizador V22: {e}")
+            self.set_status_async("Erro no Otimizador.", "red")
+            self.log_async(f"❌ Erro no Otimizador: {e}")
             self.log_async(traceback.format_exc())
         finally:
             self._otimizador_v22_ativo = False
@@ -4190,20 +4198,20 @@ class RoboLotofacilUltraApp:
     # ─────────────────────────────────────────────────────────────────────────
 
     def iniciar_dashboard_v22(self) -> None:
-        """Exibe o Dashboard Científico V22 no log."""
+        """Exibe o Dashboard Comparativo no log."""
         if not _V22_OK:
             self.log("❌ Módulos V22 não disponíveis.")
             return
         self.log("=" * 70)
-        self.log("📊 DASHBOARD CIENTÍFICO V22")
-        self.set_status("Carregando dashboard V22...", "blue")
+        self.log("📊 DASHBOARD COMPARATIVO")
+        self.set_status("Carregando dashboard comparativo...", "blue")
         try:
             dash = DashboardV22()
             self.log(dash.resumo_texto())
-            self.set_status("Dashboard V22 carregado.", "green")
+            self.set_status("Dashboard comparativo carregado.", "green")
         except Exception as e:
-            self.log(f"❌ Erro no dashboard V22: {e}")
-            self.set_status("Erro no dashboard V22.", "red")
+            self.log(f"❌ Erro no dashboard comparativo: {e}")
+            self.set_status("Erro no dashboard comparativo.", "red")
 
     def iniciar_pipeline_v22(self) -> None:
         """Dispara o Pipeline Automático V22 em thread separada."""

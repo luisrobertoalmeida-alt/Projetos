@@ -1501,13 +1501,13 @@ def montar_configuracoes_cientificas(geracoes_base: int, pop_base: int) -> list[
     `pop_base` (parâmetros da função) seguem aceitos por compatibilidade
     de assinatura, mas não são mais usados para gerar variantes de G/P.
 
-    Mantém só a comparação que ainda faz sentido: G/P fixo (35/27) vs.
+    Mantém só a comparação que ainda faz sentido: G/P fixo (16/40) vs.
     a mesma config com diversidade ampliada (parâmetro não testado até
     agora).
     """
     candidatos = [
-        {"nome": "Configuração validada (G=35/P=27)", "geracoes": 35, "pop_size": 27},
-        {"nome": "Diversidade ampliada", "geracoes": 35, "pop_size": 27, "override": {"diversidade": 0.86, "limite_intersecao": 11}},
+        {"nome": "Configuração validada (G=16/P=40)", "geracoes": 16, "pop_size": 40},
+        {"nome": "Diversidade ampliada", "geracoes": 16, "pop_size": 40, "override": {"diversidade": 0.86, "limite_intersecao": 11}},
     ]
     return candidatos
 

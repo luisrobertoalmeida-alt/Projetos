@@ -165,13 +165,13 @@ def montar_configuracoes_laboratorio(
 
     `geracoes_max`/`pop_size_max`/`janela_analise` seguem aceitos por
     compatibilidade de assinatura, mas não influenciam mais o resultado:
-    retorna sempre a configuração validada (G=35/P=27).
+    retorna sempre a configuração validada (G=16/P=40).
     """
     return [{
-        "nome": "Configuração validada (G=35/P=27)",
-        "geracoes": 35,
-        "pop_size": 27,
-        "ratio_gp": round(35 / 27, 2),
+        "nome": "Configuração validada (G=16/P=40)",
+        "geracoes": 16,
+        "pop_size": 40,
+        "ratio_gp": round(16 / 40, 2),
         "janela": max(30, int(janela_analise)),
     }]
 
@@ -185,7 +185,7 @@ def gerar_apostas_laboratorio_inteligente(  # noqa: E501
     status_cb=None,
 ):
     """
-    Gera o pacote com a configuração G/P validada (35/27).
+    Gera o pacote com a configuração G/P validada (16/40).
 
     Até 2026-07-17 esta função testava várias configurações de G/P numa
     amostra pequena e escolhia uma "vencedora" — desde que o Mapa G×P e a
@@ -309,14 +309,14 @@ def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: in
         media_melhor, taxa_12, taxa_13 = 0.0, 0.0, 0.0
         motivo_desempenho = "sem registros reais suficientes"
 
-    # geracoes/pop_size: FIXOS em 35/27 desde 2026-07-16 (Mapa G x P, n=300,
+    # geracoes/pop_size: FIXOS em 16/40 desde 2026-07-18 (Mapa G x P, n=300,
     # TOST margem=0.3) confirmou equivalência estatística na faixa G=16-300 —
     # não há vale estrutural, então nem quantidade de jogos, nem desempenho
     # recente, nem histórico técnico anterior devem reajustar esses dois
     # parâmetros. `perfil` segue aceito por compatibilidade de assinatura,
     # mas não afeta mais G/P.
-    geracoes = 35
-    pop_size = 27
+    geracoes = 16
+    pop_size = 40
 
     janela = min(max(MIN_HIST, janela), max(MIN_HIST, total_hist or janela))
     passos_bt = 50 if qtd_jogos <= 20 else 35

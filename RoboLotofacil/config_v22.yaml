@@ -8,7 +8,7 @@ versao: "V22.0"
 
 # ── Parâmetros do algoritmo genético ────────────────────────
 genetico:
-  # G=35/P=27: fixo desde 2026-07-16. Mapa G x P (n=300, TOST margem=0.3)
+  # G=16/P=40: fixo desde 2026-07-18. Mapa G x P (n=300, TOST margem=0.3)
   # confirmou equivalência estatística entre G=16 e G=300 -- não há vale
   # estrutural (a alegação anterior "G=88 validado com 5 rodadas" não se
   # sustentou em amostra maior, ver ARQUITETURA.md e
@@ -16,8 +16,8 @@ genetico:
   # ter efeito prático mensurável; ainda ajustável via
   # estrategia_override/mapa_gp_custom.py para quem quiser reabrir a
   # investigação.
-  geracoes: 35
-  populacao: 27
+  geracoes: 16
+  populacao: 40
   janela: 188           # Janela histórica ativa
   jogos: 20             # Jogos por pacote
   modo_turbo: false     # Desligado — usar histórico completo

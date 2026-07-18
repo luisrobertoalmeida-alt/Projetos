@@ -151,14 +151,17 @@ confirma o mesmo padrão em toda a faixa — `média_melhor` varia só entre
 11.24 e 11.35 (spread de ~0.11), bem dentro da margem de equivalência do
 TOST (±0.3). Não há vale estrutural em nenhum ponto testado.
 
-**Decisão: G=35/P=27 fixo, removido da tela principal.** Como G/P não
+**Decisão: G=16/P=40 fixo, removido da tela principal.** Como G/P não
 tem efeito prático mensurável nessa faixa, expor como parâmetro manual só
 cria a falsa impressão de que vale a pena ajustar. `ui.py` fixa
-`self.geracoes`/`self.pop_size` em 35/27 (margem de segurança sobre o
-ponto mais barato testado, G=16) e não exibe mais os campos na tela
-(`config_v22.yaml` atualizado com os mesmos valores). Continua ajustável
+`self.geracoes`/`self.pop_size` em 16/40 (`config_v22.yaml` atualizado com
+os mesmos valores) e não exibe mais os campos na tela. Continua ajustável
 por quem quiser reabrir a investigação, via `estrategia_override` ou
 rodando `mapa_gp_custom.py` diretamente.
+
+*Atualizado em 2026-07-18: valor fixo trocado de G=35/P=27 para G=16/P=40
+— ambos já confirmados estatisticamente equivalentes acima (linha 144),
+sem mudança de racional, só o ponto escolhido dentro da faixa validada.*
 
 ## 🗺️ Mapa G×P com grade customizada — `mapa_gp_custom.py`
 
@@ -185,7 +188,8 @@ equivalentes, desfazendo o benefício do fix de G=35/P=27:
 - **`calcular_configuracao_assistida()`** (`apostas.py`) não recalcula
   mais gerações/população a partir de quantidade de jogos, desempenho
   recente ou banco técnico — repassa os valores fixos. Consequência: o
-  checkbox **"🧭 Assistente Auto Config"** (ligado por padrão) e o botão
+  checkbox **"🧭 Assistente Auto Config"** (desligado por padrão desde
+  2026-07-18 — antes ligado) e o botão
   **"🧭 Auto Ajuste"** pararam de sobrescrever `self.geracoes`/
   `self.pop_size` a cada geração de jogos.
 - **`aplicar_conhecimento_cientifico_na_configuracao()`** (`backtest.py`)
@@ -205,7 +209,7 @@ equivalentes, desfazendo o benefício do fix de G=35/P=27:
   removida.
 - **`montar_configuracoes_laboratorio()`/`gerar_apostas_laboratorio_inteligente()`**
   simplificadas: não testam mais variantes de G/P (não há mais nada
-  para comparar), geram direto com a configuração fixa (35/27). O botão
+  para comparar), geram direto com a configuração fixa (16/40). O botão
   "🔬 Laboratório" continua funcionando, mas não roda mais a bateria de
   configurações nem exibe "resultado do laboratório" no log (campo
   `analise["laboratorio_inteligente"]["ativo"]` passa a `False`).
