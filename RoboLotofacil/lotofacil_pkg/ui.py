@@ -539,7 +539,8 @@ class RoboLotofacilUltraApp:
             "🏆 Lab Histórico":        "Calibra o robô vs. aleatório usando o modo Laboratório Inteligente.",
             "🧭 Auto Ajuste":          "Calcula e aplica automaticamente a melhor configuração para o histórico atual.",
             "🔀 Walk-Forward":         "Validação walk-forward deslizante: avalia robustez em múltiplas janelas e detecta overfitting.",
-            "📐 Bootstrap IC":         "Inferência estatística: IC de 95%/99%, p-value e Cohen's d sobre os resultados do último backtest.",
+            "📐 Bootstrap IC":         "IC 95%/99% e erro padrão (bootstrap) sobre a série de acertos do último backtest. "
+                                "Não compara contra aleatório (sem p-value/Cohen's d aqui) — para isso use 🎯 Calibrar IA ou 🗺️ Mapa G×P.",
             "🔬 Análise Cient. V2":    "Teste binomial de significância + Walk-Forward com métrica corrigida (melhor do pacote). Rode Calibrar IA e Walk-Forward antes.",
         }
         for txt, cmd, cor in [
@@ -4260,18 +4261,34 @@ class RoboLotofacilUltraApp:
         try:
             info = getattr(self, "info_backtest", {})
 
-            # Monta lista de resultados a partir das estruturas possíveis do backtest
-            resultados = []
-            for v in info.get("acertos_por_passo", []):
-                if isinstance(v, (int, float)):
-                    resultados.append({"acertos": float(v)})
-            if not resultados:
-                # Fallback: usa media_melhor replicada pelos passos
-                media = info.get("media_melhor", 0.0)
-                passos = max(1, info.get("passos", 1))
-                resultados = [{"acertos": float(media)}] * passos
+            # Monta lista de resultados a partir da serie real por passo do backtest.
+            # NAO usar fallback de media_melhor replicada: isso produz uma amostra
+            # sem variancia (erro padrao sempre 0, IC degenerado no ponto observado)
+            # -- resultado estatisticamente sem sentido, mesmo "parecendo" valido
+            # num JSON (achado de auditoria, 2026-07-18: bootstrap_ic_20260718_103521.json
+            # tinha erro_padrao_bootstrap=0.0 porque backtest_ultra_massivo() nao
+            # devolvia "acertos_por_passo" -- corrigido em backtest.py).
+            resultados = [
+                {"acertos": float(v)}
+                for v in info.get("acertos_por_passo", [])
+                if isinstance(v, (int, float))
+            ]
+            if len(resultados) < 2:
+                self.log_async(
+                    "⚠️ Bootstrap IC: nenhuma série de acertos por passo disponível "
+                    "no último backtest (ou com menos de 2 pontos) — não é possível "
+                    "calcular variância real. Execute 📊 Backtest ou 🤖 BT Automático "
+                    "novamente antes de tentar de novo."
+                )
+                self.set_status_async("Bootstrap IC: dados insuficientes.", "red")
+                return
 
             self.log_async(f"Amostra para inferência: {len(resultados)} observações")
+            self.log_async(
+                "Nota: este relatório mede IC/erro padrão da série do backtest — "
+                "não compara contra aleatório (sem p-value/Cohen's d aqui; use "
+                "🎯 Calibrar IA ou 🗺️ Mapa G×P para isso)."
+            )
             self.root.after(0, self._iniciar_progresso)
 
             rel = relatorio_inferencial(resultados, n_reamostras=2000, seed=42)

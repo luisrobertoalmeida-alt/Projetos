@@ -1378,6 +1378,10 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
             "geracoes": cfg["geracoes"],
             "pop_size": cfg["pop_size"],
             "ultimos": registros[-20:],
+            # Serie completa por passo (mesma convencao de backtest_basico) --
+            # sem isso, Bootstrap IC nao tem como calcular variancia real e
+            # cai num fallback degenerado (media replicada, erro padrao 0).
+            "acertos_por_passo": [r["media_acertos"] for r in registros],
         })
         resultados_config.append(resumo)
         avisar(f"Resultado {cfg['nome']}: score={resumo['score']} | média melhor={resumo['media_melhor']} | máx={resumo['max_melhor']}")
@@ -1407,6 +1411,7 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
         "max_melhor": vencedor.get("max_melhor", 0),
         "distribuicao": vencedor.get("distribuicao", {}),
         "ultimos": vencedor.get("ultimos", []),
+        "acertos_por_passo": vencedor.get("acertos_por_passo", []),
     }
     resultado["arquivo_relatorio"] = salvar_relatorio_backtest_ultra(resultado)
     return resultado

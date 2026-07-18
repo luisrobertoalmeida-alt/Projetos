@@ -440,6 +440,18 @@ class TestBacktestUltra(unittest.TestCase):
         else:
             self.assertIn("passos", self.resultado)
 
+    def test_acertos_por_passo_presente_e_completo(self):
+        """
+        Regressao (achado de auditoria, 2026-07-18): sem "acertos_por_passo",
+        o Bootstrap IC da UI caia num fallback que replica media_melhor pelos
+        passos, produzindo erro padrao 0 e IC degenerado -- um resultado
+        estatisticamente impossivel dado que a serie real tem variancia.
+        """
+        self.assertIn("acertos_por_passo", self.resultado)
+        serie = self.resultado["acertos_por_passo"]
+        self.assertEqual(len(serie), self.resultado["passos"])
+        self.assertTrue(all(isinstance(v, (int, float)) for v in serie))
+
 
 # ── executar_auto_diagnostico ─────────────────────────────────────────────────
 
