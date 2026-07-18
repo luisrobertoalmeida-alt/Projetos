@@ -518,11 +518,19 @@ class RoboLotofacilUltraApp:
             ("🎯 Dual-Perfil",    self.gerar_jogos_dual_perfil,      TEMA["btn_gerar"]),
             ("🔒 Fechamento",     self.iniciar_fechamento,           TEMA["btn_pacote"]),
             ("⚡ Otimizador", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
-            ("🗺️ Mapa G×P",      self.iniciar_mapa_gp,                TEMA["btn_neon_verde"]),
         ]:
             btn = self.criar_botao_colorido(linha3, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
             tooltip(btn, _tips_linha3.get(txt, ""))
+
+        # Mapa G×P separado dos demais (espaço extra antes), menor — mesmo
+        # tamanho do botão "✖ Encerrar" (linha 5).
+        btn_mapa_gp = self.criar_botao_colorido(
+            linha3, "🗺️ Mapa G×P", self.iniciar_mapa_gp,
+            cor=TEMA["btn_neon_verde"], largura=10,
+        )
+        btn_mapa_gp.pack(side="left", padx=(24, 3))
+        tooltip(btn_mapa_gp, _tips_linha3.get("🗺️ Mapa G×P", ""))
 
         # ── Linha 4: inteligência e calibração ───────────────
         tk.Label(topo, text="🧠 Inteligência, diagnóstico e calibração", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
