@@ -28,6 +28,7 @@ Backtesting, calibração vs. aleatório, laboratório histórico,
 módulo científico V11, relatórios, dashboard e auditoria de pacotes.
 """
 import os
+import json
 import math
 import time
 import random
@@ -51,10 +52,7 @@ from .utils import (
     normalizar_scores, definir_rng_thread, limpar_rng_thread,
 )
 from .persistencia import salvar_csv_blindado
-from .apostas import (
-    gerar_apostas, gerar_apostas_laboratorio_inteligente,
-    montar_configuracoes_laboratorio,
-)
+from .apostas import gerar_apostas
 from .genetico import (
     analisar_estrutura_jogo_cached, analisar_estrutura_jogo,
     calcular_mapa_cobertura, resumo_estrutural_pacote,
@@ -121,7 +119,6 @@ def resumir_configuracao_robo(configuracao: dict | None = None, analise: dict | 
         "populacao": configuracao.get("populacao"),
         "passos_backtest": configuracao.get("passos_backtest"),
         "modo_turbo": configuracao.get("modo_turbo"),
-        "modo_laboratorio": configuracao.get("modo_laboratorio"),
         "assistente_auto_config": configuracao.get("assistente_auto_config"),
         "modo_estrategico": estrategia.get("modo"),
         "indice_confianca": estrategia.get("indice_confianca"),
@@ -244,6 +241,26 @@ def gerar_resumo_banco_desempenho(banco: dict | None = None, ultimos: int = 30) 
     }
 
 
+def _ranking_modelos_historico() -> list[dict]:
+    """Ranking de modelos do ensemble a partir de historico_modelos.json (Poda Inteligente V20.2)."""
+    arq = os.path.join(PASTA_DADOS, "historico_modelos.json")
+    if not os.path.exists(arq):
+        return []
+    try:
+        with open(arq, "r", encoding="utf-8") as f:
+            historico = json.load(f)
+        ranking = []
+        for modelo, dados in historico.items():
+            ranking.append({
+                "modelo": modelo,
+                "media": round(dados.get("media", 0), 4),
+                "concursos": dados.get("concursos", 0),
+            })
+        return sorted(ranking, key=lambda x: x["media"], reverse=True)
+    except Exception:
+        return []
+
+
 def gerar_dashboard_desempenho_historico() -> str:
     resumo = gerar_resumo_banco_desempenho()
     banco = carregar_banco_desempenho()
@@ -261,6 +278,13 @@ def gerar_dashboard_desempenho_historico() -> str:
                 f"11+={r.get('qtd_11_mais')} | 12+={r.get('qtd_12_mais')} | 13+={r.get('qtd_13_mais')} | "
                 f"J={cfg.get('qtd_jogos')} G={cfg.get('geracoes')} P={cfg.get('populacao')} H={cfg.get('janela_historica')}"
             )
+    ranking_modelos = _ranking_modelos_historico()
+    if ranking_modelos:
+        linhas.append("")
+        linhas.append("RANKING DE MODELOS DO ENSEMBLE")
+        linhas.append("-" * 72)
+        for i, m in enumerate(ranking_modelos[:10], start=1):
+            linhas.append(f"{i}. {m['modelo']}: média={m['media']} | concursos={m['concursos']}")
     return "\n".join(linhas)
 
 
@@ -896,218 +920,15 @@ def calibrar_robo_vs_aleatorio(concursos: list, janela: int = 120, qtd_jogos: in
     return salvar_relatorio_calibracao(resultado)
 
 
-def salvar_relatorio_laboratorio_historico(resultado: dict) -> str:
-    garantir_estrutura_pastas()
-    timestamp = gerar_timestamp_arquivo()
-    caminho_txt = os.path.join(PASTA_EXPORT, f"laboratorio_historico_vs_aleatorio_{timestamp}.txt")
-    caminho_csv = os.path.join(PASTA_EXPORT, f"laboratorio_historico_vs_aleatorio_{timestamp}.csv")
-
-    linhas_txt = [
-        "===== LABORATORIO HISTORICO VS ALEATORIO =====",
-        f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-        f"Concursos testados por configuracao: {resultado.get('passos', 0)}",
-        f"Janela historica: {resultado.get('janela', 0)}",
-        f"Jogos por pacote: {resultado.get('qtd_jogos', 0)}",
-        "",
-        "RANKING",
-    ]
-
-    for pos, item in enumerate(resultado.get("ranking", []), start=1):
-        sig = item.get("significancia", {})
-        sig_str = ""
-        if sig:
-            sig_str = (
-                f" | p={sig.get('p_value', 1):.4f} "
-                f"({'✅SIG' if sig.get('significativo') else '⚠️n.sig'})"
-                f" IC95%[{sig.get('ic_95_inferior', 0):.1%},{sig.get('ic_95_superior', 0):.1%}]"
-            )
-        linhas_txt.append(
-            f"#{pos} {item.get('nome', '')} | score={item.get('score_ranking', 0)} | "
-            f"11+={item.get('pct_pacotes_11_mais', 0)}% | 12+={item.get('pct_pacotes_12_mais', 0)}% | "
-            f"13+={item.get('pct_pacotes_13_mais', 0)}% | media_melhor={item.get('media_melhor', 0)} | "
-            f"vantagem_score={item.get('vantagem_media_score', 0)} | G={item.get('geracoes', 0)} | P={item.get('pop_size', 0)}"
-            f"{sig_str}"
-        )
-
-    vencedor = (resultado.get("ranking") or [{}])[0]
-    linhas_txt.extend([
-        "",
-        "CONFIGURACAO RECOMENDADA",
-        f"Nome: {vencedor.get('nome', '')}",
-        f"Geracoes: {vencedor.get('geracoes', 0)}",
-        f"Populacao: {vencedor.get('pop_size', 0)}",
-        f"Score historico: {vencedor.get('score_ranking', 0)}",
-        "",
-        "Observacao: ranking historico nao garante sorteio futuro; use como calibracao, nao como promessa.",
-    ])
-
-    with open(caminho_txt, "w", encoding="utf-8") as f:
-        f.write("\n".join(linhas_txt))
-
-    try:
-        pd.DataFrame(resultado.get("linhas", [])).to_csv(caminho_csv, index=False, encoding="utf-8-sig")
-    except Exception:
-        caminho_csv = ""
-
-    resultado["arquivo_txt"] = caminho_txt
-    resultado["arquivo_csv"] = caminho_csv
-    return resultado
-
-
-def calibrar_laboratorio_historico_vs_aleatorio(  # -> dict
-    concursos,
-    janela=120,
-    qtd_jogos=10,
-    passos=30,
-    geracoes_max=250,
-    pop_size_max=180,
-    status_cb=None,
-    seed=None,
-):
-    treino, validacao, teste = split_temporal(concursos)
-    total = len(concursos or [])
-    if total < MIN_HIST + 10:
-        raise ValueError(f"Historico insuficiente para laboratorio historico: {total} concursos. Use ao menos {MIN_HIST + 10}.")
-
-    # Item 3 — seed reproduzível: se fornecida, fixa o estado global de random
-    # antes de iniciar o laboratório para garantir comparabilidade entre execuções.
-    if seed is not None:
-        random.seed(seed)
-
-    janela = min(max(MIN_HIST, int(janela)), max(MIN_HIST, total - 5))
-    passos = min(max(1, int(passos)), max(1, total - janela))
-    qtd_jogos = min(max(5, int(qtd_jogos)), 50)
-    inicio = max(janela, total - passos)
-    configs = montar_configuracoes_laboratorio(geracoes_max, pop_size_max)
-
-    linhas = []
-    ranking = []
-
-    for idx_cfg, cfg in enumerate(configs, start=1):
-        nome = cfg["nome"]
-        ger = int(cfg["geracoes"])
-        pop = int(cfg["pop_size"])
-        if status_cb:
-            status_cb(f"[{idx_cfg}/{len(configs)}] Laboratorio historico: {nome} | G={ger} | P={pop}")
-
-        # Reinicia seed por configuração para que cada perfil seja comparado
-        # nas mesmas condições aleatórias (elimina viés de ordem de execução).
-        if seed is not None:
-            random.seed(seed)
-
-        linhas_cfg = []
-        t0 = time.time()
-        for pos, i in enumerate(range(inicio, total), start=1):
-            base = concursos[:i]
-            real = sorted(concursos[i])
-            jogos_robo, analise, pesos = gerar_apostas(
-                base,
-                qtd_jogos=qtd_jogos,
-                janela_analise=min(janela, len(base)),
-                geracoes=ger,
-                pop_size=pop,
-            )
-            jogos_aleatorios = gerar_jogos_aleatorios(qtd_jogos)
-
-            resumo_robo = resumir_acertos_pacote([intersecao(j, real) for j in jogos_robo])
-            resumo_aleatorio = resumir_acertos_pacote([intersecao(j, real) for j in jogos_aleatorios])
-            score_robo = score_calibracao_pacote(resumo_robo)
-            score_aleatorio = score_calibracao_pacote(resumo_aleatorio)
-            linha = {
-                "configuracao": nome,
-                "geracoes": ger,
-                "pop_size": pop,
-                "teste": pos,
-                "concurso_idx": i + 1,
-                "resultado_real": formatar_jogo(real),
-                "melhor_robo": resumo_robo["melhor"],
-                "media_robo": resumo_robo["media"],
-                "qtd_11_mais_robo": resumo_robo["qtd_11_mais"],
-                "qtd_12_mais_robo": resumo_robo["qtd_12_mais"],
-                "qtd_13_mais_robo": resumo_robo["qtd_13_mais"],
-                "score_robo": score_robo,
-                "melhor_aleatorio": resumo_aleatorio["melhor"],
-                "media_aleatorio": resumo_aleatorio["media"],
-                "qtd_11_mais_aleatorio": resumo_aleatorio["qtd_11_mais"],
-                "qtd_12_mais_aleatorio": resumo_aleatorio["qtd_12_mais"],
-                "qtd_13_mais_aleatorio": resumo_aleatorio["qtd_13_mais"],
-                "score_aleatorio": score_aleatorio,
-                "vantagem_score_robo": round(score_robo - score_aleatorio, 3),
-            }
-            linhas.append(linha)
-            linhas_cfg.append(linha)
-
-            if status_cb and (pos == 1 or pos % 5 == 0 or pos == passos):
-                status_cb(
-                    f"  {nome} {pos}/{passos} | robo melhor={resumo_robo['melhor']} | "
-                    f"aleatorio melhor={resumo_aleatorio['melhor']}"
-                )
-
-        resumo_robo = resumir_linhas_calibracao(linhas_cfg, "robo")
-        vantagens = [float(r["vantagem_score_robo"]) for r in linhas_cfg]
-        score_ranking = round(
-            float(resumo_robo.get("media_score", 0))
-            + float(resumo_robo.get("pct_pacotes_11_mais", 0)) * 0.10
-            + float(resumo_robo.get("pct_pacotes_12_mais", 0)) * 0.25
-            + float(resumo_robo.get("pct_pacotes_13_mais", 0)) * 0.60
-            + (sum(vantagens) / len(vantagens) if vantagens else 0),
-            3,
-        )
-        item = {
-            "nome": nome,
-            "geracoes": ger,
-            "pop_size": pop,
-            "score_ranking": score_ranking,
-            "tempo_s": round(time.time() - t0, 2),
-            "vantagem_media_score": round(sum(vantagens) / len(vantagens), 3) if vantagens else 0,
-            "robo_venceu_score": sum(1 for v in vantagens if v > 0),
-            "aleatorio_venceu_score": sum(1 for v in vantagens if v < 0),
-            **resumo_robo,
-        }
-        # Item 1 — p-value por configuração: testa se a vantagem observada é
-        # estatisticamente significativa ou pode ser explicada por acaso.
-        sig = teste_significancia_calibracao(
-            item["robo_venceu_score"],
-            item["aleatorio_venceu_score"],
-            empates=sum(1 for v in vantagens if v == 0),
-        )
-        item["significancia"] = sig
-        ranking.append(item)
-        if status_cb:
-            status_cb(
-                f"  Resultado {nome}: score={score_ranking} | 11+={item.get('pct_pacotes_11_mais', 0)}% | "
-                f"12+={item.get('pct_pacotes_12_mais', 0)}% | vantagem={item.get('vantagem_media_score', 0)}"
-            )
-            status_cb(
-                f"  Significância: p={sig['p_value']:.4f} | "
-                f"{'✅ SIGNIFICATIVO' if sig['significativo'] else '⚠️ não significativo'} | "
-                f"IC95% [{sig['ic_95_inferior']:.1%}, {sig['ic_95_superior']:.1%}]"
-                + (f" | ~{sig['passos_extras_para_significancia']} passos extras para p<0.05" if sig.get('passos_extras_para_significancia') else "")
-            )
-
-    ranking = sorted(ranking, key=lambda r: r["score_ranking"], reverse=True)
-    resultado = {
-        "tipo": "laboratorio_historico_vs_aleatorio",
-        "passos": passos,
-        "janela": janela,
-        "qtd_jogos": qtd_jogos,
-        "ranking": ranking,
-        "linhas": linhas,
-    }
-    return salvar_relatorio_laboratorio_historico(resultado)
-
-
 def salvar_relatorio_auto_diagnostico(resultado: dict) -> str:
     garantir_estrutura_pastas()
     timestamp = gerar_timestamp_arquivo()
     caminho_txt = os.path.join(PASTA_EXPORT, f"auto_diagnostico_lotofacil_{timestamp}.txt")
 
     calibracao = resultado.get("calibracao") or {}
-    lab = resultado.get("laboratorio_historico") or {}
     comparador = resultado.get("comparador") or []
     robo = calibracao.get("resumo_robo", {})
     aleatorio = calibracao.get("resumo_aleatorio", {})
-    vencedor_lab = (lab.get("ranking") or [{}])[0]
     vencedor_comp = comparador[0] if comparador else {}
 
     linhas = [
@@ -1127,16 +948,7 @@ def salvar_relatorio_auto_diagnostico(resultado: dict) -> str:
         f"Vantagem media de score: {calibracao.get('vantagem_media_score', 0)}",
         f"Arquivo calibracao: {calibracao.get('arquivo_txt', '')}",
         "",
-        "2) LABORATORIO HISTORICO",
-        f"Vencedor: {vencedor_lab.get('nome', '')}",
-        f"Geracoes recomendadas: {vencedor_lab.get('geracoes', 0)}",
-        f"Populacao recomendada: {vencedor_lab.get('pop_size', 0)}",
-        f"Score historico: {vencedor_lab.get('score_ranking', 0)}",
-        f"Pacotes 11+: {vencedor_lab.get('pct_pacotes_11_mais', 0)}%",
-        f"Pacotes 12+: {vencedor_lab.get('pct_pacotes_12_mais', 0)}%",
-        f"Arquivo laboratorio: {lab.get('arquivo_txt', '')}",
-        "",
-        "3) COMPARADOR DE ESTRATEGIAS",
+        "2) COMPARADOR DE ESTRATEGIAS",
         f"Estrategia vencedora: {vencedor_comp.get('nome', '')}",
         f"Score: {vencedor_comp.get('score_ponderado', 0)}",
         f"Media do melhor jogo: {vencedor_comp.get('media_melhor', 0)}",
@@ -1147,11 +959,6 @@ def salvar_relatorio_auto_diagnostico(resultado: dict) -> str:
     ]
 
     recomendacao = []
-    if vencedor_lab:
-        recomendacao.append(
-            f"Use como ponto de partida a configuracao '{vencedor_lab.get('nome', '')}' "
-            f"(G={vencedor_lab.get('geracoes', 0)}, P={vencedor_lab.get('pop_size', 0)})."
-        )
     if vencedor_comp:
         recomendacao.append(f"No comparador, a estrategia mais forte foi '{vencedor_comp.get('nome', '')}'.")
     if float(calibracao.get("vantagem_media_score", 0) or 0) <= 0:
@@ -1192,7 +999,7 @@ def executar_auto_diagnostico_lotofacil(  # -> dict
     pop_size = max(20, int(pop_size))
 
     if status_cb:
-        status_cb("Auto Diagnostico 1/3: calibrando robo vs aleatorio...")
+        status_cb("Auto Diagnostico 1/2: calibrando robo vs aleatorio...")
     calibracao = calibrar_robo_vs_aleatorio(
         concursos,
         janela=janela,
@@ -1204,19 +1011,7 @@ def executar_auto_diagnostico_lotofacil(  # -> dict
     )
 
     if status_cb:
-        status_cb("Auto Diagnostico 2/3: rodando Laboratorio Historico...")
-    laboratorio = calibrar_laboratorio_historico_vs_aleatorio(
-        concursos,
-        janela=janela,
-        qtd_jogos=qtd_jogos,
-        passos=passos,
-        geracoes_max=geracoes,
-        pop_size_max=pop_size,
-        status_cb=status_cb,
-    )
-
-    if status_cb:
-        status_cb("Auto Diagnostico 3/3: comparando estrategias...")
+        status_cb("Auto Diagnostico 2/2: comparando estrategias...")
     comparador = comparar_estrategias(
         concursos,
         janela=janela,
@@ -1234,7 +1029,6 @@ def executar_auto_diagnostico_lotofacil(  # -> dict
         "geracoes": geracoes,
         "pop_size": pop_size,
         "calibracao": calibracao,
-        "laboratorio_historico": laboratorio,
         "comparador": comparador,
     })
 

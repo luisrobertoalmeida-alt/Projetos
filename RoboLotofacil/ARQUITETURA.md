@@ -208,13 +208,73 @@ equivalentes, desfazendo o benefício do fix de G=35/P=27:
   "G=88 validado com 5 rodadas" já derrubado. A guarda de ratio foi
   removida.
 - **`montar_configuracoes_laboratorio()`/`gerar_apostas_laboratorio_inteligente()`**
-  simplificadas: não testam mais variantes de G/P (não há mais nada
-  para comparar), geram direto com a configuração fixa (16/40). O botão
-  "🔬 Laboratório" continua funcionando, mas não roda mais a bateria de
-  configurações nem exibe "resultado do laboratório" no log (campo
-  `analise["laboratorio_inteligente"]["ativo"]` passa a `False`).
+  simplificadas em 2026-07-17, **removidas por completo em 2026-07-18**
+  (ver seção "Segunda limpeza" abaixo) — geravam exatamente o mesmo
+  resultado que "🎲 Gerar Jogos" já entrega.
 - `config_v22.yaml`: removida a chave duplicada e nunca lida por
   nenhum código, `genetico.passos_calibracao`.
+
+## 🧹 Segunda limpeza — 2026-07-18 (pós fix de G=16/P=40)
+
+Levantada pelo usuário durante uma sessão de revisão da tela: com G/P
+fixo, vários mecanismos que existiam para *decidir* ou *testar* G/P
+tinham virado casca vazia — rodavam, mas sempre chegavam na mesma
+configuração fixa, sem gerar informação nova. Removidos/simplificados:
+
+- **Botão "🔬 Laboratório"** (`gerar_jogos_laboratorio`) e
+  `gerar_apostas_laboratorio_inteligente()`/`montar_configuracoes_laboratorio()`
+  (`apostas.py`) — geravam o pacote com o mesmo G/P fixo que "🎲 Gerar
+  Jogos" já usa, só que **sem** a injeção de impopularidade
+  (`estrategia_override`). Ou seja, virou um subconjunto pior do botão
+  principal, não uma alternativa. Removido; "🎲 Gerar Jogos" cobre o caso.
+- **Checkbox "Modo Laboratório Inteligente"** (`self.modo_laboratorio`) —
+  a variável nunca era lida em lugar nenhum (`.get()` não aparecia em
+  nenhum condicional); só existia o `.set()`. Marcar ou desmarcar não
+  tinha efeito algum. Removida.
+- **Botão "🏆 Lab Histórico"** e `calibrar_laboratorio_historico_vs_aleatorio()`/
+  `salvar_relatorio_laboratorio_historico()` (`backtest.py`) — desde que
+  `montar_configuracoes_laboratorio()` passou a devolver sempre 1 config
+  fixa, esse botão rodava a **mesma simulação** do "🎯 Calibrar IA" (mesmo
+  G/P, mesma janela, mesmos passos, mesmos testes estatísticos), só
+  embrulhada num formato de "ranking de 1 posição". Removido por completo.
+- **Auto Diagnóstico** (`executar_auto_diagnostico_lotofacil`) rodava
+  Calibração → Laboratório Histórico → Comparador — a etapa do meio era a
+  duplicata acima, dobrando o tempo de execução para o mesmo resultado.
+  Reduzido para 2 etapas (Calibração → Comparador); relatório renumerado.
+- **Auto Ajuste / Assistente Auto Config** (`calcular_configuracao_assistida`,
+  `apostas.py`) — calculava desempenho real (média do melhor acerto, taxa
+  12+/13+, ajustes de memória) só para exibir como "motivo" no log; nada
+  disso influenciava janela, passos ou G/P (que são fixos). Simplificada
+  para só o que de fato é aplicado: janela (por tamanho do histórico) e
+  passos de backtest (por quantidade de jogos). Tooltip do botão "🧭 Auto
+  Ajuste" atualizado para não prometer mais do que isso.
+- **Botão "📊 Dashboard Comparativo"** (`DashboardV22`/`v22_dashboard.py`) —
+  auditado e tinha 3 problemas: (1) a seção "tendência de
+  acertos"/"estabilidade" lia o mesmo arquivo
+  (`lotofacil_desempenho_historico.json`) que o botão "📊 Desempenho" já
+  mostra; (2) as seções "evolução por versão" e "histórico de
+  calibrações" dependem de `historico_relatorios.json`, escrito só pelo
+  Pipeline V22 (`RelatorioV22`) — e nenhum botão da tela dispara esse
+  pipeline (`iniciar_pipeline_v22` existe mas está órfão), então essas
+  seções sempre apareciam vazias; (3) só a seção "ranking de modelos"
+  trazia algo que "📊 Desempenho" não tinha. Removido o botão e o módulo
+  `v22_dashboard.py` (zero outros usos no projeto); a seção "ranking de
+  modelos" foi incorporada em `gerar_dashboard_desempenho_historico()`
+  (`backtest.py`), então nada de útil se perdeu.
+- **Botão "🧠 Ver Aprendizado"** removido da tela a pedido do usuário
+  (método `ver_aprendizado` mantido no código, sem botão vinculado).
+- **Reorganização de botões** (a pedido do usuário): "📊 Backtest" e "🤖 BT
+  Automático" moveram de "Operação principal" para "Inteligência,
+  diagnóstico e calibração"; "🧪 Simulador" e "✅ Conferir Jogos" moveram
+  de "Conferência, relatórios e arquivos" para "Operação principal",
+  logo após "🎲 Gerar Jogos" — seguindo o fluxo de uso real (Atualizar →
+  Carregar → Gerar Jogos → Simular → Conferir).
+- **Bug corrigido de passagem**: `v22_pipeline.py` monitorava
+  `laboratorio_historico_ativo` para saber se a etapa "calibracao" do
+  Pipeline V22 tinha terminado — um flag que nunca era setado por
+  `iniciar_calibracao_vs_aleatorio` (que usa `calibracao_ativa`). Como
+  a remoção do Lab Histórico eliminaria esse atributo, o mapeamento foi
+  corrigido para `calibracao_ativa`.
 
 **✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
 pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,

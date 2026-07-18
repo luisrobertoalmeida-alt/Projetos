@@ -3,8 +3,6 @@ lotofacil_pkg/apostas.py
 -------------------------
 Orquestração da geração de apostas:
   - gerar_apostas — pipeline completo (análise → ensemble → genético → cobertura)
-  - Modo Laboratório Inteligente — gera com a configuração G/P validada (não
-    testa mais variantes de G/P, ver montar_configuracoes_laboratorio)
   - Assistente de configuração, Simulador "e se", Pacote mínimo
   - Relatório de evolução do aprendizado
 """
@@ -145,81 +143,6 @@ def score_pacote_laboratorio(jogos: list, analise: dict, pesos: dict) -> float:
     )
 
 
-def montar_configuracoes_laboratorio(
-    geracoes_max: int,
-    pop_size_max: int,
-    janela_analise: int = 150,
-) -> list[dict]:
-    """
-    Até 2026-07-17 esta função montava uma bateria de até 5 configurações
-    que só variavam gerações/população (com uma guarda de "zona morta"
-    para ratio G/P alto + janela pequena, descoberta em calibração de
-    25/06/2026 — antes da metodologia pareada/TOST deste projeto).
-
-    Reavaliada com estatística pareada (`validacao_zona_morta.py`, n=150,
-    janela=120, ratio 1.64 vs. 1.30): Cohen's d pareado = -0.04
-    (desprezível), TOST (margem=±0.3) confirma equivalência. A "zona
-    morta" não se sustentou — é o mesmo tipo de conclusão de amostra
-    pequena já derrubada no Mapa G×P (ver ARQUITETURA.md). A guarda foi
-    removida.
-
-    `geracoes_max`/`pop_size_max`/`janela_analise` seguem aceitos por
-    compatibilidade de assinatura, mas não influenciam mais o resultado:
-    retorna sempre a configuração validada (G=16/P=40).
-    """
-    return [{
-        "nome": "Configuração validada (G=16/P=40)",
-        "geracoes": 16,
-        "pop_size": 40,
-        "ratio_gp": round(16 / 40, 2),
-        "janela": max(30, int(janela_analise)),
-    }]
-
-
-def gerar_apostas_laboratorio_inteligente(  # noqa: E501
-    concursos_completos,
-    qtd_jogos=20,
-    janela_analise=120,
-    geracoes_max=250,
-    pop_size_max=180,
-    status_cb=None,
-):
-    """
-    Gera o pacote com a configuração G/P validada (16/40).
-
-    Até 2026-07-17 esta função testava várias configurações de G/P numa
-    amostra pequena e escolhia uma "vencedora" — desde que o Mapa G×P e a
-    reavaliação da "zona morta" confirmaram equivalência estatística em
-    toda a faixa de G/P testada, não há mais nada para comparar aqui, só
-    overhead (rodar duas vezes: teste + geração final). Mantido só o
-    passo de geração final.
-    """
-    def avisar(msg: str) -> None:
-        if status_cb:
-            status_cb(msg)
-
-    cfg = montar_configuracoes_laboratorio(geracoes_max, pop_size_max, janela_analise)[0]
-    avisar(
-        "Modo Laboratório Inteligente: G/P já validado (Mapa G×P + reavaliação "
-        "de zona morta) — gerando direto com a configuração fixa, sem testar variantes."
-    )
-    avisar(f"Configuração: G={cfg['geracoes']} P={cfg['pop_size']}")
-
-    jogos, analise, pesos = gerar_apostas(
-        concursos_completos,
-        qtd_jogos=qtd_jogos,
-        janela_analise=janela_analise,
-        geracoes=cfg["geracoes"],
-        pop_size=cfg["pop_size"],
-    )
-    analise["laboratorio_inteligente"] = {
-        "ativo": False,
-        "motivo": "G/P fixo e validado (Mapa G×P + zona morta reavaliada) — sem variantes para testar.",
-        "configuracao_usada": cfg,
-    }
-    return jogos, analise, pesos
-
-
 def carregar_performance_estrategias(caminho: str = ARQUIVO_PERFORMANCE_ESTRATEGIA) -> dict:
     dados = ler_json(caminho, default={"versao": "1.0", "geracoes": [], "backtests": []})
     dados.setdefault("geracoes", [])
@@ -274,23 +197,21 @@ def registrar_performance_geracao(jogos: list, analise: dict, geracoes: int, pop
 # =========================================================
 def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: int = 20, janela_atual: int = 120, geracoes_atual: int = 35, pop_atual: int = 70, perfil: str = "auto") -> dict:
     """
-    Sugere uma configuração técnica segura para reduzir tentativa manual.
-    Ajusta janela e passos de backtest conforme tamanho do histórico. Gerações/
-    população NÃO são mais ajustadas aqui (ver nota abaixo) — apenas repassadas
-    fixas. Não promete previsão; apenas escolhe parâmetros coerentes.
+    Sugere janela histórica e passos de backtest a partir só do tamanho do
+    histórico e da quantidade de jogos — duas regras fixas, sem aprendizado
+    nem heurística por trás. Gerações/população NÃO são ajustadas aqui (ver
+    nota abaixo) — apenas repassadas fixas.
+
+    Até 2026-07-18 esta função também calculava desempenho recente
+    (`média do melhor acerto`, `taxa 12+/13+`, ajustes de memória) e expunha
+    isso como "motivo" da sugestão — mas nada disso influenciava janela,
+    passos ou G/P; era só texto informativo desconectado do que de fato
+    era aplicado. Removido para não sugerir uma sofisticação que não existe.
     """
     total_hist = len(concursos or [])
     qtd_jogos = min(max(5, int(qtd_jogos or 20)), 100)
-    janela_atual = int(janela_atual or 120)
-    geracoes_atual = int(geracoes_atual or 35)
-    pop_atual = int(pop_atual or 70)
 
-    memoria = carregar_memoria_aprendizado()
-    ajustes = calcular_bonus_aprendizado(memoria)
-    registros_reais = memoria.get("registros", [])[-80:]
-
-    # Janela: se houver histórico suficiente, prefere 120-200; se o desempenho real
-    # estiver fraco, abre um pouco a janela para reduzir ruído recente.
+    # Janela: quanto mais histórico disponível, mais concursos entram na análise.
     if total_hist >= 240:
         janela = 200
     elif total_hist >= 160:
@@ -298,46 +219,26 @@ def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: in
     elif total_hist >= 100:
         janela = 100
     else:
-        janela = max(MIN_HIST, min(total_hist or janela_atual, 80))
-
-    if registros_reais:
-        media_melhor = mean([float(r.get("melhor_acerto", 0) or 0) for r in registros_reais])
-        taxa_12 = sum(1 for r in registros_reais if float(r.get("melhor_acerto", 0) or 0) >= 12) / max(1, len(registros_reais))
-        taxa_13 = sum(1 for r in registros_reais if float(r.get("melhor_acerto", 0) or 0) >= 13) / max(1, len(registros_reais))
-        motivo_desempenho = "desempenho recente registrado (não influencia geração/população — ver nota abaixo)"
-    else:
-        media_melhor, taxa_12, taxa_13 = 0.0, 0.0, 0.0
-        motivo_desempenho = "sem registros reais suficientes"
+        janela = max(MIN_HIST, min(total_hist or int(janela_atual or 120), 80))
+    janela = min(max(MIN_HIST, janela), max(MIN_HIST, total_hist or janela))
 
     # geracoes/pop_size: FIXOS em 16/40 desde 2026-07-18 (Mapa G x P, n=300,
     # TOST margem=0.3) confirmou equivalência estatística na faixa G=16-300 —
-    # não há vale estrutural, então nem quantidade de jogos, nem desempenho
-    # recente, nem histórico técnico anterior devem reajustar esses dois
-    # parâmetros. `perfil` segue aceito por compatibilidade de assinatura,
-    # mas não afeta mais G/P.
-    geracoes = 16
-    pop_size = 40
-
-    janela = min(max(MIN_HIST, janela), max(MIN_HIST, total_hist or janela))
+    # não há vale estrutural, então nem quantidade de jogos, nem histórico
+    # técnico anterior devem reajustar esses dois parâmetros. `perfil` e
+    # `geracoes_atual`/`pop_atual` seguem aceitos por compatibilidade de
+    # assinatura, mas não afetam mais G/P.
     passos_bt = 50 if qtd_jogos <= 20 else 35
 
-    cfg = {
+    return {
         "qtd_jogos": qtd_jogos,
         "janela": int(janela),
-        "geracoes": int(geracoes),
-        "pop_size": int(pop_size),
+        "geracoes": 16,
+        "pop_size": 40,
         "passos_backtest": int(passos_bt),
-        "usar_laboratorio": False,
         # modo_turbo NAO e definido aqui — o assistente respeita a escolha do usuario.
         # A UI preserva o estado atual do checkbox ao aplicar esta configuracao.
-        "motivo": motivo_desempenho,
-        "media_melhor_real": round(media_melhor, 3),
-        "taxa_12_mais": round(taxa_12 * 100, 2),
-        "taxa_13_mais": round(taxa_13 * 100, 2),
-        "registros_reais": len(registros_reais),
-        "ajustes_memoria": ajustes,
     }
-    return cfg
 
 
 def explicar_configuracao_assistida(cfg: dict) -> str:
@@ -345,15 +246,8 @@ def explicar_configuracao_assistida(cfg: dict) -> str:
     linhas.append("ASSISTENTE DE CONFIGURAÇÃO INTELIGENTE")
     linhas.append("-" * 72)
     linhas.append(f"Jogos: {cfg.get('qtd_jogos')} | Janela: {cfg.get('janela')} | Gerações: {cfg.get('geracoes')} | População: {cfg.get('pop_size')}")
-    linhas.append(f"Backtest sugerido: {cfg.get('passos_backtest')} passos | Laboratório automático: desligado")
-    linhas.append(f"Motivo: {cfg.get('motivo')}")
-    if cfg.get('registros_reais'):
-        linhas.append(f"Base real do robô: {cfg.get('registros_reais')} registro(s) | média do melhor acerto={cfg.get('media_melhor_real')} | 12+={cfg.get('taxa_12_mais')}% | 13+={cfg.get('taxa_13_mais')}%")
-    else:
-        linhas.append("Base real do robô: ainda sem registros suficientes; usando configuração técnica segura.")
-    if cfg.get("conhecimento_cientifico"):
-        cc = cfg.get("conhecimento_cientifico") or {}
-        linhas.append(f"Conhecimento científico ativo: {cc.get('estrategia_base', '')} | G={cc.get('geracoes', 0)} | P={cc.get('pop_size', 0)} | modelo campeão={cc.get('modelo_campeao', '')}")
+    linhas.append(f"Backtest sugerido: {cfg.get('passos_backtest')} passos")
+    linhas.append("Janela e passos escolhidos só pelo tamanho do histórico atual; G/P fixos (ver Mapa G×P).")
     return "\n".join(linhas)
 
 

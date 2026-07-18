@@ -468,10 +468,14 @@ class TestAutoDiagnostico(unittest.TestCase):
         self.assertIsInstance(self.resultado, dict)
 
     def test_tem_nota(self):
-        # executar_auto_diagnostico_lotofacil retorna calibracao, laboratorio_historico
-        # e comparador — não existe chave "nota" ou "nota_geral" no contrato público.
-        # Verifica as chaves que a função realmente entrega.
-        for chave in ("calibracao", "laboratorio_historico", "comparador"):
+        # executar_auto_diagnostico_lotofacil retorna calibracao e comparador —
+        # o passo "laboratorio_historico" foi removido (2026-07-18): duplicava
+        # a mesma simulação de "calibracao" (G/P fixo vs. aleatório), sem testar
+        # variantes de verdade desde que montar_configuracoes_laboratorio()
+        # passou a devolver sempre a mesma config fixa. Não existe chave "nota"
+        # ou "nota_geral" no contrato público. Verifica as chaves que a função
+        # realmente entrega.
+        for chave in ("calibracao", "comparador"):
             self.assertIn(chave, self.resultado)
 
     def test_nota_range(self):
@@ -484,7 +488,6 @@ class TestAutoDiagnostico(unittest.TestCase):
         # que é o equivalente funcional do "diagnóstico" esperado pelo teste original.
         tem = (
             "comparador" in self.resultado
-            or "laboratorio_historico" in self.resultado
             or "calibracao" in self.resultado
         )
         self.assertTrue(tem)
