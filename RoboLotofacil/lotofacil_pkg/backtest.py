@@ -517,6 +517,66 @@ def comparar_estrategias(concursos: list, janela: int, passos: int, qtd_jogos: i
 # =========================================================
 # BACKTEST
 # =========================================================
+def _alimentar_poda_e_elo(registros: list[dict]) -> list[dict]:
+    """
+    Alimenta a poda inteligente V20.2 (pesos_modelos.json) e o ELO/4-fases
+    V21.5-FULL a partir de uma série de passos, cada um com pelo menos
+    `concurso_idx` e `acertos_modelo` (dict modelo -> acertos nesse passo).
+
+    Compartilhado por `backtest_basico`, `backtest_ultra_massivo` e
+    `executar_backtest_cientifico_massivo` — até 2026-07-18 só
+    `backtest_basico` alimentava esses dois sistemas (inconsistência: rodar
+    "📊 Backtest" com <120 passos afetava os pesos reais do ensemble, com
+    ≥120 passos ("Ultra Massivo") não). Agora as três fontes alimentam do
+    mesmo jeito.
+
+    Retorna a lista de resultados de poda (ou []).
+    """
+    poda_resultado: list[dict] = []
+    try:
+        acum: dict[str, list[float]] = {}
+        for r in registros:
+            for nome, val in (r.get("acertos_modelo") or {}).items():
+                acum.setdefault(nome, []).append(val)
+
+        if acum:
+            media_por_modelo = {
+                nome: round(sum(vals) / len(vals), 4)
+                for nome, vals in acum.items()
+            }
+            registrar_resultado_modelo_backtest(media_por_modelo)
+            poda_resultado = avaliar_e_podar_modelos(
+                modelos_ativos=list(media_por_modelo.keys())
+            )
+            if poda_resultado:
+                for r in poda_resultado:
+                    db_registrar_evento_poda(
+                        r.get("nome", ""),
+                        r.get("estado", "ATIVO"),
+                        r.get("score_sobrevivencia", 0.0),
+                        r.get("peso_novo", 1.0),
+                    )
+    except Exception:
+        pass
+
+    try:
+        from .v21_5_meta_competitivo import atualizar_elo_concurso
+        from .v21_5_auto_poda_full import avaliar_estados_modelos
+
+        for idx, r in enumerate(registros):
+            acertos_passo = r.get("acertos_modelo")
+            if not acertos_passo:
+                continue
+            concurso_num = r.get("concurso_idx", idx + 1)
+            elo_result = atualizar_elo_concurso(acertos_passo, concurso=concurso_num)
+            elos_atuais = elo_result.get("elos_novos", {})
+            avaliar_estados_modelos(acertos_passo, elos=elos_atuais, concurso=concurso_num)
+    except Exception:
+        pass
+
+    return poda_resultado
+
+
 def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 50, geracoes: int = 16, pop_size: int = 40) -> dict:
     """
     Backtest basico blindado com execucao paralela para maior velocidade.
@@ -599,56 +659,8 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
     melhores = [r["melhor_acerto"] for r in resumo]
     dist = Counter(melhores)
 
-    # ── V20.2: registra acertos por modelo e executa poda ──────────────────
-    poda_resultado: list[dict] = []
-    try:
-        # Acumula a media de acertos de cada modelo ao longo de todos os passos
-        acum: dict[str, list[float]] = {}
-        for r in resumo:
-            for nome, val in (r.get("acertos_modelo") or {}).items():
-                acum.setdefault(nome, []).append(val)
-
-        # Registra UMA entrada por modelo (media do backtest inteiro)
-        # para não inflar artificialmente o historico com N entradas por rodada
-        if acum:
-            media_por_modelo = {
-                nome: round(sum(vals) / len(vals), 4)
-                for nome, vals in acum.items()
-            }
-            registrar_resultado_modelo_backtest(media_por_modelo)
-            poda_resultado = avaliar_e_podar_modelos(
-                modelos_ativos=list(media_por_modelo.keys())
-            )
-            # V21.1-B/C: espelha eventos de poda no SQLite
-            if poda_resultado:
-                for r in poda_resultado:
-                    db_registrar_evento_poda(
-                        r.get("nome", ""),
-                        r.get("estado", "ATIVO"),
-                        r.get("score_sobrevivencia", 0.0),
-                        r.get("peso_novo", 1.0),
-                    )
-    except Exception:
-        pass
-
-    # ── V21.5-FULL: atualiza ELO e estados 4-fases passo a passo ───────────
-    try:
-        from .v21_5_meta_competitivo import atualizar_elo_concurso, carregar_elo
-        from .v21_5_auto_poda_full import avaliar_estados_modelos
-
-        for idx, r in enumerate(resumo):
-            acertos_passo = r.get("acertos_modelo")
-            if not acertos_passo:
-                continue
-            concurso_num = r.get("concurso_idx", idx + 1)
-            # 1. Atualiza ELO com o resultado deste passo
-            elo_result = atualizar_elo_concurso(acertos_passo, concurso=concurso_num)
-            elos_atuais = elo_result.get("elos_novos", {})
-            # 2. Avalia transição de estado (4 fases) com ELO como contexto
-            avaliar_estados_modelos(acertos_passo, elos=elos_atuais,
-                                    concurso=concurso_num)
-    except Exception:
-        pass
+    # ── V20.2/V21.5-FULL: registra acertos por modelo, poda e ELO ──────────
+    poda_resultado = _alimentar_poda_e_elo(resumo)
 
     acertos_por_passo = [r["media_acertos"] for r in resumo]
     return {
@@ -1166,14 +1178,33 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
         for modelo, peso in confianca_modelos.items():
             acumulador_modelos[modelo] += float(peso)
             presenca_modelos[modelo] += 1
+
+        # Mesmo calculo de acertos por modelo que backtest_basico usa para
+        # alimentar poda inteligente/ELO (ver _alimentar_poda_e_elo) — antes
+        # só o modo <120 passos fazia isso, deixando o robô real sem
+        # atualização de pesos sempre que "Ultra Massivo" era acionado.
+        acertos_modelo: dict[str, float] = {}
+        try:
+            modelos_scores = ((analise.get("ensemble") or {}).get("modelos") or {})
+            for nome, scores_dez in modelos_scores.items():
+                if not scores_dez:
+                    continue
+                top15 = sorted(scores_dez, key=lambda n: scores_dez[n], reverse=True)[:15]
+                acertos_modelo[nome] = float(intersecao(top15, real))
+        except Exception:
+            pass
+
         registros.append({
             "concurso_idx": i + 1,
             "melhor_acerto": melhor,
             "media_acertos": media_acertos,
             "modo": modo,
+            "acertos_modelo": acertos_modelo,
         })
         if tarefa % 10 == 0 or tarefa == total_tarefas:
             avisar(f"Backtest ultra: {tarefa}/{total_tarefas} simulações concluídas.")
+
+    _alimentar_poda_e_elo(registros)
 
     resumo = resumir_serie_backtest(registros)
     resumo.update({
@@ -1318,6 +1349,15 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
     2) Campeonato entre modelos do ensemble.
     3) Autocalibração de gerações/população/diversidade.
     4) Banco de conhecimento histórico do próprio robô.
+
+    Desde 2026-07-18, o campeonato de modelos (fase 2) também alimenta a
+    poda inteligente (`pesos_modelos.json`) e o ELO/4-fases via
+    `_alimentar_poda_e_elo()` — a mesma infraestrutura que `backtest_basico`
+    e `backtest_ultra_massivo` alimentam a cada rodada, só que aqui com uma
+    medição mais rigorosa (pipeline completo por modelo isolado via
+    `forcar_modelo`, não uma extração bruta de top-15). Funciona como
+    correção periódica por cima da atualização contínua e barata do
+    "📊 Backtest".
     """
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
@@ -1338,7 +1378,7 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
         if status_cb:
             status_cb(msg)
 
-    def rodar_variante(nome: str, tipo: str, ger: int, pop: int, override: dict | None = None) -> dict:
+    def rodar_variante(nome: str, tipo: str, ger: int, pop: int, override: dict | None = None) -> tuple[dict, list[dict]]:
         override = dict(override or {})
         registros = []
         t0 = time.time()
@@ -1363,34 +1403,55 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
             })
             if pos == 1 or pos % 10 == 0 or pos == len(indices):
                 avisar(f"{nome}: {pos}/{len(indices)} testes concluídos.")
-        return _resumo_cientifico(nome, tipo, registros, {
+        resumo = _resumo_cientifico(nome, tipo, registros, {
             "geracoes": int(ger),
             "pop_size": int(pop),
             "override": override,
             "tempo_s": round(time.time() - t0, 1),
         })
+        return resumo, registros
 
     avisar("Fase 1/4: Backtest científico por configurações...")
     configs = montar_configuracoes_cientificas(geracoes, pop_size)
     resultados_config = []
     for cfg in configs:
-        resultados_config.append(rodar_variante(
+        resumo_cfg, _ = rodar_variante(
             cfg["nome"], "configuracao", cfg["geracoes"], cfg["pop_size"], cfg.get("override")
-        ))
+        )
+        resultados_config.append(resumo_cfg)
     ranking_config = sorted(resultados_config, key=lambda r: r.get("score_cientifico", 0), reverse=True)
     vencedor_config = ranking_config[0] if ranking_config else {}
 
     avisar("Fase 2/4: Campeonato entre modelos do ensemble...")
     modelos = ["estatistico", "markov", "bayesiano", "tendencia", "neural_leve", "cobertura", "pares_trios"]
     resultados_modelos = []
+    registros_por_modelo: dict[str, list[dict]] = {}
     ger_v = int(vencedor_config.get("geracoes", geracoes) or geracoes)
     pop_v = int(vencedor_config.get("pop_size", pop_size) or pop_size)
     for modelo in modelos:
-        resultados_modelos.append(rodar_variante(
+        resumo_modelo, registros_modelo = rodar_variante(
             f"Modelo isolado: {modelo}", "modelo", ger_v, pop_v, {"forcar_modelo": modelo}
-        ))
+        )
+        resultados_modelos.append(resumo_modelo)
+        registros_por_modelo[modelo] = registros_modelo
     ranking_modelos = sorted(resultados_modelos, key=lambda r: r.get("score_cientifico", 0), reverse=True)
     vencedor_modelo = ranking_modelos[0] if ranking_modelos else {}
+
+    # Alimenta poda inteligente (pesos_modelos.json) e ELO/4-fases com o
+    # campeonato de modelos isolados — metodologia mais rigorosa que a do
+    # backtest_basico (roda o pipeline completo por modelo, não extrai um
+    # top-15 bruto), usada aqui como correção periódica por cima da
+    # atualização contínua e barata que o "📊 Backtest" já faz a cada rodada.
+    try:
+        por_passo: dict[int, dict] = {}
+        for modelo, registros_modelo in registros_por_modelo.items():
+            for r in registros_modelo:
+                idx = r["concurso_idx"]
+                entrada = por_passo.setdefault(idx, {"concurso_idx": idx, "acertos_modelo": {}})
+                entrada["acertos_modelo"][modelo] = r["media_acertos"]
+        _alimentar_poda_e_elo(list(por_passo.values()))
+    except Exception:
+        pass
 
     avisar("Fase 3/4: Gerando autocalibração...")
     recomendacao = {

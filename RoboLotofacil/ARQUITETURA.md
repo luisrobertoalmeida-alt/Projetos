@@ -300,6 +300,46 @@ configuração fixa, sem gerar informação nova. Removidos/simplificados:
   `explicar_configuracao_assistida()` (`apostas.py`) e todos os call
   sites. Janela e passos de backtest continuam editáveis manualmente.
 
+## 🧹 Terceira limpeza — 2026-07-18 (poda/ELO e reorganização de tela)
+
+Discussão com o usuário sobre Backtest/BT Automático/Backtest Científico
+revelou uma peça de infraestrutura que não estava documentada: "📊
+Backtest" não é só diagnóstico — ele alimenta a poda inteligente V20.2
+(`pesos_modelos.json`, pesos reais usados por "🎲 Gerar Jogos") e o
+ELO/4-fases V21.5-FULL (exibido em "⚗️ Painel Científico" → aba "🥇
+Campeão"). Isso levantou duas perguntas do usuário, respondidas assim:
+
+- **"Não seria melhor o Científico alimentar a poda/ELO?"** — Sim,
+  metodologicamente: o Científico V11 isola cada modelo rodando o
+  pipeline completo com `forcar_modelo` (zera a confiança dos outros 6),
+  medição mais fiel do que a aproximação barata do `backtest_basico`
+  (extrai um top-15 bruto do score do modelo, sem passar pelo
+  refinamento genético). Mas o Científico custa ~7x mais gerações só na
+  fase de campeonato — não dá pra ser a única fonte sem deixar poda/ELO
+  desatualizados na maior parte do tempo. Solução adotada: `_alimentar_poda_e_elo()`
+  (`backtest.py`) virou uma função compartilhada; `backtest_basico`/
+  `backtest_ultra_massivo` continuam alimentando a cada rodada (barato,
+  frequente), e `executar_backtest_cientifico_massivo` (fase 2, campeonato
+  de modelos) agora também alimenta com sua medição mais rigorosa — uma
+  correção periódica por cima da atualização contínua.
+- **"Inconsistência dos 120 passos"** — `backtest_ultra_massivo` (modo
+  ativado automaticamente com ≥120 passos) não calculava `acertos_modelo`
+  nem chamava a poda/ELO, diferente de `backtest_basico` (<120 passos).
+  Ou seja, o mesmo botão "📊 Backtest" afetava o robô real ou não, só
+  pela quantidade de passos digitada. Corrigido: `backtest_ultra_massivo`
+  agora calcula `acertos_modelo` do mesmo jeito e chama
+  `_alimentar_poda_e_elo()` também.
+
+Reorganização de tela adicional (a pedido do usuário):
+- "🧪 Backtest Científico" saiu de "Investigação avançada" para ficar em
+  sequência com "📊 Backtest"/"🤖 BT Automático" (linha de inteligência/
+  diagnóstico).
+- "⚡ Otimizador" e "🗺️ Mapa G×P" saíram de "Investigação avançada" para
+  "Operação principal" — linha "Investigação avançada" removida (ficou
+  vazia).
+- Otimizador: limiar de aceite de 11+ subiu de 93% para 95%
+  (`limiar_11` em `iniciar_otimizador_v22`, `ui.py`).
+
 **✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
 pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,
 teste de permutação sign-flip e TOST (`v20_6_bootstrap.py`: `cohen_d_pareado`,

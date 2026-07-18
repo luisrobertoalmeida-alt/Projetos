@@ -504,6 +504,12 @@ class RoboLotofacilUltraApp:
                                 "ensemble e joga TODAS as combinações de 15 dentro dele. Garantia matemática (não estatística) "
                                 "condicionada às 15 sorteadas estarem dentro do pool escolhido — ver VALIDACAO_ESCALA_REAL "
                                 "e docstring de fechamento.py.",
+            "⚡ Otimizador": "Gera pacotes candidatos com a mesma configuração até atingir 95% de 11+ na simulação "
+                                "(ou esgotar as tentativas) — investigação, não muda a config validada.",
+            "🗺️ Mapa G×P":     "Mapeia o espaço G×P e testa os extremos contra os intermediários com estatística PAREADA "
+                                "(Cohen's d pareado, sign-flip, TOST) — mesma metodologia de reanalise_pareada.py. "
+                                "Já confirmado equivalente de G=16 a G=300 (ver ARQUITETURA.md) — use só para reabrir "
+                                "a investigação, não é necessário no uso normal.",
         }
         for txt, cmd, cor in [
             ("⬆ Atualizar",      self.iniciar_atualizar_resultados, TEMA["btn_atualizar"]),
@@ -513,6 +519,8 @@ class RoboLotofacilUltraApp:
             ("✅ Conferir Jogos",self.conferir_jogos_gerados,                TEMA["btn_conferir"]),
             ("🎯 Dual-Perfil",    self.gerar_jogos_dual_perfil,      TEMA["btn_gerar"]),
             ("🔒 Fechamento",     self.iniciar_fechamento,           TEMA["btn_pacote"]),
+            ("⚡ Otimizador", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
+            ("🗺️ Mapa G×P",      self.iniciar_mapa_gp,                TEMA["btn_backauto"]),
         ]:
             btn = self.criar_botao_colorido(linha3, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
@@ -528,6 +536,8 @@ class RoboLotofacilUltraApp:
             "🎯 Calibrar IA":          "Compara o robô contra pacotes aleatórios em concursos passados.",
             "📊 Backtest":       "Testa o robô em concursos passados e mede a taxa de acertos. (F6)",
             "🤖 BT Automático": "Walk-forward detalhado: gera e confere jogos concurso a concurso, salva relatório.",
+            "🧪 Backtest Científico": "Backtest científico massivo (configuração validada vs. diversidade ampliada) e "
+                                "campeonato de modelos do ensemble — alimenta poda/ELO com o resultado.",
             "🔀 Walk-Forward":         "Validação walk-forward deslizante: avalia robustez em múltiplas janelas e detecta overfitting.",
             "📐 Bootstrap IC":         "IC 95%/99% e erro padrão (bootstrap) sobre a série de acertos do último backtest. "
                                 "Não compara contra aleatório (sem p-value/Cohen's d aqui) — para isso use 🎯 Calibrar IA ou 🗺️ Mapa G×P.",
@@ -539,6 +549,7 @@ class RoboLotofacilUltraApp:
             ("🎯 Calibrar IA",         self.iniciar_calibracao_vs_aleatorio,    TEMA["btn_backtest"]),
             ("📊 Backtest",       self.iniciar_rodar_backtest,       TEMA["btn_backtest"]),
             ("🤖 BT Automático", self.iniciar_backtest_automatico,   TEMA["btn_backauto"]),
+            ("🧪 Backtest Científico", self.iniciar_backtest_cientifico_v11, TEMA["btn_relatorio"]),
             ("🔀 Walk-Forward",        self.iniciar_walkforward,                TEMA["btn_backauto"]),
             ("📐 Bootstrap IC",        self.iniciar_bootstrap_ic,               TEMA["btn_relatorio"]),
             ("🔬 Análise Científica",   self.iniciar_analise_cientifica_v2,      TEMA["btn_relatorio"]),
@@ -577,34 +588,6 @@ class RoboLotofacilUltraApp:
             linha5, "✖ Encerrar",
             self.encerrar_aplicativo, cor=TEMA["btn_encerrar"],
         ).pack(side="right", padx=3)
-
-        # ── Linha 6: investigação avançada (uso pontual, não dia a dia) ──
-        # Movidos para cá em 2026-07-17: testam/exploram parâmetros que já
-        # têm resposta validada (G×P equivalente de 16 a 300 — Mapa G×P,
-        # zona morta derrubada, ver ARQUITETURA.md) ou geram variantes por
-        # repetição de semente — úteis para investigar, não para uso
-        # recorrente. Ficavam misturados com os botões de operação diária.
-        tk.Label(topo, text="🔬 Investigação avançada (uso pontual)", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
-        linha6 = tk.Frame(topo, bg=bg)
-        linha6.pack(fill="x", pady=(4, 6))
-        _tips_linha6 = {
-            "🗺️ Mapa G×P":     "Mapeia o espaço G×P e testa os extremos contra os intermediários com estatística PAREADA "
-                                "(Cohen's d pareado, sign-flip, TOST) — mesma metodologia de reanalise_pareada.py. "
-                                "Já confirmado equivalente de G=16 a G=300 (ver ARQUITETURA.md) — use só para reabrir "
-                                "a investigação, não é necessário no uso normal.",
-            "⚡ Otimizador": "Gera múltiplos pacotes candidatos com a mesma configuração e seleciona automaticamente "
-                                "o com maior % de 11+ na simulação — investigação, não muda a config validada.",
-            "🧪 Backtest Científico": "Backtest científico massivo (configuração validada vs. diversidade ampliada) e "
-                                "campeonato de modelos do ensemble.",
-        }
-        for txt, cmd, cor in [
-            ("🗺️ Mapa G×P",      self.iniciar_mapa_gp,                TEMA["btn_backauto"]),
-            ("⚡ Otimizador", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
-            ("🧪 Backtest Científico", self.iniciar_backtest_cientifico_v11, TEMA["btn_relatorio"]),
-        ]:
-            btn = self.criar_botao_colorido(linha6, txt, cmd, cor=cor)
-            btn.pack(side="left", padx=3)
-            tooltip(btn, _tips_linha6.get(txt, ""))
 
         # ── Barra de progresso ────────────────────────────────
         barra_frame = tk.Frame(topo, bg=bg)
@@ -3961,7 +3944,7 @@ class RoboLotofacilUltraApp:
             jogos_otimizados, relatorio = _otimizar_pacote(
                 concursos,
                 fn_gerar,
-                limiar_11=93.0,
+                limiar_11=95.0,
                 limiar_media=11.20,
                 max_tentativas=tentativas,
                 n_simulacoes=500,
