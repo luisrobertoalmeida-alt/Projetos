@@ -2,7 +2,7 @@
 lotofacil_pkg/utils.py
 ----------------------
 Funções utilitárias puras: matemática, strings, I/O JSON, seeds.
-Sem dependências internas ao pacote (importa apenas stdlib).
+Única dependência interna: `config` (para ler/gravar a seed global).
 """
 import os
 import json
@@ -12,13 +12,24 @@ import threading
 from datetime import datetime
 from statistics import mean
 
+from . import config as _config_module
 from .config import NUMEROS, SEED, _PASTAS_APP
 
 
 # ── Seed ──────────────────────────────────────────────────────────────────────
 
 def seed_global(seed=SEED) -> None:
-    """Inicializa semente do gerador aleatório. None = entropia do sistema."""
+    """
+    Inicializa semente do gerador aleatório. None = entropia do sistema.
+
+    Também grava em `config.SEED`: é esse atributo do módulo (não o valor
+    importado aqui) que `backtest.py:_seed_do_passo` lê para derivar a seed
+    de cada passo de backtest/walk-forward/calibração em paralelo. Sem essa
+    gravação, "Seed fixo" só afetava a geração de jogos avulsa (`random.seed`
+    local) e as ferramentas de validação continuavam usando entropia real,
+    mesmo com o checkbox marcado.
+    """
+    _config_module.SEED = seed
     if seed is not None:
         random.seed(seed)
 

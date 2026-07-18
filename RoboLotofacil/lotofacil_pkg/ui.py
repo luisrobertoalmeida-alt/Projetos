@@ -938,6 +938,27 @@ class RoboLotofacilUltraApp:
                       text=f"Melhor: {max(melhores)}   Média: {media_geral:.1f}   Total registros: {len(registros)}",
                       fill=acc, font=("Segoe UI", 9, "bold"), anchor="w")
 
+    def _aplicar_seed_configurada(self, log_async: bool = False) -> None:
+        """
+        Aplica a seed (fixa ou aleatória) conforme o checkbox "Seed fixo".
+
+        Chamado no início de toda operação que gera jogos/simula concursos
+        (Gerar Jogos, Backtest, BT Automático, Walk-Forward, Calibrar IA, Lab
+        Histórico, Auto Diagnóstico, Científico V11, Dual-Perfil, Otimizador,
+        Mapa G×P) para que o mesmo seed valha para todas elas — antes, só
+        "Gerar Jogos" aplicava `seed_global`, e mesmo essa chamada não
+        alcançava `config.SEED` (ver `seed_global` em utils.py), então as
+        demais sempre rodavam com entropia real, mesmo com o checkbox
+        marcado.
+        """
+        registrar = self.log_async if log_async else self.log
+        if self.usar_seed_fixo.get():
+            seed_global(int(self.seed_valor.get()))
+            registrar(f"Seed fixo ativado: {self.seed_valor.get()} (resultados reproduzíveis)")
+        else:
+            seed_global(None)
+            registrar("Seed aleatório (resultados diferentes a cada execução)")
+
     def _iniciar_progresso(self) -> None:
         if not self._progresso_visivel:
             self._progresso_visivel = True
@@ -1253,13 +1274,7 @@ class RoboLotofacilUltraApp:
             self._atualizar_progresso(5, "Analisando histórico...")
             self.log("=" * 72)
             self.log("GERAÇÃO DE JOGOS")
-            # Aplica seed conforme configuracao do usuario
-            if self.usar_seed_fixo.get():
-                seed_global(int(self.seed_valor.get()))
-                self.log(f"Seed fixo ativado: {self.seed_valor.get()} (resultados reproduziveis)")
-            else:
-                seed_global(None)
-                self.log("Seed aleatorio (resultados diferentes a cada execucao)")
+            self._aplicar_seed_configurada()
             aprendizado_previo = calcular_bonus_aprendizado()
             self.log("Memória IA: " + aprendizado_previo.get("resumo", "Sem registros anteriores."))
             base_total = getattr(self, "total_concursos_csv", len(self.concursos))
@@ -1571,6 +1586,7 @@ class RoboLotofacilUltraApp:
             self.root.after(0, self._iniciar_progresso)
             self.log("=" * 72)
             self.log("🎯 GERAÇÃO DUAL-PERFIL V21.5-FULL")
+            self._aplicar_seed_configurada()
             self.log(f"Total de jogos: {qtd} | Janela: {janela}")
             self.log(f"Perfil Consistência: {round(qtd * 0.70)} jogos — G={ger_ui} P={pop_ui} · otimizado para 11+/12+")
             self.log(f"Perfil Exploração:   {round(qtd * 0.30)} jogos — G=40 P=40 · Pares/Trios+Cobertura → 13+")
@@ -1665,6 +1681,7 @@ class RoboLotofacilUltraApp:
             pop = max(20, int(self.pop_size.get()))
 
             self.root.after(0, self._iniciar_progresso)
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Configuração calibração: passos={passos} | janela={janela} | jogos={qtd} | G={ger} | P={pop}")
             resultado = calibrar_robo_vs_aleatorio(
                 self.concursos,
@@ -1747,6 +1764,7 @@ class RoboLotofacilUltraApp:
             pop = max(20, int(self.pop_size.get()))
 
             self.root.after(0, self._iniciar_progresso)
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Configuração Lab Histórico: passos={passos} | janela={janela} | jogos={qtd} | Gmax={ger} | Pmax={pop}")
             resultado = calibrar_laboratorio_historico_vs_aleatorio(
                 self.concursos,
@@ -1837,6 +1855,7 @@ class RoboLotofacilUltraApp:
             ger = max(10, int(self.geracoes.get()))
             pop = max(30, int(self.pop_size.get()))
             self.root.after(0, self._iniciar_progresso)
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Configuração Científica: passos={passos} | janela={janela} | jogos={qtd} | G={ger} | P={pop}")
             resultado = executar_backtest_cientifico_massivo(
                 self.concursos,
@@ -1912,6 +1931,7 @@ class RoboLotofacilUltraApp:
             pop = max(20, int(self.pop_size.get()))
 
             self.root.after(0, self._iniciar_progresso)
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Configuração Auto Diagnóstico: passos={passos} | janela={janela} | jogos={qtd} | G={ger} | P={pop}")
             resultado = executar_auto_diagnostico_lotofacil(
                 self.concursos,
@@ -2009,6 +2029,7 @@ class RoboLotofacilUltraApp:
             qtd = min(max(5, int(self.qtd_jogos.get())), 100)
             ger = max(5, int(self.geracoes.get()))
             pop = max(20, int(self.pop_size.get()))
+            self._aplicar_seed_configurada(log_async=True)
 
             janela_maxima_segura = max(MIN_HIST, total - 5)
             janela = min(max(MIN_HIST, janela_digitada), janela_maxima_segura)
@@ -2199,6 +2220,7 @@ class RoboLotofacilUltraApp:
             self.set_status("Rodando backtest...", "blue")
             self.log("=" * 72)
             self.log("BACKTEST")
+            self._aplicar_seed_configurada()
             base_total = getattr(self, "total_concursos_csv", total)
             self.log(f"Base completa no disco: {base_total} concursos")
             self.log(f"Concursos carregados em memória: {total}")
@@ -3484,6 +3506,7 @@ class RoboLotofacilUltraApp:
         self._btn_rodar_comp.config(state="disabled")
         self._iniciar_progresso()
         self._notebook_corpo.select(3)
+        self._aplicar_seed_configurada()
 
         def tarefa():
             try:
@@ -3925,6 +3948,7 @@ class RoboLotofacilUltraApp:
             qtd = min(max(5, int(self.qtd_jogos.get())), 20)
             ger = max(10, int(self.geracoes.get()))
             pop = max(30, int(self.pop_size.get()))
+            self._aplicar_seed_configurada(log_async=True)
 
             self.log_async(
                 f"Parâmetros: treino={janela_treino} | teste={janela_teste} "
@@ -4037,6 +4061,7 @@ class RoboLotofacilUltraApp:
             passos  = max(10, int(self.passos_backtest.get()))
             qtd     = min(max(5, int(self.qtd_jogos.get())), 20)
 
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Parâmetros: janela={janela} | passos={passos} | jogos={qtd}")
             self.root.after(0, self._iniciar_progresso)
 
@@ -4141,6 +4166,7 @@ class RoboLotofacilUltraApp:
 
             self.log("=" * 72)
             self.log("⚡ OTIMIZADOR INICIADO")
+            self._aplicar_seed_configurada()
             self.log(f"Parâmetros: janela={janela} | G={ger} | P={pop} | jogos={qtd} | tentativas={tentativas}")
             self.root.after(0, self._iniciar_progresso)
 
