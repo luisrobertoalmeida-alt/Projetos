@@ -504,10 +504,6 @@ class RoboLotofacilUltraApp:
                                 "e docstring de fechamento.py.",
             "⚡ Otimizador": "Gera pacotes candidatos com a mesma configuração até atingir 95% de 11+ na simulação "
                                 "(ou esgotar as tentativas) — investigação, não muda a config validada.",
-            "🗺️ Mapa G×P":     "Mapeia o espaço G×P e testa os extremos contra os intermediários com estatística PAREADA "
-                                "(Cohen's d pareado, sign-flip, TOST) — mesma metodologia de reanalise_pareada.py. "
-                                "Já confirmado equivalente de G=16 a G=300 (ver ARQUITETURA.md) — use só para reabrir "
-                                "a investigação, não é necessário no uso normal.",
         }
         for txt, cmd, cor in [
             ("⬆ Atualizar",      self.iniciar_atualizar_resultados, TEMA["btn_atualizar"]),
@@ -522,15 +518,6 @@ class RoboLotofacilUltraApp:
             btn = self.criar_botao_colorido(linha3, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
             tooltip(btn, _tips_linha3.get(txt, ""))
-
-        # Mapa G×P separado dos demais (espaço extra antes), menor — mesmo
-        # tamanho do botão "✖ Encerrar" (linha 5).
-        btn_mapa_gp = self.criar_botao_colorido(
-            linha3, "🗺️ Mapa G×P", self.iniciar_mapa_gp,
-            cor=TEMA["btn_neon_verde"], largura=10,
-        )
-        btn_mapa_gp.pack(side="left", padx=(24, 3))
-        tooltip(btn_mapa_gp, _tips_linha3.get("🗺️ Mapa G×P", ""))
 
         # ── Linha 4: inteligência e calibração ───────────────
         tk.Label(topo, text="🧠 Inteligência, diagnóstico e calibração", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
@@ -611,7 +598,7 @@ class RoboLotofacilUltraApp:
         tk.Frame(self.root, bg=bg3, height=1).pack(fill="x")
 
     def _montar_notebook(self) -> None:
-        """Notebook inferior com abas: Log, Jogos Gerados, Histórico de Acertos, Comparador."""
+        """Notebook inferior com abas: Log, Jogos Gerados, Histórico de Acertos, Comparador, Mapa G×P."""
         bg, bg2, fg = TEMA["bg"], TEMA["bg2"], TEMA["fg"]
 
         self._notebook_corpo = ttk.Notebook(self.root)
@@ -655,6 +642,12 @@ class RoboLotofacilUltraApp:
         aba_comp = ttk.Frame(self._notebook_corpo)
         self._notebook_corpo.add(aba_comp, text="  ⚖️ Comparador  ")
         self._montar_aba_comparador(aba_comp)
+
+        # Aba Mapa G×P — uso pontual, tirada da barra de botões principal
+        # para não competir em destaque com a operação do dia a dia.
+        aba_mapa_gp = ttk.Frame(self._notebook_corpo)
+        self._notebook_corpo.add(aba_mapa_gp, text="  🗺️ Mapa G×P  ")
+        self._montar_aba_mapa_gp(aba_mapa_gp)
 
     def _registrar_atalhos(self) -> None:
         """Registra todos os atalhos de teclado globais."""
@@ -804,6 +797,45 @@ class RoboLotofacilUltraApp:
         self._resultados_comp = []   # cache dos últimos resultados
         self._comp_sort_col   = None
         self._comp_sort_asc   = False
+
+    def _montar_aba_mapa_gp(self, parent: ttk.Frame) -> None:
+        """
+        Aba do Mapa G×P — investigação pontual (não é operação do dia a dia),
+        por isso fica numa aba própria em vez de um botão na barra principal.
+        """
+        bg, bg2, bg3 = TEMA["bg"], TEMA["bg2"], TEMA["bg3"]
+        fg, fg2, acc = TEMA["fg"], TEMA["fg2"], TEMA["accent"]
+
+        painel = tk.Frame(parent, bg=bg2, padx=16, pady=14)
+        painel.pack(fill="x")
+
+        tk.Label(painel, text="🗺️  Mapa G×P",
+                 bg=bg2, fg=acc, font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 8))
+
+        tk.Label(
+            painel,
+            text="Mapeia o espaço de Gerações×População e testa os extremos contra os intermediários com "
+                 "estatística PAREADA (Cohen's d pareado, sign-flip, TOST) — mesma metodologia de "
+                 "reanalise_pareada.py. Já confirmado equivalente de G=16 a G=300 (ver ARQUITETURA.md); use só "
+                 "para reabrir a investigação, não é necessário no uso normal.",
+            bg=bg2, fg=fg2, font=("Segoe UI", 9), justify="left", wraplength=760,
+        ).pack(anchor="w", pady=(0, 12))
+
+        self._lbl_mapa_gp_status = tk.Label(
+            painel, text="Usa Janela histórica, Passos BT e Qtd. jogos configurados no topo da tela.",
+            bg=bg2, fg=fg2, font=("Segoe UI", 9),
+        )
+        self._lbl_mapa_gp_status.pack(anchor="w", pady=(0, 10))
+
+        def _rodar():
+            self._lbl_mapa_gp_status.config(
+                text="⏳ Rodando... acompanhe o progresso na aba 📋 Log.", fg=TEMA["amarelo"]
+            )
+            self.iniciar_mapa_gp()
+
+        self.criar_botao_colorido(
+            painel, "🗺️ Rodar Mapa G×P", _rodar, cor=TEMA["btn_neon_verde"],
+        ).pack(anchor="w")
 
     def _atualizar_tabela_jogos(self) -> None:
         """Preenche a tabela de jogos com os dados da última geração."""
