@@ -81,4 +81,5 @@ TEMA = {
     "btn_relatorio": "#1a1a40",
     "btn_pdf":       "#330022",
     "btn_pacote":    "#1a3300",
+    "btn_neon_verde": "#00e64d",
 }

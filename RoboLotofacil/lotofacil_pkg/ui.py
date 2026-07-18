@@ -435,14 +435,6 @@ class RoboLotofacilUltraApp:
         campo(linha1, "Janela histórica", self.janela_hist)
         campo(linha1, "Passos BT",    self.passos_backtest)
         campo(linha1, "  Pool Fecht.", self.tamanho_pool_fechamento, w=3)
-        # ── Seed (antes do campo Dezenas) ─────────────────────
-        tk.Label(linha1, text="  Seed:", bg=bg, fg=fg2, font=("Segoe UI", 9)).pack(side="left", padx=(8, 2))
-        tk.Checkbutton(linha1, text="fixo", variable=self.usar_seed_fixo,
-                       bg=bg, fg=fg2, activebackground=bg, selectcolor=bg3,
-                       font=("Segoe UI", 9)).pack(side="left")
-        tk.Entry(linha1, textvariable=self.seed_valor, width=5,
-                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
-                 font=("Segoe UI", 9)).pack(side="left", padx=(2, 0))
         # ── Campo Dezenas destacado ───────────────────────────
         _acc = TEMA["accent"]
         _dez_frame = tk.Frame(linha1, bg=_acc, padx=1, pady=1)
@@ -488,6 +480,12 @@ class RoboLotofacilUltraApp:
         chk(linha2, "Autoatualizar ao abrir",       self.auto_update_on_open)
         chk(linha2, "Modo Turbo",                   self.modo_turbo)
         chk(linha2, "Auto Aprender ao carregar",    self.auto_aprender_on_open)
+        tk.Checkbutton(linha2, text="Seed fixo", variable=self.usar_seed_fixo,
+                       bg=bg, fg=fg2, activebackground=bg, selectcolor=bg3,
+                       font=("Segoe UI", 9)).pack(side="left", padx=(6, 2))
+        tk.Entry(linha2, textvariable=self.seed_valor, width=5,
+                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
+                 font=("Segoe UI", 9)).pack(side="left")
 
         # ── Linha 3: operação principal ───────────────────────
         tk.Label(topo, text="▶ Operação principal", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
@@ -520,7 +518,7 @@ class RoboLotofacilUltraApp:
             ("🎯 Dual-Perfil",    self.gerar_jogos_dual_perfil,      TEMA["btn_gerar"]),
             ("🔒 Fechamento",     self.iniciar_fechamento,           TEMA["btn_pacote"]),
             ("⚡ Otimizador", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
-            ("🗺️ Mapa G×P",      self.iniciar_mapa_gp,                TEMA["btn_backauto"]),
+            ("🗺️ Mapa G×P",      self.iniciar_mapa_gp,                TEMA["btn_neon_verde"]),
         ]:
             btn = self.criar_botao_colorido(linha3, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
