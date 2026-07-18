@@ -3,7 +3,7 @@ lotofacil_pkg/apostas.py
 -------------------------
 Orquestração da geração de apostas:
   - gerar_apostas — pipeline completo (análise → ensemble → genético → cobertura)
-  - Assistente de configuração, Simulador "e se", Pacote mínimo
+  - Simulador "e se", Pacote mínimo
   - Relatório de evolução do aprendizado
 """
 from collections import Counter
@@ -11,7 +11,7 @@ from datetime import datetime
 from statistics import mean
 
 from .config import (
-    NUMEROS, MIN_HIST, ARQUIVO_APRENDIZADO,
+    NUMEROS, ARQUIVO_APRENDIZADO,
     ARQUIVO_PERFORMANCE_ESTRATEGIA, ARQUIVO_DESEMPENHO_HISTORICO,
     ARQUIVO_CONHECIMENTO_CIENTIFICO,
 )
@@ -187,68 +187,6 @@ def registrar_performance_geracao(jogos: list, analise: dict, geracoes: int, pop
         return registro
     except Exception:
         return None
-
-
-# =========================================================
-# ASSISTENTE DE CONFIGURAÇÃO INTELIGENTE
-# =========================================================
-# =========================================================
-# ASSISTENTE DE CONFIGURAÇÃO INTELIGENTE
-# =========================================================
-def calcular_configuracao_assistida(concursos: list | None = None, qtd_jogos: int = 20, janela_atual: int = 120, geracoes_atual: int = 35, pop_atual: int = 70, perfil: str = "auto") -> dict:
-    """
-    Sugere janela histórica e passos de backtest a partir só do tamanho do
-    histórico e da quantidade de jogos — duas regras fixas, sem aprendizado
-    nem heurística por trás. Gerações/população NÃO são ajustadas aqui (ver
-    nota abaixo) — apenas repassadas fixas.
-
-    Até 2026-07-18 esta função também calculava desempenho recente
-    (`média do melhor acerto`, `taxa 12+/13+`, ajustes de memória) e expunha
-    isso como "motivo" da sugestão — mas nada disso influenciava janela,
-    passos ou G/P; era só texto informativo desconectado do que de fato
-    era aplicado. Removido para não sugerir uma sofisticação que não existe.
-    """
-    total_hist = len(concursos or [])
-    qtd_jogos = min(max(5, int(qtd_jogos or 20)), 100)
-
-    # Janela: quanto mais histórico disponível, mais concursos entram na análise.
-    if total_hist >= 240:
-        janela = 200
-    elif total_hist >= 160:
-        janela = 150
-    elif total_hist >= 100:
-        janela = 100
-    else:
-        janela = max(MIN_HIST, min(total_hist or int(janela_atual or 120), 80))
-    janela = min(max(MIN_HIST, janela), max(MIN_HIST, total_hist or janela))
-
-    # geracoes/pop_size: FIXOS em 16/40 desde 2026-07-18 (Mapa G x P, n=300,
-    # TOST margem=0.3) confirmou equivalência estatística na faixa G=16-300 —
-    # não há vale estrutural, então nem quantidade de jogos, nem histórico
-    # técnico anterior devem reajustar esses dois parâmetros. `perfil` e
-    # `geracoes_atual`/`pop_atual` seguem aceitos por compatibilidade de
-    # assinatura, mas não afetam mais G/P.
-    passos_bt = 50 if qtd_jogos <= 20 else 35
-
-    return {
-        "qtd_jogos": qtd_jogos,
-        "janela": int(janela),
-        "geracoes": 16,
-        "pop_size": 40,
-        "passos_backtest": int(passos_bt),
-        # modo_turbo NAO e definido aqui — o assistente respeita a escolha do usuario.
-        # A UI preserva o estado atual do checkbox ao aplicar esta configuracao.
-    }
-
-
-def explicar_configuracao_assistida(cfg: dict) -> str:
-    linhas = []
-    linhas.append("ASSISTENTE DE CONFIGURAÇÃO INTELIGENTE")
-    linhas.append("-" * 72)
-    linhas.append(f"Jogos: {cfg.get('qtd_jogos')} | Janela: {cfg.get('janela')} | Gerações: {cfg.get('geracoes')} | População: {cfg.get('pop_size')}")
-    linhas.append(f"Backtest sugerido: {cfg.get('passos_backtest')} passos")
-    linhas.append("Janela e passos escolhidos só pelo tamanho do histórico atual; G/P fixos (ver Mapa G×P).")
-    return "\n".join(linhas)
 
 
 # =========================================================

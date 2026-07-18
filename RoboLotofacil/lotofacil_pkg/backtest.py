@@ -68,7 +68,6 @@ from .aprendizado import carregar_memoria_aprendizado, gerar_resumo_aprendizado
 from .apostas import (
     carregar_performance_estrategias, salvar_performance_estrategias,
     registrar_performance_geracao,
-    calcular_configuracao_assistida, explicar_configuracao_assistida,
     gerar_relatorio_evolucao_aprendizado,
 )
 
@@ -119,7 +118,6 @@ def resumir_configuracao_robo(configuracao: dict | None = None, analise: dict | 
         "populacao": configuracao.get("populacao"),
         "passos_backtest": configuracao.get("passos_backtest"),
         "modo_turbo": configuracao.get("modo_turbo"),
-        "assistente_auto_config": configuracao.get("assistente_auto_config"),
         "modo_estrategico": estrategia.get("modo"),
         "indice_confianca": estrategia.get("indice_confianca"),
         "ciclo_principal": estrategia.get("ciclo_principal"),
@@ -519,11 +517,18 @@ def comparar_estrategias(concursos: list, janela: int, passos: int, qtd_jogos: i
 # =========================================================
 # BACKTEST
 # =========================================================
-def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 50) -> dict:
+def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 50, geracoes: int = 16, pop_size: int = 40) -> dict:
     """
     Backtest basico blindado com execucao paralela para maior velocidade.
     Ao final, registra a media de acertos de cada modelo no historico e
     aciona a poda inteligente V20.2 para ajustar os pesos do ensemble.
+
+    IMPORTANTE: `geracoes`/`pop_size` devem ser a configuração REAL do robô
+    (self.geracoes/self.pop_size na UI). Até 2026-07-18 esta função ignorava
+    esses parâmetros e usava G=20/P=40 fixo no código — ou seja, a poda
+    inteligente estava sendo calibrada com o desempenho de modelos numa
+    config diferente da que "Gerar Jogos" de fato usa, contaminando os
+    pesos reais do ensemble com dados de uma simulação irrelevante.
     """
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
@@ -533,6 +538,8 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
     janela = int(janela)
     passos = int(passos)
     qtd_jogos = int(qtd_jogos)
+    geracoes = int(geracoes)
+    pop_size = int(pop_size)
 
     janela_maxima_segura = max(MIN_HIST, total - 5)
     janela = min(max(MIN_HIST, janela), janela_maxima_segura)
@@ -553,8 +560,8 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
                 base,
                 qtd_jogos=qtd_jogos,
                 janela_analise=min(janela, len(base)),
-                geracoes=20,
-                pop_size=40,
+                geracoes=geracoes,
+                pop_size=pop_size,
             )
             acertos = [intersecao(j, real) for j in jogos]
             melhor = max(acertos) if acertos else 0
@@ -1094,11 +1101,22 @@ def salvar_relatorio_backtest_ultra(resultado: dict) -> str:
     return caminho
 
 
-def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 200, status_cb=None) -> dict:
+def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 200, status_cb=None, geracoes: int = 16, pop_size: int = 40) -> dict:
     """
-    Backtest pesado blindado.
-    Compara configurações evolutivas e gera ranking textual, campeonato entre modelos
-    e relatório .txt em exportações.
+    Backtest pesado blindado, com a configuração G/P real do robô.
+
+    Até 2026-07-18 esta função comparava 3 variantes que só diferiam por
+    escala de gerações/população ("Ultra Rápido" G=16/P=36, "Ultra
+    Equilibrado" G=24/P=52, "Ultra Forte" G=34/P=70) — nenhuma delas era a
+    configuração fixa de verdade (G=16/P=40), e o Mapa G×P já confirmou
+    equivalência estatística nessa faixa toda, então a comparação só
+    custava tempo (3x as simulações) para declarar um "vencedor" arbitrário
+    entre configs que sabemos indistinguíveis. Pior: esse resultado
+    (baseado em G/P que não é o do robô) não alimentava a poda de modelos
+    — mas dava a falsa impressão de estar validando "o robô". Reduzido
+    para uma única simulação com a configuração real (`geracoes`/`pop_size`,
+    parâmetros repassados por quem chama — normalmente `self.geracoes`/
+    `self.pop_size` da UI).
     """
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
@@ -1108,6 +1126,8 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
     janela = int(janela)
     passos = int(passos)
     qtd_jogos = int(qtd_jogos)
+    geracoes = int(geracoes)
+    pop_size = int(pop_size)
 
     # A janela precisa deixar concursos posteriores para simulação.
     janela_maxima_segura = max(MIN_HIST, total - 5)
@@ -1118,70 +1138,55 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
     qtd_jogos = min(max(5, qtd_jogos), 30)
     inicio = max(janela, total - passos)
 
-    configs = [
-        {"nome": "Ultra Rápido", "geracoes": 16, "pop_size": 36},
-        {"nome": "Ultra Equilibrado", "geracoes": 24, "pop_size": 52},
-        {"nome": "Ultra Forte", "geracoes": 34, "pop_size": 70},
-    ]
-
     def avisar(msg: str) -> None:
         if status_cb:
             status_cb(msg)
 
-    resultados_config = []
     acumulador_modelos = Counter()
     presenca_modelos = Counter()
+    registros = []
 
-    total_tarefas = len(configs) * (total - inicio)
-    tarefa = 0
-
-    for cfg in configs:
-        registros = []
-        avisar(f"Testando configuração: {cfg['nome']} | gerações={cfg['geracoes']} | população={cfg['pop_size']}")
-        for i in range(inicio, total):
-            tarefa += 1
-            base = concursos[:i]
-            real = concursos[i]
-            jogos, analise, pesos = gerar_apostas(
-                base,
-                qtd_jogos=qtd_jogos,
-                janela_analise=min(janela, len(base)),
-                geracoes=cfg["geracoes"],
-                pop_size=cfg["pop_size"],
-            )
-            acertos = [intersecao(j, real) for j in jogos]
-            melhor = max(acertos) if acertos else 0
-            media_acertos = round(sum(acertos) / len(acertos), 3) if acertos else 0
-            modo = (analise.get("estrategia") or {}).get("modo", "")
-            confianca_modelos = ((analise.get("ensemble") or {}).get("confianca_modelos") or {})
-            for modelo, peso in confianca_modelos.items():
-                acumulador_modelos[modelo] += float(peso)
-                presenca_modelos[modelo] += 1
-            registros.append({
-                "concurso_idx": i + 1,
-                "melhor_acerto": melhor,
-                "media_acertos": media_acertos,
-                "modo": modo,
-            })
-            if tarefa % 10 == 0 or tarefa == total_tarefas:
-                avisar(f"Backtest ultra: {tarefa}/{total_tarefas} simulações concluídas.")
-
-        resumo = resumir_serie_backtest(registros)
-        resumo.update({
-            "nome": cfg["nome"],
-            "geracoes": cfg["geracoes"],
-            "pop_size": cfg["pop_size"],
-            "ultimos": registros[-20:],
-            # Serie completa por passo (mesma convencao de backtest_basico) --
-            # sem isso, Bootstrap IC nao tem como calcular variancia real e
-            # cai num fallback degenerado (media replicada, erro padrao 0).
-            "acertos_por_passo": [r["media_acertos"] for r in registros],
+    total_tarefas = total - inicio
+    avisar(f"Backtest ultra massivo: G={geracoes} | P={pop_size} (configuração real do robô)")
+    for tarefa, i in enumerate(range(inicio, total), start=1):
+        base = concursos[:i]
+        real = concursos[i]
+        jogos, analise, pesos = gerar_apostas(
+            base,
+            qtd_jogos=qtd_jogos,
+            janela_analise=min(janela, len(base)),
+            geracoes=geracoes,
+            pop_size=pop_size,
+        )
+        acertos = [intersecao(j, real) for j in jogos]
+        melhor = max(acertos) if acertos else 0
+        media_acertos = round(sum(acertos) / len(acertos), 3) if acertos else 0
+        modo = (analise.get("estrategia") or {}).get("modo", "")
+        confianca_modelos = ((analise.get("ensemble") or {}).get("confianca_modelos") or {})
+        for modelo, peso in confianca_modelos.items():
+            acumulador_modelos[modelo] += float(peso)
+            presenca_modelos[modelo] += 1
+        registros.append({
+            "concurso_idx": i + 1,
+            "melhor_acerto": melhor,
+            "media_acertos": media_acertos,
+            "modo": modo,
         })
-        resultados_config.append(resumo)
-        avisar(f"Resultado {cfg['nome']}: score={resumo['score']} | média melhor={resumo['media_melhor']} | máx={resumo['max_melhor']}")
+        if tarefa % 10 == 0 or tarefa == total_tarefas:
+            avisar(f"Backtest ultra: {tarefa}/{total_tarefas} simulações concluídas.")
 
-    ranking = sorted(resultados_config, key=lambda r: r.get("score", 0), reverse=True)
-    vencedor = ranking[0] if ranking else {}
+    resumo = resumir_serie_backtest(registros)
+    resumo.update({
+        "nome": f"Configuração validada (G={geracoes}/P={pop_size})",
+        "geracoes": geracoes,
+        "pop_size": pop_size,
+        "ultimos": registros[-20:],
+        # Serie completa por passo (mesma convencao de backtest_basico) --
+        # sem isso, Bootstrap IC nao tem como calcular variancia real e
+        # cai num fallback degenerado (media replicada, erro padrao 0).
+        "acertos_por_passo": [r["media_acertos"] for r in registros],
+    })
+    avisar(f"Resultado: score={resumo['score']} | média melhor={resumo['media_melhor']} | máx={resumo['max_melhor']}")
 
     ranking_modelos = []
     for modelo, total_peso in acumulador_modelos.items():
@@ -1198,14 +1203,14 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
         "passos": total - inicio,
         "janela": janela,
         "qtd_jogos": qtd_jogos,
-        "ranking_configuracoes": ranking,
+        "ranking_configuracoes": [resumo],
         "ranking_modelos": ranking_modelos,
-        "configuracao_vencedora": vencedor,
-        "media_melhor": vencedor.get("media_melhor", 0),
-        "max_melhor": vencedor.get("max_melhor", 0),
-        "distribuicao": vencedor.get("distribuicao", {}),
-        "ultimos": vencedor.get("ultimos", []),
-        "acertos_por_passo": vencedor.get("acertos_por_passo", []),
+        "configuracao_vencedora": resumo,
+        "media_melhor": resumo.get("media_melhor", 0),
+        "max_melhor": resumo.get("max_melhor", 0),
+        "distribuicao": resumo.get("distribuicao", {}),
+        "ultimos": resumo.get("ultimos", []),
+        "acertos_por_passo": resumo.get("acertos_por_passo", []),
     }
     resultado["arquivo_relatorio"] = salvar_relatorio_backtest_ultra(resultado)
     return resultado

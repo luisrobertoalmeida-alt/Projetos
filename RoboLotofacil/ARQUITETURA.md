@@ -275,6 +275,30 @@ configuração fixa, sem gerar informação nova. Removidos/simplificados:
   `iniciar_calibracao_vs_aleatorio` (que usa `calibracao_ativa`). Como
   a remoção do Lab Histórico eliminaria esse atributo, o mapeamento foi
   corrigido para `calibracao_ativa`.
+- **Bug real encontrado pelo usuário: "📊 Backtest" não testava o G/P do
+  robô e contaminava os pesos do ensemble.** `backtest_basico()` tinha
+  `geracoes=20, pop_size=40` **hardcoded** no código (não os 16/40 reais),
+  e `backtest_ultra_massivo()` comparava 3 configs inventadas ("Ultra
+  Rápido" G=16/P=36, "Ultra Equilibrado" G=24/P=52, "Ultra Forte"
+  G=34/P=70) — nenhuma delas a config real. Mais grave: `backtest_basico()`
+  alimenta a poda inteligente (`avaliar_e_podar_modelos`), que grava
+  direto em `pesos_modelos.json` — os pesos que "🎲 Gerar Jogos" usa de
+  verdade. Ou seja, cada "📊 Backtest" reajustava o ensemble real com base
+  no desempenho de modelos sob uma config diferente da que o robô
+  realmente usa. "🤖 BT Automático" nunca teve esse problema (já lia
+  `self.geracoes`/`self.pop_size`). Corrigido: as duas funções agora
+  recebem `geracoes`/`pop_size` como parâmetro e a UI passa os valores
+  reais; `backtest_ultra_massivo()` parou de comparar 3 variantes de G/P
+  (mesmo motivo do Mapa G×P — são estatisticamente equivalentes) e roda
+  uma simulação só, com a config real.
+- **Removido "🧭 Auto Ajuste" e "🧭 Assistente Auto Config"** — depois da
+  simplificação acima, restava só ajustar janela e passos de backtest por
+  2 regras fixas (tamanho do histórico e quantidade de jogos), sem
+  nenhuma inteligência real por trás. O usuário considerou sem serventia
+  suficiente para justificar dois pontos de entrada na tela; removidos
+  o botão, o checkbox, `calcular_configuracao_assistida()`/
+  `explicar_configuracao_assistida()` (`apostas.py`) e todos os call
+  sites. Janela e passos de backtest continuam editáveis manualmente.
 
 **✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
 pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,

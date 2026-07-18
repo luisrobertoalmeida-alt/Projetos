@@ -63,7 +63,6 @@ from .apostas import (
     gerar_apostas,
     gerar_apostas_dual_perfil, relatorio_dual_perfil,
     simular_jogos_em_concurso, calcular_pacote_minimo,
-    calcular_configuracao_assistida, explicar_configuracao_assistida,
     gerar_relatorio_evolucao_aprendizado,
     carregar_performance_estrategias, registrar_performance_geracao,
 )
@@ -199,7 +198,6 @@ class RoboLotofacilUltraApp:
         self.auto_aprender_on_open = tk.BooleanVar(value=True)
         self.usar_seed_fixo = tk.BooleanVar(value=False)
         self.seed_valor = tk.IntVar(value=42)
-        self.assistente_config_auto = tk.BooleanVar(value=False)
         # V21.6 — controle de impopularidade (0 = desligado, 100 = máximo)
         self.peso_impopularidade = tk.IntVar(value=30)
 
@@ -490,7 +488,6 @@ class RoboLotofacilUltraApp:
         chk(linha2, "Autoatualizar ao abrir",       self.auto_update_on_open)
         chk(linha2, "Modo Turbo",                   self.modo_turbo)
         chk(linha2, "Auto Aprender ao carregar",    self.auto_aprender_on_open)
-        chk(linha2, "🧭 Assistente Auto Config",      self.assistente_config_auto)
 
         # ── Linha 3: operação principal ───────────────────────
         tk.Label(topo, text="▶ Operação principal", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
@@ -531,8 +528,6 @@ class RoboLotofacilUltraApp:
             "🎯 Calibrar IA":          "Compara o robô contra pacotes aleatórios em concursos passados.",
             "📊 Backtest":       "Testa o robô em concursos passados e mede a taxa de acertos. (F6)",
             "🤖 BT Automático": "Walk-forward detalhado: gera e confere jogos concurso a concurso, salva relatório.",
-            "🧭 Auto Ajuste":          "Ajusta janela histórica e passos de backtest conforme o tamanho do histórico atual "
-                                "(G/P não mudam mais — ficam fixos em 16/40, ver Mapa G×P).",
             "🔀 Walk-Forward":         "Validação walk-forward deslizante: avalia robustez em múltiplas janelas e detecta overfitting.",
             "📐 Bootstrap IC":         "IC 95%/99% e erro padrão (bootstrap) sobre a série de acertos do último backtest. "
                                 "Não compara contra aleatório (sem p-value/Cohen's d aqui) — para isso use 🎯 Calibrar IA ou 🗺️ Mapa G×P.",
@@ -544,7 +539,6 @@ class RoboLotofacilUltraApp:
             ("🎯 Calibrar IA",         self.iniciar_calibracao_vs_aleatorio,    TEMA["btn_backtest"]),
             ("📊 Backtest",       self.iniciar_rodar_backtest,       TEMA["btn_backtest"]),
             ("🤖 BT Automático", self.iniciar_backtest_automatico,   TEMA["btn_backauto"]),
-            ("🧭 Auto Ajuste",         self.iniciar_autoajuste,                 TEMA["btn_atalho"]),
             ("🔀 Walk-Forward",        self.iniciar_walkforward,                TEMA["btn_backauto"]),
             ("📐 Bootstrap IC",        self.iniciar_bootstrap_ic,               TEMA["btn_relatorio"]),
             ("🔬 Análise Científica",   self.iniciar_analise_cientifica_v2,      TEMA["btn_relatorio"]),
@@ -1142,56 +1136,6 @@ class RoboLotofacilUltraApp:
             self.log(traceback.format_exc())
 
 
-    def iniciar_autoajuste(self) -> None:
-        """Lança autoajuste em thread para não travar a UI."""
-        if getattr(self, "_autoajuste_ativo", False):
-            self.log("⚠️ Auto Ajuste já em andamento.")
-            return
-        self._autoajuste_ativo = True
-        self.set_status("Calculando configuração ideal...", "blue")
-        threading.Thread(target=self._executar_autoajuste, daemon=True).start()
-
-    def _executar_autoajuste(self) -> None:
-        """Executa cálculo de configuração assistida em thread separada."""
-        try:
-            self.aplicar_autoajuste_configuracao()
-        finally:
-            self._autoajuste_ativo = False
-
-    def aplicar_autoajuste_configuracao(self) -> None:
-        """Aplica uma configuração recomendada para reduzir tentativa manual."""
-        try:
-            if not self.concursos:
-                try:
-                    limite = self.calcular_limite_turbo() if self.modo_turbo.get() else None
-                    self.concursos, self.df_csv, self.total_concursos_csv = carregar_concursos_do_csv(
-                        self.caminho_csv.get().strip(), limite=limite
-                    )
-                except Exception:
-                    # Ainda permite sugerir usando os valores atuais.
-                    pass
-            cfg = calcular_configuracao_assistida(
-                self.concursos,
-                qtd_jogos=int(self.qtd_jogos.get()),
-                janela_atual=int(self.janela_hist.get()),
-                geracoes_atual=int(self.geracoes.get()),
-                pop_atual=int(self.pop_size.get()),
-            )
-            self.qtd_jogos.set(cfg["qtd_jogos"])
-            self.janela_hist.set(cfg["janela"])
-            # Gerações/população NÃO são mais tocadas aqui (2026-07-17): ficam
-            # fixas em 16/40, Mapa G x P provou que ajustar esses dois não
-            # muda o resultado.
-            self.passos_backtest.set(cfg["passos_backtest"])
-            self.log("=" * 72)
-            self.log(explicar_configuracao_assistida(cfg))
-            self.set_status("Auto Ajuste aplicado.", "green")
-            return cfg
-        except Exception as e:
-            self.set_status("Erro no Auto Ajuste.", "red")
-            self.log(f"❌ Erro ao aplicar Auto Ajuste: {e}")
-            return None
-
     def iniciar_gerar_jogos(self) -> None:
         """Lança gerar_jogos em thread separada para não travar a UI."""
         if getattr(self, "_geracao_ativa", False):
@@ -1224,22 +1168,6 @@ class RoboLotofacilUltraApp:
                 limite = self.calcular_limite_turbo() if self.modo_turbo.get() else None
                 self.concursos, self.df_csv, self.total_concursos_csv = carregar_concursos_do_csv(self.caminho_csv.get().strip(), limite=limite)
 
-            if self.assistente_config_auto.get():
-                cfg_auto = calcular_configuracao_assistida(
-                    self.concursos,
-                    qtd_jogos=int(self.qtd_jogos.get()),
-                    janela_atual=int(self.janela_hist.get()),
-                    geracoes_atual=int(self.geracoes.get()),
-                    pop_atual=int(self.pop_size.get()),
-                )
-                self.qtd_jogos.set(cfg_auto["qtd_jogos"])
-                self.janela_hist.set(cfg_auto["janela"])
-                self.passos_backtest.set(cfg_auto["passos_backtest"])
-                # Gerações/população NÃO são mais tocadas aqui (2026-07-17):
-                # ficam fixas em 16/40 (ver self.geracoes/self.pop_size),
-                # Mapa G x P provou que ajustar esses dois não muda o resultado.
-                # modo_turbo NAO e tocado aqui — respeita a escolha manual do usuario.
-
             # Atualiza TAMANHO_JOGO globalmente conforme campo da UI (15–18)
             _config_module.TAMANHO_JOGO = min(max(15, int(self.tamanho_jogo.get())), 18)
 
@@ -1260,8 +1188,6 @@ class RoboLotofacilUltraApp:
             self.log(f"Concursos carregados em memória: {len(self.concursos)}")
             self.log(f"Analisando apenas os últimos: {janela} concursos")
             self.log(f"Jogos={qtd} | Gerações={ger} | População={pop}")
-            if self.assistente_config_auto.get():
-                self.log("🧭 Assistente Auto Config ativo: janela e passos de backtest ajustados automaticamente.")
 
             # V21.6 — injeta peso_impopularidade na estratégia via override
             peso_imp_ui = round(self.peso_impopularidade.get() / 100.0, 2)
@@ -2067,6 +1993,8 @@ class RoboLotofacilUltraApp:
             janela_digitada = int(self.janela_hist.get())
             passos_digitados = int(self.passos_backtest.get())
             qtd = min(max(5, int(self.qtd_jogos.get())), 30)
+            ger = max(5, int(self.geracoes.get()))
+            pop = max(20, int(self.pop_size.get()))
 
             # Correção principal: a janela não pode consumir todo o histórico.
             janela_maxima_segura = max(MIN_HIST, total - 5)
@@ -2086,7 +2014,7 @@ class RoboLotofacilUltraApp:
                 self.log(f"⚠️ Janela ajustada automaticamente de {janela_digitada} para {janela} para evitar erro de histórico insuficiente.")
             if passos != passos_digitados:
                 self.log(f"⚠️ Passos ajustados automaticamente de {passos_digitados} para {passos} conforme histórico disponível.")
-            self.log(f"Passos={passos} | Janela={janela} | Jogos por rodada={qtd}")
+            self.log(f"Passos={passos} | Janela={janela} | Jogos por rodada={qtd} | G={ger} | P={pop}")
 
             if passos >= 120:
                 self.log("Modo Ultra Massivo ativado automaticamente pelo número alto de passos.")
@@ -2099,27 +2027,24 @@ class RoboLotofacilUltraApp:
                         pass
 
                 self.info_backtest = backtest_ultra_massivo(
-                    self.concursos, janela=janela, qtd_jogos=qtd, passos=passos, status_cb=status_ultra
+                    self.concursos, janela=janela, qtd_jogos=qtd, passos=passos, status_cb=status_ultra,
+                    geracoes=ger, pop_size=pop,
                 )
                 self.log("✅ Backtest Ultra Massivo concluído.")
-                self.log(f"Configuração vencedora: {self.info_backtest.get('configuracao_vencedora', {}).get('nome', '')}")
+                self.log(f"Configuração testada: {self.info_backtest.get('configuracao_vencedora', {}).get('nome', '')}")
                 self.log(f"Média do melhor jogo: {self.info_backtest['media_melhor']}")
                 self.log(f"Melhor acerto observado: {self.info_backtest['max_melhor']}")
                 self.log(f"Distribuição dos melhores acertos: {self.info_backtest['distribuicao']}")
-                self.log("Ranking das configurações:")
-                for pos, item in enumerate(self.info_backtest.get('ranking_configuracoes', []), start=1):
-                    self.log(
-                        f"{pos}. {item.get('nome')} | score={item.get('score')} | "
-                        f"média={item.get('media_melhor')} | máx={item.get('max_melhor')} | "
-                        f"11+={item.get('taxa_11')}% | 12+={item.get('taxa_12')}% | 13+={item.get('taxa_13')}%"
-                    )
                 self.log("Campeonato entre modelos:")
                 for pos, item in enumerate(self.info_backtest.get('ranking_modelos', []), start=1):
                     self.log(f"{pos}. {item.get('modelo')} | peso médio={item.get('peso_medio')}")
                 self.log(f"Relatório salvo em: {self.info_backtest.get('arquivo_relatorio', '')}")
                 self.set_status("Backtest Ultra Massivo concluído com sucesso.", "green")
             else:
-                self.info_backtest = backtest_basico(self.concursos, janela=janela, qtd_jogos=qtd, passos=passos)
+                self.info_backtest = backtest_basico(
+                    self.concursos, janela=janela, qtd_jogos=qtd, passos=passos,
+                    geracoes=ger, pop_size=pop,
+                )
                 self.log(f"✅ Backtest concluído. Passos: {self.info_backtest['passos']}")
                 self.log(f"Média do melhor jogo: {self.info_backtest['media_melhor']}")
                 self.log(f"Melhor acerto observado: {self.info_backtest['max_melhor']}")
@@ -2209,7 +2134,6 @@ class RoboLotofacilUltraApp:
             "populacao": get_int(self.pop_size, 150),
             "passos_backtest": get_int(self.passos_backtest, 20),
             "modo_turbo": get_bool(self.modo_turbo),
-            "assistente_auto_config": get_bool(self.assistente_config_auto),
             "seed_fixo": get_bool(self.usar_seed_fixo),
             "seed_valor": get_int(self.seed_valor, 42),
         }
