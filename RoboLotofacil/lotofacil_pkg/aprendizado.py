@@ -239,6 +239,8 @@ def registrar_resultado_aprendizado(jogos: list, analise: dict, pesos: dict, res
     estrategia = analise.get("estrategia") or {}
     ensemble = analise.get("ensemble") or {}
     cobertura = analise.get("cobertura_global") or {}
+    pares_pacote = [contar_pares(j) for j in jogos]
+    somas_pacote = [soma_jogo(j) for j in jogos]
 
     registro = {
         "data_registro": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
@@ -247,6 +249,14 @@ def registrar_resultado_aprendizado(jogos: list, analise: dict, pesos: dict, res
         "melhor_acerto": max(acertos) if acertos else 0,
         "media_acertos": round(sum(acertos) / len(acertos), 3) if acertos else 0,
         "distribuicao_acertos": dict(sorted(Counter(acertos).items())),
+        # pares_medios/soma_media: padrão do pacote entregue ao usuário,
+        # usados por analisar_padroes_vencedores() (analise.py) para
+        # recalibrar pesos com base nos jogos que mais acertaram — antes
+        # dessas duas chaves não existirem aqui, a função sempre lia o
+        # valor-padrão e o auto-ajuste nunca disparava (ver 2026-07-19 no
+        # ARQUITETURA.md).
+        "pares_medios": round(mean(pares_pacote), 2) if pares_pacote else 7.0,
+        "soma_media": round(mean(somas_pacote), 2) if somas_pacote else 195.0,
         "modo": estrategia.get("modo", "equilibrado"),
         "indice_confianca": estrategia.get("indice_confianca", 0),
         "diversidade": estrategia.get("diversidade", 0),

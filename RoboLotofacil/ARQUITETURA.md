@@ -11,7 +11,7 @@ a suite de testes completa antes de liberar.
 | `historico.py` | Leitura e análise do histórico CSV |
 | `analise.py` | Modelos de IA (bayesiano, markov, neural_leve, etc.) |
 | `genetico.py` | Algoritmo genético de otimização de jogos |
-| `apostas.py` | Pipeline principal: gerar_apostas(), calcular_configuracao_assistida() |
+| `apostas.py` | Pipeline principal: gerar_apostas(), gerar_apostas_dual_perfil() |
 | `aprendizado.py` | Memória adaptativa e aprendizado permanente |
 | `backtest.py` | Calibração, backtest científico V11, laboratório histórico |
 | `persistencia.py` | Leitura/escrita de arquivos CSV e JSON |
@@ -28,20 +28,27 @@ a suite de testes completa antes de liberar.
 | `ui.py` | Interface gráfica principal (Tkinter) |
 | `fechamento.py` | Fechamento combinatório de garantia total (wheeling). Botão "🔒 Fechamento" na UI (linha "Operação principal"), campo "Pool Fecht." (16-20). Garantia matemática condicional — ver docstring do módulo e `VALIDACAO_ESCALA_REAL_2026-07-14.md`. |
 | `auditoria_cientifica.py` | Auditoria científica contínua para scripts de validação (`auditoria_experimento`, `corrigir_multiplas_comparacoes`, `consolidar_rodada_experimentos`). Não tem botão de UI (é infraestrutura de validação, não feature de produto) — mesmo status de `v20_6_bootstrap.py`, do qual depende. Ver seção "Decisão de arquitetura" abaixo e `test_auditoria_cientifica.py`. |
-| `execucao_paralela.py` | Execução paralela por PROCESSOS (não threads) do walk-forward para scripts de validação standalone — `ThreadPoolExecutor` não acelera o algoritmo genético (GIL, Python puro); `ProcessPoolExecutor` dá speedup real (medido: 3,77x com 4 processos). Uso restrito a scripts standalone, NÃO à UI. Requisito não-negociável (testado): mesma seed_base ⇒ resultado idêntico entre `modo="processos"` e `modo="sequencial"`. `fn_gerar` precisa ser função top-level (não closure) — ver docstring do módulo. Ver `test_execucao_paralela.py`. |
+
+**Removido em 2026-07-19**: `execucao_paralela.py` — apesar do próprio
+docstring afirmar que era usado por `validacao_gp.py`/`reanalise_pareada.py`,
+nenhum desses scripts (nem qualquer outro arquivo do repositório) de fato
+o chamava; cada script standalone reimplementava sua própria lógica de
+`ProcessPoolExecutor`. Ver auditoria completa mais abaixo.
 
 ## 🟡 MÓDULOS EXPERIMENTAIS (usar com cuidado)
 | Módulo | Status | Observação |
 |--------|--------|------------|
 | `v21_5_meta_competitivo.py` | Experimental | Não integrado à UI |
-| `v21_5_montecarlo_cientifico.py` | Experimental | Não integrado à UI |
-| `v21_5_walkforward_profissional.py` | Experimental | Substituído pelo v20_8 |
+| `v21_5_montecarlo_cientifico.py` | Ativo (corrigido 2026-07-19) | Integrado ao "⚗️ Painel Científico"; agora usa dados reais do Backtest Científico quando disponíveis (antes sempre usava dados sintéticos) |
+| `v21_5_walkforward_profissional.py` | Ativo (corrigido 2026-07-19) | Complementa (não substitui) o v20_8: agora alimentado a cada Walk-Forward real, ver auditoria completa abaixo |
 | `v21_5_auto_poda_full.py` | Experimental | Derivado do v21_0_auto_poda |
-| `v21_3_1_dashboard_real.py` | Experimental | Dashboard alternativo |
 | `v21_3_1_hall_fama_auto.py` | Experimental | Não integrado à UI |
-| `v21_3_1_historico_combinacoes.py` | Experimental | Não integrado à UI |
 | `v21_0_auto_poda.py` | Experimental | Substituído pelo v21_5_auto_poda_full |
 | `v21_0_meta_aprendizado.py` | Experimental | Não integrado à UI |
+
+**Removidos em 2026-07-19**: `v21_3_1_dashboard_real.py`,
+`v21_3_1_historico_combinacoes.py` — nunca tinham nenhum chamador real
+fora de si mesmos.
 
 ## 🔴 MÓDULOS LEGADOS (candidatos à remoção futura)
 
@@ -406,3 +413,154 @@ nem outra — amostra insuficiente, aumentar `passos`). Testes em
 `test_estatistica_pareada.py`.
 
 Reexecutar `validacao_escala_real.py` reproduz este resultado.
+
+## 🔍 Quinta rodada — Auditoria completa — 2026-07-19
+
+Usuário pediu uma auditoria completa do robô ("não tem bug?"). Foram
+lançados 7 agentes paralelos (read-only, em worktree isolado) cobrindo
+todo `lotofacil_pkg/` — pipeline core, backtest/execução paralela/
+fechamento, módulos legados v17–v20, módulos v21, módulos v22 + plugins,
+e os dois grandes blocos de handlers de `ui.py` (geração/backtest e
+relatórios/diversos). Cada um verificou achados via grep/rastreamento de
+chamadas reais antes de reportar. Achados verificados e corrigidos:
+
+**Bugs de comportamento real:**
+- **Dual-Perfil ignorava o slider de Impopularidade em 0%**
+  (`ui.py`, `_executar_dual_perfil`): só passava `estrategia_override`
+  quando `peso_imp_ui > 0`; em 0% passava `None`, e como
+  `analise.py` embute um padrão de 30% em todo `estrategia` dict, zerar
+  o slider nesse modo não desligava nada. Corrigido para sempre passar o
+  override (igual ao modo single-perfil), com log explícito de
+  "desligada" quando 0%.
+- **Dual-Perfil nunca salvava em "últimos jogos gerados"**: faltava a
+  chamada a `self.salvar_ultimos_jogos_gerados()` que todo outro fluxo de
+  geração faz — pacotes do Dual-Perfil nunca eram conferidos
+  automaticamente contra o sorteio seguinte nem entravam como
+  aprendizado. Corrigido.
+- **Backtest Científico ainda ignorava o G/P real** — terceiro
+  "irmão" do bug já corrigido em `backtest_basico`/`backtest_ultra_massivo`
+  nesta mesma sessão: `montar_configuracoes_cientificas()` aceitava
+  `geracoes_base`/`pop_base` mas nunca os usava (candidatos sempre
+  G=16/P=40 fixo — decisão de 2026-07-16, documentada, e que hoje
+  coincide com a config real fixa). Removidos os parâmetros mortos da
+  assinatura para não sugerir que o G/P da tela influencia o teste.
+- **Dual-Perfil "Exploração" usava só 2 de 7 modelos declarados**
+  (`apostas.py`, `gerar_apostas_dual_perfil`): o `fn_map` buscava scores em
+  `ensemble_exp["scores_modelos"]`/`analise_exp["scores_estatistico"]`,
+  chaves que `calcular_ensemble_multi_ia()` nunca escreve (a chave real é
+  `"modelos"`). Só cobertura/pares_trios (que chamavam a função direto,
+  sem passar por essa busca) realmente contribuíam; os outros 5 pesos de
+  `_PESOS_EXPLORACAO` sempre voltavam vazios. Corrigido: lookup direto em
+  `ensemble_exp["modelos"][nome]`.
+- **Auto-otimização por "padrões vencedores" nunca funcionou**
+  (`analise.py`, `analisar_padroes_vencedores`): lia `pares_medios`/
+  `soma_media` dos registros de aprendizado, chaves que
+  `registrar_resultado_aprendizado()` (`aprendizado.py`) nunca gravava —
+  sempre caía no valor-padrão (soma=195), então o gatilho de recalibração
+  de `aplicar_auto_otimizacao()` (só dispara se média ≥198 ou ≤192) nunca
+  ativava, silenciosamente, desde sempre. Corrigido: o registro agora
+  calcula pares/soma médios reais do pacote conferido.
+- **Monte Carlo Científico sempre usava dados sintéticos**, nunca o
+  Backtest Científico real, apesar do próprio docstring do módulo e do
+  comentário no `ui.py` afirmarem o contrário — os dois pontos de chamada
+  nunca passavam `resultados_backtest`. P(Robô > Aleatório), IC 95%,
+  Cohen's d e p-value no "⚗️ Painel Científico" eram sempre calculados
+  sobre `rng.gauss(0.3, 0.25)`. Corrigido: novo helper
+  `_obter_resultados_backtest_reais_para_montecarlo()` (`ui.py`) busca a
+  última execução real do Backtest Científico em
+  `conhecimento_cientifico.json`; a tela agora rotula explicitamente se
+  os números são reais ou (na ausência de qualquer execução prévia)
+  sintéticos.
+- **Walk-Forward Profissional (V21.5) nunca era alimentado** —
+  `executar_walkforward_profissional()` existia, tinha lógica sólida e
+  persistia em SQLite (tabela `walkforward_indicadores`, já existente no
+  schema), mas nenhum caller real chamava essa função em lugar nenhum do
+  robô; o painel "Walk-Forward Profissional" sempre mostrava "nenhuma
+  execução registrada". Em vez de remover o módulo, foi conectado ao
+  fluxo real: `_executar_walkforward` (`ui.py`) agora também chama
+  `executar_walkforward_profissional()` com o mesmo `fn_gerar`/janelas do
+  Walk-Forward V20.8 já em uso, como camada extra de indicadores
+  acumulados (não substitui o V20.8, complementa).
+- **Thread-safety: "⬆ Atualizar" e "📂 Carregar"** — os dois botões mais
+  usados chamavam `self.log`/`self.set_status`/`_iniciar_progresso`/
+  `_parar_progresso` diretamente de dentro da thread de fundo, em vez das
+  versões `_async`/`root.after` usadas no resto do arquivo. Corrigido em
+  `atualizar_resultados_reais`, `carregar_historico`,
+  `avaliar_ultimo_sorteio_automatico` e
+  `iniciar_aprendizado_automatico_pos_carga`. **Nota honesta**: ao
+  corrigir isso, foi constatado que o padrão "self.log direto dentro de
+  thread" na verdade aparece também no corpo principal de praticamente
+  todo outro handler threaded do arquivo (`_executar_gerar_jogos`,
+  calibração, fechamento, etc.) — só os blocos de `except` usam
+  consistentemente as versões `_async`. Converter tudo teria escopo e
+  risco bem maiores que o corrigido aqui; fica registrado como
+  característica arquitetural conhecida, não resolvida por completo.
+- **Bootstrap IC criava uma janela (Toplevel) fora da thread principal**
+  — `_executar_bootstrap_ic` chamava `_abrir_janela_resultado_bootstrap`
+  direto, sem `root.after`. Corrigido.
+- **"Conferir resultado" manual não atualizava gráfico/painel** —
+  `registrar_resultado`'s `confirmar()` não chamava
+  `_atualizar_grafico_acertos()`/`_atualizar_painel_info()` como
+  `conferir_jogos_gerados`/`ver_aprendizado` fazem. Corrigido.
+- **Gráfico do Comparador com o mesmo padrão do bug já corrigido no
+  gráfico de Acertos** (canvas sem `<Configure>`, podendo desenhar em
+  1x1 antes do notebook mapear a aba). Corrigido com o mesmo binding,
+  redesenhando com `self._resultados_comp` (já armazenado).
+- **Tooltip de "💾 Salvar TXT" enganoso** — prometia "o relatório atual",
+  mas a função só salva os números nus dos jogos. Texto corrigido.
+
+**Limpeza de código órfão** (confirmado por grep em todo o repositório —
+zero chamadores reais fora de si mesmos e de seus próprios testes —
+suíte completa rodada depois, sem regressão):
+- Removidos por inteiro: `v18_meta_otimizador.py`, `v18_1c_meta_ensemble.py`,
+  `v18_2_montecarlo.py`, `v18_2b_auditor_cientifico.py`,
+  `v19_1_benchmark.py`, `v19_1_cache_inteligente.py`,
+  `v19_1_estabilidade.py`, `v19_1_telemetria.py`, `v20_3_ablation.py`,
+  `v20_4_backtest_massivo.py`, `execucao_paralela.py`,
+  `v21_3_1_dashboard_real.py`, `v21_3_1_historico_combinacoes.py`.
+- **Sistema de plugins V22 removido por inteiro**: `v22_plugins.py`
+  (`PluginManager`) nunca era instanciado em lugar nenhum — `plugins/
+  frequencia.py` e `plugins/impopularidade.py` nunca chegavam a rodar.
+  Removidos os dois arquivos, o diretório `plugins/`, a seção `plugins:`
+  de `config_v22.yaml` e os acessores `ConfigV22.plugins()`/
+  `plugins_ativos` (mortos junto).
+- `v18_1b_ia_adaptativa.py` reduzido a só `carregar_pesos_modelos()` (a
+  única função de fato usada, por `analise.py`) — as outras 5 funções
+  (`registrar_resultado_modelo`, `calcular_rating_modelo`,
+  `recalcular_pesos_adaptativos`, `gerar_hall_da_fama`,
+  `salvar_pesos_modelos`) nunca tinham chamador: quem de fato escreve
+  `pesos_modelos.json`/`historico_modelos.json` é
+  `v20_2_poda_inteligente.py`, que por coincidência usa os mesmos nomes
+  de arquivo.
+- `v21_0_sqlite.db_registrar_geracao()` — o docstring afirmava ser
+  "chamado por `apostas.registrar_performance_geracao()`", mas isso nunca
+  foi verdade. Em vez de remover, foi conectado de fato (espelhamento
+  best-effort no SQLite, mesmo padrão já usado para aprendizado). Já
+  `db_salvar_peso_modelo`/`db_ultimos_pesos` foram removidas — não tinham
+  nenhum chamador real, nem mesmo o módulo experimental que as usava
+  (também removido).
+- Testes reorganizados para acompanhar: `test_v19_modulos.py` →
+  `test_v17_4_features.py` (só o que sobrou de válido: `v17_4_features`,
+  que é usado de verdade por `backtest.py`/`genetico.py`);
+  `test_v20_modulos.py` → `test_v20_2_poda_inteligente.py` (idem, só
+  `v20_2_poda_inteligente`, que é usado de verdade por `backtest.py`);
+  `test_execucao_paralela.py` removido junto com o módulo.
+
+**Confirmado limpo, sem achados**: `genetico.py`, `historico.py`,
+`utils.py`, `config.py`, `persistencia.py`, `fechamento.py`,
+`v17_4_features.py`, `v20_2_poda_inteligente.py`, `v20_6_bootstrap.py`,
+`v20_8_walkforward.py`, `v22_otimizador.py` (rebalanceamento de score
+desta sessão confirmado internamente consistente), `v22_pipeline.py`
+(flags de conclusão, já corrigidas antes, continuam corretas).
+
+**Identificado mas deliberadamente não alterado nesta rodada** (achado
+real, mas de menor risco/impacto — documentado para decisão futura, não
+uma pendência esquecida): `v20_5_validacao_cientifica.py` tem só 2 de 6
+funções públicas realmente chamadas pela UI (`benchmark_vs_aleatorio`,
+`ganho_estatistico`); o próprio consolidador do módulo
+(`gerar_relatorio_validacao`) nunca é usado — a UI reimplementa uma
+fatia mais simples do relatório. A maior parte de `config_v22.yaml`
+(seções `validacao`, `dashboard`, `caminhos`) também nunca é lida por
+código real, porque o único consumidor completo dessas seções
+(`v22_relatorio.py`/`v22_pipeline.py`) só é alcançável pelo Pipeline V22,
+que já está documentado como órfão desde a rodada anterior.

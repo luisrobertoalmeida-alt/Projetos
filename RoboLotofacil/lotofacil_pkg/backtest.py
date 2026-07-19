@@ -1332,7 +1332,7 @@ def _resumo_cientifico(nome: str, tipo: str, registros: list, extra: dict | None
     }
 
 
-def montar_configuracoes_cientificas(geracoes_base: int, pop_base: int) -> list[dict]:
+def montar_configuracoes_cientificas() -> list[dict]:
     """
     Configurações testadas pelo Backtest Científico V11.
 
@@ -1341,9 +1341,12 @@ def montar_configuracoes_cientificas(geracoes_base: int, pop_base: int) -> list[
     científica", "Exploratória forte", além da base) — o Mapa G x P
     (n=300, TOST margem=0.3) confirmou equivalência estatística entre
     G=16 e G=300, então essa busca comparava configurações que já
-    sabemos indistinguíveis, custando tempo à toa. `geracoes_base`/
-    `pop_base` (parâmetros da função) seguem aceitos por compatibilidade
-    de assinatura, mas não são mais usados para gerar variantes de G/P.
+    sabemos indistinguíveis, custando tempo à toa. A função não recebe
+    mais `geracoes`/`pop_size` do chamador (2026-07-19): recebê-los sem
+    usá-los para nada dava a falsa impressão de que o G/P configurado na
+    tela influenciava as variantes testadas, quando na prática elas
+    sempre foram G=16/P=40 fixo — que é, coincidentemente, a própria
+    configuração real do robô.
 
     Mantém só a comparação que ainda faz sentido: G/P fixo (16/40) vs.
     a mesma config com diversidade ampliada (parâmetro não testado até
@@ -1372,6 +1375,15 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
     `forcar_modelo`, não uma extração bruta de top-15). Funciona como
     correção periódica por cima da atualização contínua e barata do
     "📊 Backtest".
+
+    `geracoes`/`pop_size` (parâmetros desta função) são validados/limitados
+    mas não influenciam mais nenhuma fase: a fase 1
+    (`montar_configuracoes_cientificas()`) sempre testa G=16/P=40 fixo, e a
+    fase 2 (campeonato de modelos) sempre herda G/P do vencedor da fase 1
+    (`vencedor_config`), que também já vem com "geracoes"/"pop_size"
+    preenchidos — o fallback para os parâmetros do caller nunca dispara na
+    prática. Mantidos na assinatura só por estabilidade de chamada externa
+    (ver 2026-07-19 no ARQUITETURA.md).
     """
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
@@ -1426,7 +1438,7 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
         return resumo, registros
 
     avisar("Fase 1/4: Backtest científico por configurações...")
-    configs = montar_configuracoes_cientificas(geracoes, pop_size)
+    configs = montar_configuracoes_cientificas()
     resultados_config = []
     for cfg in configs:
         resumo_cfg, _ = rodar_variante(

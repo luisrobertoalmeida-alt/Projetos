@@ -27,6 +27,14 @@ from .aprendizado import (
     gerar_resumo_aprendizado,
 )
 from .historico import analisar_historico
+# V21.1-A: espelhamento no SQLite (falha silenciosa) — db_registrar_geracao
+# existia desde a V21.1 mas nunca era chamada apesar do próprio docstring
+# afirmar o contrário, deixando a tabela geracoes_performance sempre vazia
+# (ver 2026-07-19 no ARQUITETURA.md).
+try:
+    from .v21_0_sqlite import db_registrar_geracao as _db_reg_geracao
+except Exception:
+    def _db_reg_geracao(_r): pass
 from .analise import (
     calcular_motor_estrategico,
     calcular_ensemble_multi_ia,
@@ -184,6 +192,7 @@ def registrar_performance_geracao(jogos: list, analise: dict, geracoes: int, pop
         dados = carregar_performance_estrategias()
         dados.setdefault("geracoes", []).append(registro)
         salvar_performance_estrategias(dados)
+        _db_reg_geracao(registro)
         return registro
     except Exception:
         return None
@@ -459,21 +468,18 @@ def gerar_apostas_dual_perfil(
     total_exp = sum(_PESOS_EXPLORACAO.values())
     conf_exp = {k: v / total_exp for k, v in _PESOS_EXPLORACAO.items()}
     ensemble_exp["confianca_modelos"] = conf_exp
-    # Recalcula pesos_finais por dezena com a nova confiança
-    from .analise import calcular_scores_pares_trios, calcular_scores_cobertura
+    # Recalcula pesos_finais por dezena com a nova confiança.
+    # `ensemble_exp["modelos"]` já traz os scores brutos dos 7 modelos
+    # (mesma chave usada por calcular_ensemble_multi_ia) — antes este bloco
+    # buscava em "scores_modelos"/"scores_estatistico", chaves que o
+    # ensemble nunca escreve, então 5 dos 7 pesos declarados em
+    # _PESOS_EXPLORACAO sempre voltavam vazios (ver 2026-07-19 no
+    # ARQUITETURA.md).
     from .utils import normalizar_scores as _norm
     scores_exp = {}
+    modelos_exp = ensemble_exp.get("modelos", {})
     for nome, peso in conf_exp.items():
-        fn_map = {
-            "estatistico":  lambda: analise_exp.get("scores_estatistico", {}),
-            "markov":       lambda: ensemble_exp.get("scores_modelos", {}).get("markov", {}),
-            "bayesiano":    lambda: ensemble_exp.get("scores_modelos", {}).get("bayesiano", {}),
-            "tendencia":    lambda: ensemble_exp.get("scores_modelos", {}).get("tendencia", {}),
-            "neural_leve":  lambda: ensemble_exp.get("scores_modelos", {}).get("neural_leve", {}),
-            "cobertura":    lambda: calcular_scores_cobertura(analise_exp),
-            "pares_trios":  lambda: calcular_scores_pares_trios(analise_exp),
-        }
-        sc = fn_map.get(nome, lambda: {})()
+        sc = modelos_exp.get(nome, {})
         for dezena, val in sc.items():
             scores_exp[dezena] = scores_exp.get(dezena, 0.0) + float(val) * peso
     pesos_exp = _norm(scores_exp) if scores_exp else ensemble_exp.get("pesos_finais", {})

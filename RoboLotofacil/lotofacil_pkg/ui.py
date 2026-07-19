@@ -77,15 +77,17 @@ from .backtest import (
     gerar_dashboard_analitico, auditar_pacote_jogos,
     gerar_relatorio_simulador_pacote, avaliar_jogos, gerar_relatorio_texto,
     barra_ascii,
+    carregar_conhecimento_cientifico,
 )
 from .v20_8_walkforward import relatorio_walkforward, salvar_relatorio_walkforward
 from .v20_6_bootstrap import relatorio_inferencial, salvar_relatorio_inferencial
-# V22: Configuração central, Pipeline, Relatório, Plugins, Otimizador
+# V22: Configuração central, Pipeline, Relatório, Otimizador
+# (v22_plugins/PluginManager removido em 2026-07-19 — nunca era
+# instanciado em lugar nenhum; ver ARQUITETURA.md)
 try:
     from .v22_config import cfg as cfg_v22
     from .v22_pipeline import PipelineV22
     from .v22_relatorio import RelatorioV22
-    from .v22_plugins import PluginManager
     from .v22_otimizador import otimizar_pacote as _otimizar_pacote
     _V22_OK = True
 except Exception as _v22_err:
@@ -560,7 +562,7 @@ class RoboLotofacilUltraApp:
         _tips_linha5 = {
             "📈 Dashboard":      "Abre o painel analítico completo com análise do pacote e relatório.",
             "📊 Desempenho":     "Exibe o banco histórico de acertos reais registrados e o ranking de modelos do ensemble.",
-            "💾 Salvar TXT":     "Salva o relatório atual em arquivo de texto.",
+            "💾 Salvar TXT":     "Salva só os números dos jogos gerados em TXT (sem relatório, score ou logs).",
             "📋 Excel":          "Exporta o histórico de resultados para planilha Excel.",
             "🎰 Probabilidades": "Calculadora de probabilidades reais baseada em combinatória.",
             "🗑 Limpar":         "Limpa o painel de log. (Ctrl+L)",
@@ -790,6 +792,15 @@ class RoboLotofacilUltraApp:
         tk.Frame(parent, bg=bg3, height=1).pack(fill="x")
         self._canvas_comp = tk.Canvas(parent, bg=bg, highlightthickness=0, height=220)
         self._canvas_comp.pack(fill="x", padx=0, pady=0)
+        # Mesmo bug (agora corrigido) do gráfico de Acertos: sem <Configure>,
+        # o primeiro desenho pode acontecer com o canvas ainda em 1x1 (antes
+        # do notebook mapear a aba), ficando invisível até algum redesenho
+        # acidental. Redesenha com o último resultado assim que o canvas
+        # recebe suas dimensões reais.
+        self._canvas_comp.bind(
+            "<Configure>",
+            lambda e: self._desenhar_grafico_comp(self._resultados_comp) if getattr(self, "_resultados_comp", None) else None,
+        )
 
         # ── Status do comparador ───────────────────────────
         self._lbl_comp_status = tk.Label(parent, text="Configure e clique em 'Rodar Comparação'.",
@@ -963,6 +974,36 @@ class RoboLotofacilUltraApp:
             seed_global(None)
             registrar("Seed aleatório (resultados diferentes a cada execução)")
 
+    def _obter_resultados_backtest_reais_para_montecarlo(self) -> list[dict] | None:
+        """
+        Extrai os resultados reais da última vitória do Backtest Científico
+        (conhecimento_cientifico.json) para alimentar o Monte Carlo
+        Científico com dados reais do robô.
+
+        Antes, `executar_montecarlo_cientifico()` era sempre chamado sem
+        `resultados_backtest`, então sempre caía no fallback sintético
+        (`rng.gauss(0.3, 0.25)`) — mesmo quando já existia um Backtest
+        Científico real rodado — e o painel mostrava P(Robô > Aleatório),
+        IC 95%, Cohen's d e p-value calculados sobre números fabricados,
+        contradizendo o próprio docstring do módulo (ver 2026-07-19 no
+        ARQUITETURA.md). Retorna None se ainda não há nenhuma execução
+        científica registrada — nesse caso o Monte Carlo cai no fallback
+        sintético mesmo, mas agora isso é sinalizado na tela.
+        """
+        try:
+            conhecimento = carregar_conhecimento_cientifico()
+            ranking = conhecimento.get("ranking_configuracoes") or []
+            if not ranking:
+                return None
+            ultimos = ranking[0].get("ultimos") or []
+            resultados = [
+                {"acertos": r.get("media_acertos", 0.0)}
+                for r in ultimos if "media_acertos" in r
+            ]
+            return resultados or None
+        except Exception:
+            return None
+
     def _iniciar_progresso(self) -> None:
         if not self._progresso_visivel:
             self._progresso_visivel = True
@@ -1079,40 +1120,43 @@ class RoboLotofacilUltraApp:
             self._atualizando = False
 
     def atualizar_resultados_reais(self) -> None:
+        # Roda em thread de fundo (iniciar_atualizar_resultados) — usa apenas
+        # chamadas thread-safe (_async / root.after), como os demais handlers
+        # threaded do arquivo (ver 2026-07-19 no ARQUITETURA.md).
         try:
-            self.set_status("Atualizando resultados reais...", "blue")
-            self.log("=" * 72)
-            self.log("ATUALIZAÇÃO AUTOMÁTICA")
-            self.log(f"Arquivo de saída: {self.caminho_csv.get().strip()}")
+            self.set_status_async("Atualizando resultados reais...", "blue")
+            self.log_async("=" * 72)
+            self.log_async("ATUALIZAÇÃO AUTOMÁTICA")
+            self.log_async(f"Arquivo de saída: {self.caminho_csv.get().strip()}")
 
             caminho, total, origem, novos, info_salvamento = baixar_e_exportar_historico_ultra(
                 caminho_saida=self.caminho_csv.get().strip(),
                 caminho_cache=ARQUIVO_CACHE,
-                status_cb=self.log,
+                status_cb=self.log_async,
             )
-            self.log(f"✅ Atualização concluída. Origem: {origem}")
-            self.log(f"Total de concursos no CSV: {total}")
-            self.log(f"Concursos novos adicionados nesta execução: {novos}")
-            self.log(f"Arquivo salvo em: {caminho}")
+            self.log_async(f"✅ Atualização concluída. Origem: {origem}")
+            self.log_async(f"Total de concursos no CSV: {total}")
+            self.log_async(f"Concursos novos adicionados nesta execução: {novos}")
+            self.log_async(f"Arquivo salvo em: {caminho}")
             if info_salvamento.get('backup'):
-                self.log(f"Backup criado em: {info_salvamento['backup']}")
+                self.log_async(f"Backup criado em: {info_salvamento['backup']}")
             if info_salvamento.get('alternativo'):
-                self.log("⚠️ O arquivo principal estava bloqueado. Os dados foram salvos em arquivo alternativo.")
-                self.log(f"Motivo: {info_salvamento.get('erro_principal', 'arquivo em uso')}")
-                self.caminho_csv.set(caminho)
-                self.set_status("Atualizado em arquivo alternativo por bloqueio do principal.", "orange")
+                self.log_async("⚠️ O arquivo principal estava bloqueado. Os dados foram salvos em arquivo alternativo.")
+                self.log_async(f"Motivo: {info_salvamento.get('erro_principal', 'arquivo em uso')}")
+                self.root.after(0, lambda: self.caminho_csv.set(caminho))
+                self.set_status_async("Atualizado em arquivo alternativo por bloqueio do principal.", "orange")
             else:
-                self.set_status("Resultados reais atualizados com sucesso.", "green")
+                self.set_status_async("Resultados reais atualizados com sucesso.", "green")
         except PermissionError as e:
-            self.set_status("Erro de permissão ao salvar CSV.", "red")
-            self.log("❌ Arquivo CSV está bloqueado ou sem permissão de escrita.")
-            self.log(str(e))
-            self.log("Feche o Excel/LibreOffice se o CSV estiver aberto e tente novamente.")
+            self.set_status_async("Erro de permissão ao salvar CSV.", "red")
+            self.log_async("❌ Arquivo CSV está bloqueado ou sem permissão de escrita.")
+            self.log_async(str(e))
+            self.log_async("Feche o Excel/LibreOffice se o CSV estiver aberto e tente novamente.")
         except Exception as e:
-            self.set_status("Erro ao atualizar resultados reais.", "red")
-            self.log("❌ Erro ao atualizar resultados reais:")
-            self.log(str(e))
-            self.log(traceback.format_exc())
+            self.set_status_async("Erro ao atualizar resultados reais.", "red")
+            self.log_async("❌ Erro ao atualizar resultados reais:")
+            self.log_async(str(e))
+            self.log_async(traceback.format_exc())
 
     def iniciar_carregar_historico(self) -> None:
         """Lança carregar_historico em thread para não travar a UI."""
@@ -1130,33 +1174,35 @@ class RoboLotofacilUltraApp:
             self._carregando = False
 
     def carregar_historico(self) -> None:
+        # Roda em thread de fundo (iniciar_carregar_historico) — mesma
+        # observação de thread-safety de atualizar_resultados_reais.
         try:
-            self._iniciar_progresso()
-            self.set_status("Carregando histórico...", "blue")
-            self.log("=" * 72)
-            self.log("CARREGAMENTO DE HISTÓRICO")
+            self.root.after(0, self._iniciar_progresso)
+            self.set_status_async("Carregando histórico...", "blue")
+            self.log_async("=" * 72)
+            self.log_async("CARREGAMENTO DE HISTÓRICO")
             limite = self.calcular_limite_turbo() if self.modo_turbo.get() else None
             self.concursos, self.df_csv, self.total_concursos_csv = carregar_concursos_do_csv(self.caminho_csv.get().strip(), limite=limite)
-            self.log(f"CSV carregado: {self.caminho_csv.get().strip()}")
-            self.log(f"Base completa no disco: {self.total_concursos_csv} concursos")
+            self.log_async(f"CSV carregado: {self.caminho_csv.get().strip()}")
+            self.log_async(f"Base completa no disco: {self.total_concursos_csv} concursos")
             if self.modo_turbo.get():
-                self.log(f"Modo turbo ativo: memória carregada com os últimos {len(self.concursos)} concursos")
-                self.log(f"Janela atual de análise: últimos {min(int(self.janela_hist.get()), len(self.concursos))} concursos")
+                self.log_async(f"Modo turbo ativo: memória carregada com os últimos {len(self.concursos)} concursos")
+                self.log_async(f"Janela atual de análise: últimos {min(int(self.janela_hist.get()), len(self.concursos))} concursos")
             else:
-                self.log(f"Concursos válidos em memória: {len(self.concursos)}")
-            self.log(f"Primeiro concurso: {formatar_jogo(self.concursos[0])}")
-            self.log(f"Último concurso:   {formatar_jogo(self.concursos[-1])}")
+                self.log_async(f"Concursos válidos em memória: {len(self.concursos)}")
+            self.log_async(f"Primeiro concurso: {formatar_jogo(self.concursos[0])}")
+            self.log_async(f"Último concurso:   {formatar_jogo(self.concursos[-1])}")
             self.avaliar_ultimo_sorteio_automatico()
             self.iniciar_aprendizado_automatico_pos_carga()
-            self._parar_progresso()
-            self._atualizar_painel_info()
-            self.set_status("Histórico carregado com sucesso.", "green")
+            self.root.after(0, self._parar_progresso)
+            self.root.after(0, self._atualizar_painel_info)
+            self.set_status_async("Histórico carregado com sucesso.", "green")
         except Exception as e:
-            self._parar_progresso()
-            self.set_status("Erro ao carregar histórico.", "red")
-            self.log("❌ Erro ao carregar histórico:")
-            self.log(str(e))
-            self.log(traceback.format_exc())
+            self.root.after(0, self._parar_progresso)
+            self.set_status_async("Erro ao carregar histórico.", "red")
+            self.log_async("❌ Erro ao carregar histórico:")
+            self.log_async(str(e))
+            self.log_async(traceback.format_exc())
 
 
     def iniciar_gerar_jogos(self) -> None:
@@ -1485,6 +1531,7 @@ class RoboLotofacilUltraApp:
 
             # V21.6 — impopularidade também no Dual-Perfil
             peso_imp_ui = round(self.peso_impopularidade.get() / 100.0, 2)
+            _override_imp = {"peso_impopularidade": peso_imp_ui}
 
             self.root.after(0, self._iniciar_progresso)
             self.log("=" * 72)
@@ -1495,6 +1542,8 @@ class RoboLotofacilUltraApp:
             self.log(f"Perfil Exploração:   {round(qtd * 0.30)} jogos — G=40 P=40 · Pares/Trios+Cobertura → 13+")
             if peso_imp_ui > 0:
                 self.log(f"📊 Impopularidade: {self.peso_impopularidade.get()}% ativo em ambos os perfis.")
+            else:
+                self.log("📊 Impopularidade desligada (slider em 0%).")
             self.log("-" * 72)
 
             self._atualizar_progresso(15, "Gerando perfil consistência...")
@@ -1507,7 +1556,7 @@ class RoboLotofacilUltraApp:
                 pop_consistencia=pop_ui,
                 fracao_exploracao=0.30,
                 status_cb=self.log,
-                estrategia_override={"peso_impopularidade": peso_imp_ui} if peso_imp_ui > 0 else None,
+                estrategia_override=_override_imp,
             )
 
             self._atualizar_progresso(80, "Finalizando pacote dual...")
@@ -1533,8 +1582,10 @@ class RoboLotofacilUltraApp:
                          f" | mín/máx: {cobertura.get('min_sobreposicao', 0)}"
                          f"/{cobertura.get('max_sobreposicao', 0)}")
 
+            self.salvar_ultimos_jogos_gerados()
             self._atualizar_progresso(95, "Exibindo jogos...")
             self.root.after(0, self._atualizar_tabela_jogos)
+            self.root.after(0, self._atualizar_painel_info)
             self._atualizar_progresso(100, "✅ Dual-Perfil concluído.")
             self.log("✅ Pacote Dual-Perfil gerado com sucesso.")
             self.set_status("✅ Dual-Perfil concluído.", "green")
@@ -2238,9 +2289,9 @@ class RoboLotofacilUltraApp:
                     concurso=concurso_atual,
                     configuracao=dados.get("configuracao", {}),
                 )
-                self.log(f"📊 Desempenho histórico atualizado: melhor={reg_hist.get('melhor_acerto')} | média={reg_hist.get('media_acertos')}")
+                self.log_async(f"📊 Desempenho histórico atualizado: melhor={reg_hist.get('melhor_acerto')} | média={reg_hist.get('media_acertos')}")
             except Exception as e:
-                self.log(f"⚠️ Avaliação feita, mas não foi possível atualizar banco histórico: {e}")
+                self.log_async(f"⚠️ Avaliação feita, mas não foi possível atualizar banco histórico: {e}")
             avaliados.add(chave)
             avaliacoes["avaliados"] = list(avaliados)[-200:]
             avaliacoes["ultima_avaliacao"] = {
@@ -2251,17 +2302,17 @@ class RoboLotofacilUltraApp:
             }
             salvar_json(ARQUIVO_AUTO_AVALIACOES, avaliacoes)
 
-            self.log("=" * 72)
-            self.log("🤖 AVALIAÇÃO AUTOMÁTICA DO ÚLTIMO SORTEIO")
-            self.log(f"Pacote gerado na referência: concurso {concurso_ref}")
-            self.log(f"Último concurso carregado: {concurso_atual}")
-            self.log(f"Resultado avaliado: {formatar_jogo(resultado_atual)}")
-            self.log(f"Melhor acerto: {registro['melhor_acerto']} | Média: {registro['media_acertos']}")
-            self.log(f"Distribuição: {registro['distribuicao_acertos']}")
-            self.log(ajustes.get("resumo", "Memória atualizada automaticamente."))
+            self.log_async("=" * 72)
+            self.log_async("🤖 AVALIAÇÃO AUTOMÁTICA DO ÚLTIMO SORTEIO")
+            self.log_async(f"Pacote gerado na referência: concurso {concurso_ref}")
+            self.log_async(f"Último concurso carregado: {concurso_atual}")
+            self.log_async(f"Resultado avaliado: {formatar_jogo(resultado_atual)}")
+            self.log_async(f"Melhor acerto: {registro['melhor_acerto']} | Média: {registro['media_acertos']}")
+            self.log_async(f"Distribuição: {registro['distribuicao_acertos']}")
+            self.log_async(ajustes.get("resumo", "Memória atualizada automaticamente."))
         except Exception as e:
-            self.log("⚠️ Falha na avaliação automática do último sorteio:")
-            self.log(str(e))
+            self.log_async("⚠️ Falha na avaliação automática do último sorteio:")
+            self.log_async(str(e))
 
     def forcar_aprendizado_continuo_seguro(self) -> None:
         """
@@ -2301,14 +2352,14 @@ class RoboLotofacilUltraApp:
             ultimo_treinado = int(estado.get("ultimo_concurso_treinado", 0) or 0)
 
             if ultimo_treinado == concurso_atual:
-                self.log(f"🧠 Aprendizado automático já executado para o concurso {concurso_atual}.")
+                self.log_async(f"🧠 Aprendizado automático já executado para o concurso {concurso_atual}.")
                 return
 
             self.aprendizado_automatico_chave = str(concurso_atual)
-            self.log("🤖 Auto Aprender ativado: iniciando aprendizado contínuo em segundo plano.")
+            self.log_async("🤖 Auto Aprender ativado: iniciando aprendizado contínuo em segundo plano.")
             self.root.after(800, lambda: self.iniciar_aprendizado_continuo(automatico=True))
         except Exception as e:
-            self.log(f"⚠️ Não foi possível iniciar o aprendizado automático: {e}")
+            self.log_async(f"⚠️ Não foi possível iniciar o aprendizado automático: {e}")
 
     def iniciar_aprendizado_continuo(self, automatico: bool = False) -> None:
         if self.aprendizado_continuo_ativo:
@@ -2577,6 +2628,8 @@ class RoboLotofacilUltraApp:
                 if resumo_hist:
                     self.log("📊 Banco histórico de desempenho atualizado.")
                     self.log(f"Resumo histórico: média melhor={resumo_hist.get('media_melhor_ultimos', 0)} | 11+={resumo_hist.get('pct_11_mais', 0)}% | 12+={resumo_hist.get('pct_12_mais', 0)}%")
+                self._atualizar_grafico_acertos()
+                self._atualizar_painel_info()
                 self.set_status("Resultado registrado no aprendizado permanente.", "green")
                 janela.destroy()
 
@@ -2655,7 +2708,11 @@ class RoboLotofacilUltraApp:
             overfit_wf = hist_wf[-1].get("overfitting_nivel", "—") if hist_wf else "—"
 
             # Monte Carlo rápido com histórico existente (sem backtest novo)
-            mc = executar_montecarlo_cientifico(n_simulacoes=500, qtd_jogos=10)
+            resultados_reais = self._obter_resultados_backtest_reais_para_montecarlo()
+            mc = executar_montecarlo_cientifico(
+                resultados_backtest=resultados_reais, n_simulacoes=500, qtd_jogos=10
+            )
+            fonte_mc = f"dados reais ({len(resultados_reais)} execuções)" if resultados_reais else "sintético — rode o Backtest Científico para dados reais"
 
             sep = "═" * 50
             linhas_c = [
@@ -2675,7 +2732,7 @@ class RoboLotofacilUltraApp:
                 f"  Estabilidade         {(est_wf or 0)*100:>6.1f}%",
                 f"  Overfitting          {overfit_wf}",
                 "",
-                "  MONTE CARLO (500 simulações)",
+                f"  MONTE CARLO (500 simulações — {fonte_mc})",
                 "",
                 f"  P(Robô > Aleatório)  {mc.get('prob_pct', 0):>6.1f}%",
                 f"  IC 95%  {mc.get('ic_95',{}).get('inferior',0):.4f} → {mc.get('ic_95',{}).get('superior',0):.4f}",
@@ -2783,10 +2840,20 @@ class RoboLotofacilUltraApp:
 
         try:
             from .v21_5_montecarlo_cientifico import executar_montecarlo_cientifico, resumo_montecarlo
-            mc1000 = executar_montecarlo_cientifico(n_simulacoes=1000, qtd_jogos=10)
+            resultados_reais_mc1000 = self._obter_resultados_backtest_reais_para_montecarlo()
+            mc1000 = executar_montecarlo_cientifico(
+                resultados_backtest=resultados_reais_mc1000, n_simulacoes=1000, qtd_jogos=10
+            )
+            fonte_mc1000 = (
+                f"dados reais ({len(resultados_reais_mc1000)} execuções do Backtest Científico)"
+                if resultados_reais_mc1000 else
+                "sintético — rode o Backtest Científico para dados reais"
+            )
             linhas_mc = [
                 "MONTE CARLO CIENTÍFICO — V21.5-FULL",
                 "=" * 60,
+                "",
+                f"  Fonte dos dados: {fonte_mc1000}",
                 "",
                 resumo_montecarlo(mc1000),
                 "",
@@ -3796,6 +3863,29 @@ class RoboLotofacilUltraApp:
             rel["qtd_jogos_usado"] = qtd
             self._ultimo_resultado_walkforward = rel
 
+            # V21.5-FULL: alimenta os indicadores permanentes do Walk-Forward
+            # Profissional (SQLite) — a aba "Walk-Forward Profissional" do
+            # Painel Científico lia esse histórico, mas nada nunca escrevia
+            # nele (executar_walkforward_profissional não tinha nenhum
+            # chamador real), então o painel sempre mostrava "nenhuma
+            # execução registrada" (ver 2026-07-19 no ARQUITETURA.md).
+            try:
+                from .v21_5_walkforward_profissional import executar_walkforward_profissional
+                ind_prof = executar_walkforward_profissional(
+                    concursos, fn_gerar,
+                    tamanho_treino=janela_treino,
+                    tamanho_teste=janela_teste,
+                    passo=passo,
+                    qtd_jogos=qtd,
+                )
+                self.log_async(
+                    f"   Walk-Forward Profissional: robustez={ind_prof.get('robustez_pct', 0)}% "
+                    f"| estabilidade={ind_prof.get('estabilidade_pct', 0)}% "
+                    f"| tendência={ind_prof.get('trend_robustez', '')}"
+                )
+            except Exception as e_prof:
+                self.log_async(f"   (aviso: Walk-Forward Profissional não pôde ser atualizado — {e_prof})")
+
             # Salva JSON
             try:
                 garantir_estrutura_pastas()
@@ -4160,7 +4250,8 @@ class RoboLotofacilUltraApp:
                     f"Mediana (boot.) : {ic['mediana_bootstrap']:.4f}",
                     f"Amostras        : {ic['n_amostras']}",
                 ]
-                self._abrir_janela_resultado_bootstrap("\n".join(linhas))
+                texto_resultado = "\n".join(linhas)
+                self.root.after(0, lambda t=texto_resultado: self._abrir_janela_resultado_bootstrap(t))
             except Exception:
                 pass
 

@@ -19,20 +19,8 @@ lotofacil_pkg/
 ├── backtest.py                  Backtesting, calibração, laboratório, relatórios
 ├── ui.py                        Interface gráfica tkinter (Neon Dark)
 ├── v17_4_features.py            Split temporal, redundância, cobertura de pares/trios
-├── v18_meta_otimizador.py       Pesos adaptativos por modelo (histórico + recente)
-├── v18_1b_ia_adaptativa.py      Detecção de cenário e ajuste de pesos por contexto
-├── v18_1c_meta_ensemble.py      Meta-ensemble: seleção de modelos por cenário
-├── v18_2_montecarlo.py          Simulação Monte Carlo e heatmap de dezenas
-├── v18_2b_auditor_cientifico.py Auditoria de overfitting, recência e pesos
-├── v18_3_parallel.py            Execução paralela com ProcessPoolExecutor
-├── v19_0_arquitetura_cientifica.py  Pipeline V19 unificado
-├── v19_1_benchmark.py           Comparação e ranking de modelos por score
-├── v19_1_cache_inteligente.py   Cache persistente de resultados de backtest
-├── v19_1_estabilidade.py        Score composto de estabilidade do pacote
-├── v19_1_telemetria.py          Medição de tempo de execução por etapa
+├── v18_1b_ia_adaptativa.py      Leitura de pesos adaptativos por modelo
 ├── v20_2_poda_inteligente.py    Score de sobrevivência e quarentena de modelos
-├── v20_3_ablation.py            Contribuição marginal de cada modelo (ablation study)
-├── v20_4_backtest_massivo.py    Backtest paralelo multi-janela (pickle-safe)
 ├── v20_5_validacao_cientifica.py  Benchmarks, z-score e ganho estatístico vs aleatório
 ├── v20_6_bootstrap.py           IC bootstrap, Cohen's d, p-value por permutação
 ├── v20_8_walkforward.py         Walk-forward validation, robustez e detecção de overfitting
@@ -41,11 +29,21 @@ lotofacil_pkg/
     ├── test_analise_genetico.py   Modelos IA e algoritmo genético
     ├── test_apostas_pipeline.py   Pipeline completo e aprendizado
     ├── test_backtest.py           Backtesting e laboratório
-    ├── test_v19_modulos.py        Módulos V19 (benchmark, cache, estabilidade, telemetria)
-    ├── test_v20_modulos.py        Módulos V20.2–V20.4 (poda, ablation, backtest massivo)
+    ├── test_v17_4_features.py     Split temporal, redundância, cobertura de pares/trios
+    ├── test_v20_2_poda_inteligente.py  Score de sobrevivência e quarentena de modelos
     ├── test_v20_5_validacao_cientifica.py  Validação científica V20.5
     └── test_v20_novos_modulos.py  Bootstrap V20.6 e Walk-Forward V20.8
 ```
+
+> Nota (2026-07-19): v18_meta_otimizador.py, v18_1c_meta_ensemble.py,
+> v18_2_montecarlo.py, v18_2b_auditor_cientifico.py, v19_1_benchmark.py,
+> v19_1_cache_inteligente.py, v19_1_estabilidade.py, v19_1_telemetria.py,
+> v20_3_ablation.py, v20_4_backtest_massivo.py e execucao_paralela.py
+> foram removidos por serem código órfão (nunca chamados fora de si
+> mesmos e de seus próprios testes) — ver ARQUITETURA.md.
+> `v18_3_parallel.py`/`v19_0_arquitetura_cientifica.py`, citados em
+> versões anteriores deste README, já não existiam no repositório antes
+> dessa limpeza.
 
 ## Instalação
 
@@ -83,27 +81,6 @@ jogos, analise, pesos = gerar_apostas(
 
 for i, jogo in enumerate(jogos, 1):
     print(f"Jogo {i:2d}: {' '.join(f'{n:02d}' for n in jogo)}")
-```
-
-## Pipeline V19 (avançado)
-
-```python
-from lotofacil_pkg.v19_0_arquitetura_cientifica import pipeline_v19
-from lotofacil_pkg.v19_1_telemetria import Telemetria
-from lotofacil_pkg.v19_1_cache_inteligente import CacheBacktest
-
-tel = Telemetria()
-cache = CacheBacktest()
-
-chave = "pipeline_padrao"
-resultado = cache.carregar(chave)
-if resultado is None:
-    tel.iniciar("pipeline_v19")
-    resultado = pipeline_v19(ranking_dezenas=pesos, metricas={})
-    tel.finalizar("pipeline_v19")
-    cache.salvar(chave, resultado)
-
-print(resultado)
 ```
 
 ## Rodando os testes

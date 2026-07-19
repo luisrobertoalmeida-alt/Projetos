@@ -57,16 +57,6 @@ relatorio:
   formato: "txt"               # txt | json | ambos
   salvar_historico: true
 
-# ── Plugins ─────────────────────────────────────────────────
-plugins:
-  diretorio: "plugins"
-  ativos:
-    - frequencia
-    - impopularidade
-    - ensemble
-  desativados:
-    - rede_neural               # experimental
-
 # ── Caminhos ────────────────────────────────────────────────
 caminhos:
   base: "~/Documents/RoboLotofacilPro"
@@ -74,5 +64,10 @@ caminhos:
   backup: "backup"
   exportacoes: "exportacoes"
   logs: "logs"
-  plugins: "plugins"
   relatorios: "relatorios_v22"
+
+# Nota (2026-07-19): a seção "plugins" foi removida junto com
+# v22_plugins.py/PluginManager e plugins/frequencia.py e
+# plugins/impopularidade.py — o PluginManager nunca era instanciado em
+# lugar nenhum do robô, então nenhum plugin chegava a rodar (ver
+# ARQUITETURA.md).
