@@ -503,7 +503,9 @@ class RoboLotofacilUltraApp:
                                 "condicionada às 15 sorteadas estarem dentro do pool escolhido — ver VALIDACAO_ESCALA_REAL "
                                 "e docstring de fechamento.py.",
             "⚡ Otimizador": "Gera pacotes candidatos com a mesma configuração até atingir 95% de 11+ na simulação "
-                                "(ou esgotar as tentativas) — investigação, não muda a config validada.",
+                                "(ou esgotar as tentativas); entre os candidatos, escolhe o melhor priorizando 12+/13+ "
+                                "e média do melhor jogo (mais raros e discriminantes que 11+) — investigação, não "
+                                "muda a config validada.",
         }
         for txt, cmd, cor in [
             ("⬆ Atualizar",      self.iniciar_atualizar_resultados, TEMA["btn_atualizar"]),
@@ -3986,7 +3988,7 @@ class RoboLotofacilUltraApp:
                 limiar_11=95.0,
                 limiar_media=11.20,
                 max_tentativas=tentativas,
-                n_simulacoes=500,
+                n_simulacoes=1000,
                 status_cb=self.log_async,
             )
 

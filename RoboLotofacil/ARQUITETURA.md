@@ -378,6 +378,21 @@ se você reiniciar o app e for direto em "Conferir Jogos" sem gerar nada
 antes, a conferência roda normalmente mas **não** registra aprendizado
 (fica só o TXT da conferência).
 
+**Critério de aceite do Otimizador (11+ vs. 12+/13+).** Usuário perguntou
+se o filtro principal do Otimizador (`limiar_11`) deveria usar 12+ em vez
+de 11+. Resposta implementada em `v22_otimizador.py`: manter 11+ como
+gate de aceite (evento quase saturado no aleatório — ~85-98% com 20-30
+jogos por pacote só por volume — serve bem como filtro de sanidade
+grosseiro), mas rebalancear o *score* que compara candidatos entre si
+para pesar mais 12+/13+ e a média do melhor jogo, que discriminam melhor
+"candidato bom" de "mediano" por serem mais raros. Score antigo
+(`pct_11*0.6 + media*3.0 + pct_12*0.4`, sem 13+) → novo
+(`pct_11*0.2 + media*3.5 + pct_12*0.8 + pct_13*1.5`). Como pesar mais um
+evento raro aumenta a sensibilidade a ruído da simulação Monte Carlo,
+`n_simulacoes` subiu de 500 para 1000 (o próprio docstring do módulo já
+prometia 1000 sem que o código cumprisse — inconsistência corrigida de
+brinde).
+
 **✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
 pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,
 teste de permutação sign-flip e TOST (`v20_6_bootstrap.py`: `cohen_d_pareado`,

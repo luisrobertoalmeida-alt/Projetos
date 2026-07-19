@@ -7,8 +7,12 @@ Em vez de ajustar G/P e esperar que os jogos sejam bons,
 gera múltiplos pacotes candidatos e seleciona o melhor
 com base na simulação de 1000 sorteios artificiais.
 
-Critério principal: % de pacotes com pelo menos 11 pontos (pct_11_mais)
-Critério secundário: média do melhor jogo (media_melhor)
+Critério de aceite (gate de sanidade): % de pacotes com pelo menos 11
+pontos (pct_11_mais) — evento quase saturado no aleatório, serve só
+para descartar erro grosseiro, não para escolher entre bons candidatos.
+Critério de ranking entre candidatos (score): pesa mais média do melhor
+jogo, 12+ e 13+ (pct_12_mais/pct_13_mais) — eventos mais raros, que de
+fato diferenciam um candidato do outro (ver 2026-07-19 no ARQUITETURA.md).
 
 Uso:
     from .v22_otimizador import otimizar_pacote
@@ -77,7 +81,7 @@ def otimizar_pacote(
     limiar_11: float = 93.0,        # % mínimo de 11+ para aceitar
     limiar_media: float = 11.20,    # média mínima do melhor jogo
     max_tentativas: int = 10,       # máximo de pacotes gerados
-    n_simulacoes: int = 500,        # simulações por candidato (leve)
+    n_simulacoes: int = 1000,       # simulações por candidato
     status_cb: Callable | None = None,
 ) -> tuple[list, dict | None, dict | None, dict]:
     """
@@ -135,13 +139,20 @@ def otimizar_pacote(
         pct_11  = metricas["pct_11_mais"]
         media   = metricas["media_melhor"]
         pct_12  = metricas["pct_12_mais"]
+        pct_13  = metricas["pct_13_mais"]
 
-        # Score composto para comparar candidatos
-        score = pct_11 * 0.6 + media * 3.0 + pct_12 * 0.4
+        # Score composto para comparar candidatos.
+        # 11+ já fica perto do teto no aleatório (~85-98% com 20-30 jogos
+        # por pacote, só por volume) — pesar forte nele mal diferencia um
+        # candidato do outro. 12+/13+ são mais raros e por isso separam
+        # melhor os candidatos; ganharam mais peso aqui (13+ não entrava
+        # no score antes). Compensado por n_simulacoes maior (500→1000),
+        # já que eventos raros têm mais ruído por rodada de simulação.
+        score = pct_11 * 0.2 + media * 3.5 + pct_12 * 0.8 + pct_13 * 1.5
 
         log(
             f"  Tentativa {tentativa}/{max_tentativas} | "
-            f"11+={pct_11}% | 12+={pct_12}% | "
+            f"11+={pct_11}% | 12+={pct_12}% | 13+={pct_13}% | "
             f"média={media} | score={score:.2f}"
         )
 
@@ -168,7 +179,7 @@ def otimizar_pacote(
 
     log("-" * 60)
     log(f"🏆 Pacote selecionado | 11+={melhor_metricas.get('pct_11_mais')}% | "
-        f"12+={melhor_metricas.get('pct_12_mais')}% | "
+        f"12+={melhor_metricas.get('pct_12_mais')}% | 13+={melhor_metricas.get('pct_13_mais')}% | "
         f"média={melhor_metricas.get('media_melhor')}")
 
     relatorio = {
