@@ -340,6 +340,44 @@ Reorganização de tela adicional (a pedido do usuário):
 - Otimizador: limiar de aceite de 11+ subiu de 93% para 95%
   (`limiar_11` em `iniciar_otimizador_v22`, `ui.py`).
 
+## 🧹 Quarta rodada — 2026-07-19 (bugs reportados pelo usuário)
+
+- **Registro da seed nos relatórios.** Usuário rodou o mesmo teste com
+  "Seed fixo" ligado e desligado para comparar, e notou que os relatórios
+  (calibração, auto diagnóstico, backtest ultra massivo, backtest
+  científico, BT Automático) não registravam se a seed usada era fixa ou
+  aleatória — dependia de lembrar o que estava marcado na tela.
+  `_descricao_seed()` (`backtest.py`) lê `config.SEED` (atualizado por
+  `seed_global()`/`_aplicar_seed_configurada()` logo antes de cada
+  operação) e agora aparece como uma linha "Seed: fixa (N)" ou "Seed:
+  aleatória" em todos esses relatórios.
+- **Bug real: jogos do Otimizador não apareciam na aba "Jogos Gerados".**
+  `_executar_otimizador_v22` setava `self.jogos_gerados` mas nunca chamava
+  `_atualizar_tabela_jogos()` — e mesmo chamando, a tabela ficaria vazia,
+  porque `otimizar_pacote()` (`v22_otimizador.py`) descartava a
+  `analise`/`pesos` do pacote vencedor (só retornava a lista de jogos),
+  e `_atualizar_tabela_jogos()`/`avaliar_jogos()` exigem os três.
+  Consequência colateral: como "Conferir Jogos" só registra aprendizado
+  quando `self.analise`/`self.pesos` não são `None` (ver próxima seção),
+  conferir um pacote gerado pelo Otimizador também não estava alimentando
+  o aprendizado permanente. Corrigido: `otimizar_pacote()` agora retorna
+  `(jogos, analise, pesos, relatorio)` do candidato vencedor; a UI seta
+  `self.analise`/`self.pesos` e atualiza a tabela e o painel de info,
+  igual às outras rotinas de geração.
+
+**Pergunta do usuário: "Conferir Jogos" alimenta o aprendizado?** Sim —
+`conferir_jogos_gerados()` chama `registrar_resultado_aprendizado()`
+(memória permanente, `lotofacil_aprendizado_permanente.json`, usada por
+`calcular_bonus_aprendizado()` para ajustar diversidade/mutação/elite na
+próxima geração) e `registrar_desempenho_historico_robo()` (banco de
+auditoria, `lotofacil_desempenho_historico.json`, mostrado em "📊
+Desempenho") — mas **só se `self.analise` e `self.pesos` não forem
+`None`**. Isso só acontece depois de rodar alguma rotina de geração
+(Gerar Jogos, Dual-Perfil, Otimizador, Laboratório...) na sessão atual;
+se você reiniciar o app e for direto em "Conferir Jogos" sem gerar nada
+antes, a conferência roda normalmente mas **não** registra aprendizado
+(fica só o TXT da conferência).
+
 **✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
 pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,
 teste de permutação sign-flip e TOST (`v20_6_bootstrap.py`: `cohen_d_pareado`,

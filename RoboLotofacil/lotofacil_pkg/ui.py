@@ -1859,6 +1859,7 @@ class RoboLotofacilUltraApp:
             linhas_txt.append(f"Jogos por concurso: {qtd}")
             linhas_txt.append(f"Gerações: {ger}")
             linhas_txt.append(f"População: {pop}")
+            linhas_txt.append(f"Seed: {'fixa (' + str(_config_module.SEED) + ')' if _config_module.SEED is not None else 'aleatória'}")
             linhas_txt.append("")
 
             self.log_async(f"Configuração: testes={total_testes} | janela={janela} | jogos={qtd} | G={ger} | P={pop}")
@@ -3979,7 +3980,7 @@ class RoboLotofacilUltraApp:
                 )
                 return jogos, analise, pesos
 
-            jogos_otimizados, relatorio = _otimizar_pacote(
+            jogos_otimizados, analise_otim, pesos_otim, relatorio = _otimizar_pacote(
                 concursos,
                 fn_gerar,
                 limiar_11=95.0,
@@ -3991,6 +3992,9 @@ class RoboLotofacilUltraApp:
 
             if jogos_otimizados:
                 self.jogos_gerados = jogos_otimizados
+                self.analise = analise_otim
+                self.pesos = pesos_otim
+                self.info_backtest = None
                 met = relatorio.get("metricas", {})
                 self.log_async("=" * 72)
                 self.log_async("✅ Otimizador concluído")
@@ -4003,6 +4007,9 @@ class RoboLotofacilUltraApp:
                 self.log_async("📋 Jogos otimizados:")
                 for i, jogo in enumerate(jogos_otimizados, 1):
                     self.log_async(f"   Jogo {i:02d}: {' '.join(f'{d:02d}' for d in sorted(jogo))}")
+                self.salvar_ultimos_jogos_gerados()
+                self.root.after(0, self._atualizar_tabela_jogos)
+                self.root.after(0, self._atualizar_painel_info)
                 self.set_status_async("Otimizador concluído.", "green")
             else:
                 self.log_async("❌ Otimizador não gerou jogos válidos.")

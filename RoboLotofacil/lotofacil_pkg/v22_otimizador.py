@@ -12,7 +12,7 @@ Critério secundário: média do melhor jogo (media_melhor)
 
 Uso:
     from .v22_otimizador import otimizar_pacote
-    jogos, relatorio = otimizar_pacote(
+    jogos, analise, pesos, relatorio = otimizar_pacote(
         concursos, fn_gerar,
         limiar_11=0.93,
         max_tentativas=10,
@@ -79,7 +79,7 @@ def otimizar_pacote(
     max_tentativas: int = 10,       # máximo de pacotes gerados
     n_simulacoes: int = 500,        # simulações por candidato (leve)
     status_cb: Callable | None = None,
-) -> tuple[list, dict]:
+) -> tuple[list, dict | None, dict | None, dict]:
     """
     Gera até max_tentativas pacotes e retorna o melhor.
 
@@ -87,7 +87,11 @@ def otimizar_pacote(
     Caso contrário, continua gerando e ao final retorna o melhor encontrado.
 
     Returns:
-        (jogos, relatorio) onde relatorio contém métricas e histórico
+        (jogos, analise, pesos, relatorio) — `analise`/`pesos` são os do
+        pacote vencedor (2º/3º item de `fn_gerar`, quando presentes),
+        necessários para exibir o pacote na aba "Jogos Gerados"
+        (`avaliar_jogos` exige análise/pesos, não só a lista de jogos).
+        `relatorio` contém métricas e histórico das tentativas.
     """
     def log(msg: str) -> None:
         if status_cb:
@@ -99,16 +103,24 @@ def otimizar_pacote(
     log("-" * 60)
 
     melhor_jogos = None
+    melhor_analise = None
+    melhor_pesos = None
     melhor_score = -1.0
     melhor_metricas = {}
     historico = []
 
     for tentativa in range(1, max_tentativas + 1):
         # Gerar pacote candidato
+        analise = None
+        pesos = None
         try:
             resultado = fn_gerar(concursos)
             if isinstance(resultado, tuple):
                 jogos = resultado[0]
+                if len(resultado) > 1:
+                    analise = resultado[1]
+                if len(resultado) > 2:
+                    pesos = resultado[2]
             else:
                 jogos = resultado
         except Exception as e:
@@ -143,6 +155,8 @@ def otimizar_pacote(
         if score > melhor_score:
             melhor_score  = score
             melhor_jogos  = jogos
+            melhor_analise = analise
+            melhor_pesos = pesos
             melhor_metricas = metricas
 
         # Aceita imediatamente se atingiu os dois limiares
@@ -167,4 +181,4 @@ def otimizar_pacote(
         "limiar_atingido": melhor_metricas.get("pct_11_mais", 0) >= limiar_11,
     }
 
-    return melhor_jogos or [], relatorio
+    return melhor_jogos or [], melhor_analise, melhor_pesos, relatorio

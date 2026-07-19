@@ -745,6 +745,17 @@ def resumir_linhas_calibracao(linhas: list, prefixo: str) -> dict:
     }
 
 
+def _descricao_seed() -> str:
+    """
+    Descreve o estado da seed no momento da chamada, para registro nos
+    relatórios (auditoria: permite saber depois se um resultado veio de
+    seed fixa e reproduzível, ou de entropia real). Lê `config.SEED`,
+    atualizado por `seed_global()`/`_aplicar_seed_configurada()` (ui.py)
+    logo antes de cada operação.
+    """
+    return f"fixa ({_cfg.SEED})" if _cfg.SEED is not None else "aleatória"
+
+
 def salvar_relatorio_calibracao(resultado: dict) -> str:
     garantir_estrutura_pastas()
     timestamp = gerar_timestamp_arquivo()
@@ -761,6 +772,7 @@ def salvar_relatorio_calibracao(resultado: dict) -> str:
         f"Jogos por pacote: {resultado.get('qtd_jogos', 0)}",
         f"Geracoes: {resultado.get('geracoes', 0)}",
         f"Populacao: {resultado.get('pop_size', 0)}",
+        f"Seed: {_descricao_seed()}",
         "",
         "ROBO",
         f"Media do melhor jogo: {robo.get('media_melhor', 0)}",
@@ -957,6 +969,7 @@ def salvar_relatorio_auto_diagnostico(resultado: dict) -> str:
         f"Janela historica: {resultado.get('janela', 0)}",
         f"Passos: {resultado.get('passos', 0)}",
         f"Jogos por pacote: {resultado.get('qtd_jogos', 0)}",
+        f"Seed: {_descricao_seed()}",
         "",
         "1) CALIBRACAO ROBO VS ALEATORIO",
         f"Robo pacotes 11+: {robo.get('pct_pacotes_11_mais', 0)}%",
@@ -1087,6 +1100,7 @@ def salvar_relatorio_backtest_ultra(resultado: dict) -> str:
     linhas.append("=" * 78 + "\n")
     linhas.append(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     linhas.append(f"Passos: {resultado.get('passos')} | Janela: {resultado.get('janela')} | Jogos por rodada: {resultado.get('qtd_jogos')}\n")
+    linhas.append(f"Seed: {_descricao_seed()}\n")
     linhas.append(f"Configuração vencedora: {resultado.get('configuracao_vencedora', {}).get('nome', '')}\n\n")
 
     linhas.append("RANKING DAS CONFIGURAÇÕES\n")
@@ -1508,6 +1522,7 @@ def salvar_relatorio_backtest_cientifico(resultado: dict) -> str:
     linhas.append("=" * 82)
     linhas.append(f"Gerado em: {resultado.get('data')}")
     linhas.append(f"Concursos testados: {resultado.get('passos')} | Janela: {resultado.get('janela')} | Jogos: {resultado.get('qtd_jogos')}")
+    linhas.append(f"Seed: {_descricao_seed()}")
     linhas.append("")
     linhas.append("1) RANKING CIENTÍFICO DE CONFIGURAÇÕES")
     linhas.append("-" * 82)
