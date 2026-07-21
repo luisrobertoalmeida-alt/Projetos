@@ -2791,10 +2791,11 @@ class RoboLotofacilUltraApp:
                 "AUTO-PODA 4-ESTADOS — V21.5-FULL",
                 "=" * 65,
                 "",
-                f"  Limiares:  observação ≥ {rel_poda['limiares']['observacao']}  |  "
-                f"quarentena ≥ {rel_poda['limiares']['quarentena']}  |  "
-                f"suspenso < {rel_poda['limiares']['suspenso']}",
-                f"  Recuperação se média ≥ {rel_poda['limiares']['recuperacao']} por {2} rodadas consecutivas",
+                "  Avaliação relativa à média do grupo (7 modelos) em cada passo do backtest",
+                f"  (correção 2026-07-21 — ver ARQUITETURA.md): abaixo de {rel_poda['limiares']['observacao']:+.2f} "
+                f"do grupo → degrada | abaixo de {rel_poda['limiares']['suspenso']:+.2f} → pode suspender | "
+                f"acima de {rel_poda['limiares']['recuperacao']:+.2f} → recupera",
+                f"  Precisa de 2 rodadas consecutivas na mesma direção pra avançar de estado",
                 "",
                 f"  {'Modelo':<14} {'Estado':<12} {'Fator':>6} {'Média':>7} {'Tend.':<10} {'Hist.':>5}",
                 "  " + "-" * 65,

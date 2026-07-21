@@ -46,11 +46,27 @@ FATORES_ESTADO = {
     ESTADO_SUSPENSO:   0.10,
 }
 
-# Limiares de acertos (escala 9–15; 9 = aleatório; 13 = muito bom)
-LIMIAR_OBSERVACAO  = 9.10   # abaixo → vai para OBSERVAÇÃO
-LIMIAR_QUARENTENA  = 9.00   # abaixo por 2 rodadas → QUARENTENA
-LIMIAR_SUSPENSO    = 8.90   # abaixo por 3 rodadas → SUSPENSO
-LIMIAR_RECUPERACAO = 9.20   # acima → inicia recuperação
+# Limiares RELATIVOS à média do grupo (dos 7 modelos) no mesmo passo do
+# backtest — não a um valor absoluto fixo.
+#
+# Até 2026-07-19 os limiares eram absolutos (observação<9.10, suspenso<8.90,
+# recuperação>=9.20) numa escala onde "9 = aleatório" (o próprio comentário
+# original já admitia isso). Como a média real de QUALQUER modelo em
+# Lotofácil gira em torno de 9.0 (empatada com o acaso — confirmado por
+# Calibrar IA vs. Aleatório), quase todo passo de backtest ficava abaixo de
+# 9.10 e quase nunca acima de 9.20: o contador "abaixo" subia em praticamente
+# todo passo e o "acima" quase nunca compensava, então TODO modelo descia
+# ATIVO→OBSERVAÇÃO→QUARENTENA→SUSPENSO com passos suficientes e ficava
+# preso lá (recuperação nunca disparava). O sistema não estava avaliando
+# desempenho relativo entre modelos — estava avaliando "supera o acaso de
+# forma absoluta", coisa que nenhum modelo consegue de forma sustentada
+# neste domínio. Corrigido comparando cada modelo à média do PRÓPRIO GRUPO
+# naquele passo — só modelos consistentemente piores que os outros 6
+# degradam; só os consistentemente melhores recuperam (ver 2026-07-21 no
+# ARQUITETURA.md).
+DELTA_OBSERVACAO  = -0.05   # abaixo da média do grupo → conta como "abaixo"
+DELTA_SUSPENSO    = -0.15   # abaixo da média do grupo por margem maior → pode suspender
+DELTA_RECUPERACAO = 0.05    # acima da média do grupo → conta como "acima"/recuperação
 
 # Rodadas consecutivas necessárias para degradar / recuperar
 RODADAS_DEGRADAR   = 2
@@ -108,10 +124,14 @@ def _estado_inicial() -> dict:
 
 # ── Lógica de transição ───────────────────────────────────────────────────────
 
-def _transicao(info: dict, media_recente: float, elo: float | None = None) -> dict:
+def _transicao(info: dict, media_recente: float, media_grupo: float, elo: float | None = None) -> dict:
     """
     Aplica a lógica de transição entre estados para UM modelo.
     Retorna o info atualizado.
+
+    `media_grupo` é a média dos 7 modelos NESSE MESMO passo — a avaliação
+    é sempre relativa ao grupo, não a um valor absoluto (ver comentário de
+    DELTA_OBSERVACAO acima).
     """
     estado_atual = info.get("estado", ESTADO_ATIVO)
     rodadas_abaixo = info.get("rodadas_abaixo", 0)
@@ -125,11 +145,13 @@ def _transicao(info: dict, media_recente: float, elo: float | None = None) -> di
     # Ajuste ELO: se ELO muito abaixo da média (<1350), contabiliza como "abaixo"
     penalidade_elo = elo is not None and elo < 1350
 
-    # ── Avalia tendência ────────────────────────────────────────────────────
-    if media_recente < LIMIAR_OBSERVACAO or penalidade_elo:
+    delta = media_recente - media_grupo
+
+    # ── Avalia tendência (relativa ao grupo) ────────────────────────────────
+    if delta < DELTA_OBSERVACAO or penalidade_elo:
         rodadas_abaixo += 1
         rodadas_acima   = 0
-    elif media_recente >= LIMIAR_RECUPERACAO:
+    elif delta >= DELTA_RECUPERACAO:
         rodadas_acima  += 1
         rodadas_abaixo  = 0
     else:
@@ -148,7 +170,7 @@ def _transicao(info: dict, media_recente: float, elo: float | None = None) -> di
             novo_estado = ESTADO_ATIVO
             rodadas_acima = 0
     elif estado_atual == ESTADO_QUARENTENA:
-        if media_recente < LIMIAR_SUSPENSO and rodadas_abaixo >= RODADAS_DEGRADAR + 2:
+        if delta < DELTA_SUSPENSO and rodadas_abaixo >= RODADAS_DEGRADAR + 2:
             novo_estado = ESTADO_SUSPENSO
         elif rodadas_acima >= RODADAS_RECUPERAR:
             novo_estado = ESTADO_OBSERVACAO
@@ -192,11 +214,15 @@ def avaliar_estados_modelos(
     """
     estados = _carregar_estados()
 
+    # Avaliação sempre relativa à média do PRÓPRIO GRUPO nesse passo (ver
+    # comentário de DELTA_OBSERVACAO) — não a um valor absoluto fixo.
+    media_grupo = mean(acertos_por_modelo.values()) if acertos_por_modelo else 0.0
+
     resultado = {}
     for nome, media in acertos_por_modelo.items():
         info = estados.get(nome, _estado_inicial())
         elo = (elos or {}).get(nome)
-        info_novo = _transicao(info, media, elo=elo)
+        info_novo = _transicao(info, media, media_grupo, elo=elo)
         info_novo["nome"] = nome
         info_novo["media_recente"] = round(media, 4)
         info_novo["fator_peso"] = FATORES_ESTADO[info_novo["estado"]]
@@ -293,11 +319,14 @@ def relatorio_poda_full() -> dict:
         "modelos":    linhas,
         "contagem":   contagem,
         "total":      len(linhas),
+        # Deltas relativos à média do grupo no mesmo passo (não valores
+        # absolutos — ver comentário de DELTA_OBSERVACAO). Não existe um
+        # "delta_quarentena" próprio: QUARENTENA é alcançada por rodadas
+        # acumuladas abaixo do delta de observação, não por um limiar extra.
         "limiares": {
-            "observacao":  LIMIAR_OBSERVACAO,
-            "quarentena":  LIMIAR_QUARENTENA,
-            "suspenso":    LIMIAR_SUSPENSO,
-            "recuperacao": LIMIAR_RECUPERACAO,
+            "observacao":  DELTA_OBSERVACAO,
+            "suspenso":    DELTA_SUSPENSO,
+            "recuperacao": DELTA_RECUPERACAO,
         },
         "fatores": FATORES_ESTADO,
         "versao":  "V21.5-FULL",

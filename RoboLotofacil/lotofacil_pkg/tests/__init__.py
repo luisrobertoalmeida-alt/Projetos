@@ -10,6 +10,7 @@ Arquivos:
   test_backtest.py                   — backtesting, laboratório e relatórios
   test_v17_4_features.py             — split temporal, redundância, cobertura de pares/trios
   test_v20_2_poda_inteligente.py     — poda inteligente de modelos (score/estado/quarentena)
+  test_v21_5_auto_poda_full.py       — poda 4-estados (transições relativas ao grupo)
   test_v20_novos_modulos.py          — V20.6 bootstrap e V20.8 walk-forward
   test_v20_5_validacao_cientifica.py — validação científica V20.5
   test_calibracao_estatistica.py     — V21.6: p-valor, IC95%, Cohen's d, critério aprovação

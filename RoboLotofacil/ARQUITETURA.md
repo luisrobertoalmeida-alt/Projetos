@@ -564,3 +564,61 @@ fatia mais simples do relatório. A maior parte de `config_v22.yaml`
 código real, porque o único consumidor completo dessas seções
 (`v22_relatorio.py`/`v22_pipeline.py`) só é alcançável pelo Pipeline V22,
 que já está documentado como órfão desde a rodada anterior.
+
+## 🐛 Sexta rodada — 2026-07-21 (bug real achado pelo usuário no uso diário)
+
+**Poda 4-Estados (V21.5-FULL) suspendia TODOS os modelos, sempre, com
+passos suficientes — bug de calibração de limiares, não um veredito real
+sobre os modelos.**
+
+Usuário rodou o Backtest Científico com 150 passos e viu o relatório de
+Poda 4-Fases mostrar os 7 modelos em SUSPENSO (fator 0.10, o mínimo).
+Investigação em `v21_5_auto_poda_full.py`:
+
+- Os limiares eram **absolutos**: observação < 9.10, quarentena < 9.00,
+  suspenso < 8.90, recuperação ≥ 9.20 — numa escala onde o próprio
+  comentário do código já dizia "9 = aleatório".
+- A média real de QUALQUER modelo em Lotofácil gira em torno de 9.0
+  (estatisticamente empatada com o acaso — confirmado por "Calibrar IA
+  vs. Aleatório": vantagem média de score de -0.086, p-valor=1.0, Cohen's
+  d=-0.024/desprezível). Ou seja: **nenhum modelo, mesmo o melhor
+  possível, consegue ficar de forma sustentada acima de 9.10**, e
+  praticamente nenhum passo individual chega a 9.20.
+- Resultado: `rodadas_abaixo` (contador de degradação) incrementava em
+  quase todo passo do backtest; `rodadas_acima` (contador de
+  recuperação) quase nunca incrementava. Com passos suficientes (150,
+  no caso do usuário), **todo modelo** descia inevitavelmente
+  ATIVO→OBSERVAÇÃO→QUARENTENA→SUSPENSO e ficava preso lá — a
+  recuperação exigia 2 rodadas seguidas ≥9.20, que na prática nunca
+  acontece. O sistema não estava medindo desempenho *relativo* entre os
+  7 modelos (que é o único sinal que faz sentido nesse domínio) — estava
+  medindo "supera o acaso de forma absoluta", uma barra que nenhum
+  modelo consegue sustentar. Zero testes cobriam este módulo antes desta
+  correção, o que explica por que passou despercebido até o usuário
+  notar no uso real.
+
+**Correção**: os limiares viraram deltas **relativos à média do grupo
+(dos 7 modelos) naquele mesmo passo**, não valores absolutos:
+`DELTA_OBSERVACAO=-0.05`, `DELTA_SUSPENSO=-0.15`, `DELTA_RECUPERACAO=+0.05`.
+`avaliar_estados_modelos()` agora calcula a média do grupo a cada
+chamada e `_transicao()` compara cada modelo a essa média, não a um
+número fixo. Isso restaura o propósito real do sistema: só modelos
+consistentemente piores que os outros 6 degradam; só os
+consistentemente melhores recuperam. `LIMIAR_QUARENTENA` (que já era
+morto — nunca era checado na lógica, só aparecia no relatório) foi
+removido; o relatório de limiares (`relatorio_poda_full()`/aba "✂️ Poda
+4-Fases" no `ui.py`) foi atualizado para refletir os deltas relativos.
+
+Adicionados 8 testes em `test_v21_5_auto_poda_full.py` (módulo não tinha
+nenhum teste antes) cobrindo o cenário exato do bug (modelo empatado com
+o grupo não pode degradar para sempre) e o comportamento correto
+(modelo consistentemente pior degrada sozinho, sem arrastar os outros).
+
+**Nota para quem já rodou backtests antes desta correção**: o arquivo
+`estados_modelos_v21.json` (na pasta `dados/` do usuário) pode ter
+modelos presos em SUSPENSO pelo bug antigo. Não precisa apagar/resetar
+manualmente — a partir da próxima rodada de backtest, a avaliação já
+passa a ser relativa ao grupo, e qualquer modelo com desempenho
+realmente acima da média dos outros 6 volta a acumular `rodadas_acima`
+e se recupera normalmente em algumas rodadas (2 rodadas por nível:
+SUSPENSO→QUARENTENA→OBSERVAÇÃO→ATIVO).
