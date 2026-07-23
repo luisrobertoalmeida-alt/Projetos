@@ -3867,18 +3867,15 @@ class RoboLotofacilUltraApp:
             # V21.5-FULL: alimenta os indicadores permanentes do Walk-Forward
             # Profissional (SQLite) — a aba "Walk-Forward Profissional" do
             # Painel Científico lia esse histórico, mas nada nunca escrevia
-            # nele (executar_walkforward_profissional não tinha nenhum
-            # chamador real), então o painel sempre mostrava "nenhuma
-            # execução registrada" (ver 2026-07-19 no ARQUITETURA.md).
+            # nele. Usa registrar_walkforward_profissional() (reaproveita
+            # as janelas/scores do robô já calculados por `rel` acima) em
+            # vez de executar_walkforward_profissional() (que rodaria
+            # fn_gerar — o algoritmo genético — de novo em cada janela e
+            # dobraria o tempo do botão sem aviso — achado de uso real,
+            # ver 2026-07-21 no ARQUITETURA.md).
             try:
-                from .v21_5_walkforward_profissional import executar_walkforward_profissional
-                ind_prof = executar_walkforward_profissional(
-                    concursos, fn_gerar,
-                    tamanho_treino=janela_treino,
-                    tamanho_teste=janela_teste,
-                    passo=passo,
-                    qtd_jogos=qtd,
-                )
+                from .v21_5_walkforward_profissional import registrar_walkforward_profissional
+                ind_prof = registrar_walkforward_profissional(concursos, rel, qtd_jogos=qtd)
                 self.log_async(
                     f"   Walk-Forward Profissional: robustez={ind_prof.get('robustez_pct', 0)}% "
                     f"| estabilidade={ind_prof.get('estabilidade_pct', 0)}% "

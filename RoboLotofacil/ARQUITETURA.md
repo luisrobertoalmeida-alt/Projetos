@@ -622,3 +622,53 @@ passa a ser relativa ao grupo, e qualquer modelo com desempenho
 realmente acima da média dos outros 6 volta a acumular `rodadas_acima`
 e se recupera normalmente em algumas rodadas (2 rodadas por nível:
 SUSPENSO→QUARENTENA→OBSERVAÇÃO→ATIVO).
+
+## 🐛 Sétima rodada — 2026-07-21 (regressão da própria correção anterior)
+
+**A correção da "Quinta rodada" (wiring do Walk-Forward Profissional)
+dobrava o tempo de execução do botão "🔀 Walk-Forward" — e escondia um
+segundo bug pré-existente que só aparecia quando a função era chamada de
+verdade.**
+
+Usuário reportou que, depois de rodar Walk-Forward, o relatório
+"Walk-Forward Profissional" continuava vazio, e o app parecia travado
+("ainda tá rodando", sem nenhuma linha nova no log). Investigação:
+
+1. **Computação duplicada.** `executar_walkforward_profissional()` (a
+   função que eu tinha conectado na Quinta rodada) roda `fn_gerar` — o
+   algoritmo genético completo (G=16/P=40) — de novo, do zero, em CADA
+   janela. Só que o Walk-Forward V20.8 (`relatorio_walkforward`, chamado
+   logo antes na mesma tela) já tinha acabado de rodar exatamente as
+   mesmas ~180 janelas com o mesmo `fn_gerar`. Ou seja: meu wiring
+   dobrava silenciosamente o tempo do botão, sem avisar o usuário, e sem
+   nenhum log de progresso por janela nessa função — por isso parecia
+   travado, mas só estava recalculando tudo de novo.
+2. **Bug pré-existente escondido pelo módulo estar órfão.** Ao chegar ao
+   fim do cálculo (depois de esperar o dobro do tempo), a função
+   quebrava com `TypeError: '<' not supported between instances of
+   'float' and 'list'` — `detectar_overfitting_wf(scores_robo, [])`
+   passava `[]` como segundo argumento posicional
+   (`limiar_degradacao`, que deveria ser um float, ex. 0.85), erro que
+   existia desde que o módulo foi escrito, mas nunca tinha sido
+   detectado porque a função nunca tinha sido chamada de verdade antes
+   da Quinta rodada (módulo órfão).
+
+**Correção**: `v21_5_walkforward_profissional.py` ganhou
+`registrar_walkforward_profissional(concursos, resultado_v20_8,
+qtd_jogos)` — versão leve que REAPROVEITA as janelas e os scores do
+robô já calculados por `relatorio_walkforward()` (só gera o baseline
+aleatório por janela, que é barato — sem rodar o algoritmo genético de
+novo). A lógica de cálculo dos indicadores foi extraída para
+`_montar_indicadores()`, compartilhada entre a função antiga
+(`executar_walkforward_profissional`, mantida para uso em scripts
+standalone sem um resultado V20.8 pronto) e a nova. `ui.py` passou a
+chamar `registrar_walkforward_profissional()` em vez de
+`executar_walkforward_profissional()`. O bug do `detectar_overfitting_wf(...,
+[])` foi corrigido para `detectar_overfitting_wf(scores_robo)` (usa o
+padrão `limiar_degradacao=0.85`).
+
+Adicionados 5 testes em `test_v21_5_walkforward_profissional.py`
+(módulo também não tinha nenhum teste antes), incluindo um teste que
+confirma explicitamente que `registrar_walkforward_profissional` NÃO
+chama `fn_gerar` — a regressão de performance exata que motivou a
+correção.
