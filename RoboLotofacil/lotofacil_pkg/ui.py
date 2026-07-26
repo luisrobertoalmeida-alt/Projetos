@@ -78,6 +78,7 @@ from .backtest import (
     gerar_relatorio_simulador_pacote, avaliar_jogos, gerar_relatorio_texto,
     barra_ascii,
     carregar_conhecimento_cientifico,
+    alimentar_poda_e_elo,
 )
 from .v20_8_walkforward import relatorio_walkforward, salvar_relatorio_walkforward
 from .v20_6_bootstrap import relatorio_inferencial, salvar_relatorio_inferencial
@@ -563,6 +564,7 @@ class RoboLotofacilUltraApp:
             "📈 Dashboard":      "Abre o painel analítico completo com análise do pacote e relatório.",
             "📊 Desempenho":     "Exibe o banco histórico de acertos reais registrados e o ranking de modelos do ensemble.",
             "💾 Salvar TXT":     "Salva só os números dos jogos gerados em TXT (sem relatório, score ou logs).",
+            "🖨️ Exportar PDF":   "Exporta os jogos gerados em PDF com o volante da Lotofácil marcado visualmente.",
             "📋 Excel":          "Exporta o histórico de resultados para planilha Excel.",
             "🎰 Probabilidades": "Calculadora de probabilidades reais baseada em combinatória.",
             "🗑 Limpar":         "Limpa o painel de log. (Ctrl+L)",
@@ -572,6 +574,7 @@ class RoboLotofacilUltraApp:
             ("📊 Desempenho",    self.abrir_dashboard_desempenho,            TEMA["btn_relatorio"]),
             ("⚗️ Painel Científico", self.abrir_dashboard_cientifico_v21,       TEMA["btn_backauto"]),
             ("💾 Salvar TXT",    self.salvar_txt,                            TEMA["btn_salvar"]),
+            ("🖨️ Exportar PDF",  self.exportar_pdf,                          TEMA["btn_pdf"]),
             ("📋 Excel",         self.exportar_excel,                        TEMA["btn_excel"]),
             ("🎰 Probabilidades",self.abrir_calculadora_probabilidades,      TEMA["btn_comparar"]),
             ("🗑 Limpar",        self.limpar,                                TEMA["btn_limpar"]),
@@ -850,8 +853,18 @@ class RoboLotofacilUltraApp:
             painel, "🗺️ Rodar Mapa G×P", _rodar, cor=TEMA["btn_neon_verde"],
         ).pack(anchor="w")
 
-    def _atualizar_tabela_jogos(self) -> None:
-        """Preenche a tabela de jogos com os dados da última geração."""
+    def _atualizar_tabela_jogos(self, mudar_aba: bool = True) -> None:
+        """
+        Preenche a tabela de jogos com os dados da última geração.
+
+        `mudar_aba=False` popula a tabela sem forçar a troca pra aba
+        "Jogos Gerados" — usado na restauração do pacote ao abrir o app
+        (`carregar_ultimos_jogos_gerados`), pra não roubar o foco da tela
+        logo na inicialização (antes, essa restauração simplesmente não
+        chamava este método, então a tabela ficava vazia até a próxima
+        geração real, mesmo com um pacote válido já em memória — ver
+        2026-07-23 no ARQUITETURA.md).
+        """
         for row in self._tree_jogos.get_children():
             self._tree_jogos.delete(row)
         if not self.jogos_gerados or self.analise is None or self.pesos is None:
@@ -888,8 +901,9 @@ class RoboLotofacilUltraApp:
                  f"[F5=Gerar  F6=Backtest  F9=Atualizar  F10=Carregar  Ctrl+L=Limpar]"
         )
         self._atualizar_painel_info()
-        # Vai para a aba de jogos automaticamente
-        self._notebook_corpo.select(1)
+        if mudar_aba:
+            # Vai para a aba de jogos automaticamente
+            self._notebook_corpo.select(1)
 
     def _atualizar_grafico_acertos(self) -> None:
         """Desenha gráfico de barras dos últimos acertos registrados."""
@@ -1095,11 +1109,19 @@ class RoboLotofacilUltraApp:
         return max(janela + passos + margem, MIN_HIST)
 
     def selecionar_csv(self) -> None:
+        # Usa a caixa de "salvar" (não "abrir") de propósito: este campo é
+        # compartilhado por Carregar E por Atualizar (que pode criar um CSV
+        # novo num caminho que ainda não existe) — askopenfilename exigiria
+        # um arquivo já existente. `confirmoverwrite=False` evita o aviso
+        # de "sobrescrever?" ao reselecionar o CSV atual, que não faz
+        # sentido aqui já que nada está sendo salvo neste momento (achado
+        # de auditoria, ver 2026-07-23 no ARQUITETURA.md).
         caminho = filedialog.asksaveasfilename(
             title="Escolha o CSV de resultados",
             defaultextension=".csv",
             filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
-            initialfile=os.path.basename(self.caminho_csv.get() or ARQUIVO_CSV_PADRAO)
+            initialfile=os.path.basename(self.caminho_csv.get() or ARQUIVO_CSV_PADRAO),
+            confirmoverwrite=False,
         )
         if caminho:
             self.caminho_csv.set(caminho)
@@ -1901,6 +1923,13 @@ class RoboLotofacilUltraApp:
             medias = []
             linhas_txt = []
             linhas_csv = []
+            # V21.5-FULL/V20.2 (2026-07-23): BT Automático nunca alimentava a
+            # poda inteligente/ELO, diferente de "📊 Backtest" que faz o
+            # mesmo tipo de trabalho (gera jogos a partir de histórico
+            # passado e confere contra o resultado real seguinte) — ver
+            # ARQUITETURA.md. `registros_poda` acumula os acertos por modelo
+            # de cada passo pra alimentar alimentar_poda_e_elo() no final.
+            registros_poda = []
 
             base_total = getattr(self, "total_concursos_csv", total)
             linhas_txt.append("===== BACKTEST AUTOMÁTICO LOTOFÁCIL =====")
@@ -1944,6 +1973,23 @@ class RoboLotofacilUltraApp:
                     if a >= 11:
                         resumo[a] += 1
 
+                # Mesmo cálculo de acertos por modelo que backtest_basico usa
+                # (ver alimentar_poda_e_elo em backtest.py).
+                acertos_modelo: dict[str, float] = {}
+                try:
+                    modelos_scores = ((analise or {}).get("ensemble") or {}).get("modelos") or {}
+                    for nome, scores_dez in modelos_scores.items():
+                        if not scores_dez:
+                            continue
+                        top15 = sorted(scores_dez, key=lambda n: scores_dez[n], reverse=True)[:15]
+                        acertos_modelo[nome] = float(intersecao(top15, resultado_real))
+                except Exception:
+                    pass
+                registros_poda.append({
+                    "concurso_idx": concurso_id,
+                    "acertos_modelo": acertos_modelo,
+                })
+
                 linhas_txt.append("-" * 72)
                 linhas_txt.append(f"Concurso real: {concurso_id} | Teste {pos}/{total_testes}")
                 linhas_txt.append(f"Resultado real: {formatar_jogo(resultado_real)}")
@@ -1966,6 +2012,12 @@ class RoboLotofacilUltraApp:
                         f"Backtest Automático {pos}/{total_testes} | melhor passo={melhor} | "
                         f"melhor geral={max(melhores)} | média geral={sum(medias)/max(1, len(medias)):.2f}"
                     )
+
+            _poda_resultado_auto, _erro_elo_auto = alimentar_poda_e_elo(registros_poda)
+            if _erro_elo_auto:
+                self.log_async(f"⚠️ ELO/4-fases não pôde ser atualizado: {_erro_elo_auto}")
+            else:
+                self.log_async("🔪 Poda inteligente e ELO/4-fases atualizados com este Backtest Automático.")
 
             garantir_estrutura_pastas()
             timestamp = gerar_timestamp_arquivo()
@@ -2219,10 +2271,19 @@ class RoboLotofacilUltraApp:
             if not self.jogos_gerados or self.analise is None or self.pesos is None or not self.concursos:
                 return
             garantir_estrutura_pastas()
+            _ensemble_atual = self.analise.get("ensemble", {}) or {}
             analise_min = tornar_json_seguro({
                 "estrategia": self.analise.get("estrategia", {}),
                 "ensemble": {
-                    "confianca_modelos": (self.analise.get("ensemble", {}) or {}).get("confianca_modelos", {})
+                    "confianca_modelos": _ensemble_atual.get("confianca_modelos", {}),
+                    # ranking/consenso são exigidos por registrar_desempenho_historico_robo()
+                    # (backtest.py) pra calcular top5/10/15_acertos e top_consenso — antes
+                    # ficavam de fora deste "analise_min" e qualquer "Conferir Jogos" feito
+                    # num pacote restaurado do disco (ex.: reabrir o app no dia seguinte)
+                    # registrava esses campos como vazios silenciosamente (ver 2026-07-23
+                    # no ARQUITETURA.md).
+                    "ranking": _ensemble_atual.get("ranking", []),
+                    "consenso": _ensemble_atual.get("consenso", {}),
                 },
                 "cobertura_global": self.analise.get("cobertura_global", {}),
             })
@@ -2248,6 +2309,11 @@ class RoboLotofacilUltraApp:
                 self.jogos_gerados = dados.get("jogos", [])
                 self.analise = dados.get("analise", {})
                 self.pesos = {int(k): float(v) for k, v in (dados.get("pesos") or {}).items()}
+                # Popula a aba "Jogos Gerados" com o pacote restaurado sem
+                # trocar de aba na inicialização (5ª instância do mesmo bug
+                # já corrigido em outros 4 handlers — ver 2026-07-23 no
+                # ARQUITETURA.md).
+                self.root.after(0, lambda: self._atualizar_tabela_jogos(mudar_aba=False))
         except Exception:
             pass
 
@@ -3339,6 +3405,42 @@ class RoboLotofacilUltraApp:
             self.log(str(e))
             self.log(traceback.format_exc())
 
+    def exportar_pdf(self) -> None:
+        """
+        Exporta os jogos gerados em PDF com volante visual da Lotofácil
+        (`exportar_apostas_pdf`, backtest.py). Função já existia
+        implementada mas não tinha nenhum botão na tela (achado de
+        auditoria, ver 2026-07-23 no ARQUITETURA.md).
+        """
+        try:
+            if not self.jogos_gerados:
+                messagebox.showwarning("Aviso", "Gere os jogos antes de exportar.")
+                return
+
+            caminho = filedialog.asksaveasfilename(
+                title="Exportar jogos em PDF",
+                defaultextension=".pdf",
+                filetypes=[("PDF", "*.pdf")],
+                initialfile=f"apostas_{gerar_timestamp_arquivo()}.pdf",
+            )
+            if not caminho:
+                return
+
+            resultado = exportar_apostas_pdf(self.jogos_gerados, caminho_saida=caminho)
+            if resultado.get("formato") == "txt_fallback":
+                self.log(f"⚠️ {resultado.get('aviso', '')}")
+                self.log(f"✅ Jogos exportados em TXT (fallback): {resultado.get('arquivo')}")
+                self.set_status("PDF indisponível — exportado como TXT.", "orange")
+            else:
+                self.log(f"✅ Jogos exportados em PDF: {resultado.get('arquivo')}")
+                self.set_status("PDF exportado com sucesso.", "green")
+
+        except Exception as e:
+            self.set_status("Erro ao exportar PDF.", "red")
+            self.log("❌ Erro ao exportar PDF:")
+            self.log(str(e))
+            self.log(traceback.format_exc())
+
 
     def exportar_excel(self) -> None:
         try:
@@ -4188,11 +4290,16 @@ class RoboLotofacilUltraApp:
                 if isinstance(v, (int, float))
             ]
             if len(resultados) < 2:
+                # Bootstrap IC lê especificamente self.info_backtest — só
+                # "📊 Backtest" preenche esse atributo. "🤖 BT Automático"
+                # guarda seu resultado em self.info_backtest_automatico (sem
+                # "acertos_por_passo"), então recomendá-lo aqui não resolvia
+                # nada (achado de auditoria, ver 2026-07-23 no ARQUITETURA.md).
                 self.log_async(
                     "⚠️ Bootstrap IC: nenhuma série de acertos por passo disponível "
                     "no último backtest (ou com menos de 2 pontos) — não é possível "
-                    "calcular variância real. Execute 📊 Backtest ou 🤖 BT Automático "
-                    "novamente antes de tentar de novo."
+                    "calcular variância real. Execute 📊 Backtest novamente antes de "
+                    "tentar de novo."
                 )
                 self.set_status_async("Bootstrap IC: dados insuficientes.", "red")
                 return

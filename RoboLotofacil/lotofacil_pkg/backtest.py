@@ -289,11 +289,17 @@ def gerar_dashboard_desempenho_historico() -> str:
 # =========================================================
 # EXPORTAÇÃO DE APOSTAS EM PDF
 # =========================================================
-def exportar_apostas_pdf(jogos: list, caminho_saida: str | None = None, titulo: str = "Robô Lotofácil Ultra") -> str | None:
+def exportar_apostas_pdf(jogos: list, caminho_saida: str | None = None, titulo: str = "Robô Lotofácil Ultra") -> dict:
     """
     Gera PDF com os jogos marcados visualmente no volante da Lotofácil.
     Usa apenas a biblioteca reportlab se disponível; caso contrário, exporta TXT formatado.
-    Retorna caminho do arquivo gerado.
+
+    Retorna um dict `{"arquivo": caminho, "formato": "pdf"|"txt_fallback",
+    "jogos": int, "aviso": str (só no fallback)}` — não uma string (o
+    docstring/type hint antigos diziam "retorna caminho do arquivo",
+    incoerente com o `return {...}` de ambos os ramos; corrigido em
+    2026-07-23, ver ARQUITETURA.md, junto com o wiring do botão que
+    faltava na UI).
     """
     garantir_estrutura_pastas()
     if caminho_saida is None:
@@ -517,20 +523,26 @@ def comparar_estrategias(concursos: list, janela: int, passos: int, qtd_jogos: i
 # =========================================================
 # BACKTEST
 # =========================================================
-def _alimentar_poda_e_elo(registros: list[dict]) -> list[dict]:
+def alimentar_poda_e_elo(registros: list[dict]) -> tuple[list[dict], str | None]:
     """
     Alimenta a poda inteligente V20.2 (pesos_modelos.json) e o ELO/4-fases
     V21.5-FULL a partir de uma série de passos, cada um com pelo menos
     `concurso_idx` e `acertos_modelo` (dict modelo -> acertos nesse passo).
 
-    Compartilhado por `backtest_basico`, `backtest_ultra_massivo` e
-    `executar_backtest_cientifico_massivo` — até 2026-07-18 só
-    `backtest_basico` alimentava esses dois sistemas (inconsistência: rodar
-    "📊 Backtest" com <120 passos afetava os pesos reais do ensemble, com
-    ≥120 passos ("Ultra Massivo") não). Agora as três fontes alimentam do
-    mesmo jeito.
+    Compartilhado por `backtest_basico`, `backtest_ultra_massivo`,
+    `executar_backtest_cientifico_massivo` e (2026-07-23)
+    `executar_backtest_automatico` (ui.py) — até 2026-07-18 só
+    `backtest_basico` alimentava esses dois sistemas, e até 2026-07-23
+    "🤖 BT Automático" não alimentava nenhum dos dois apesar de fazer o
+    mesmo tipo de trabalho de `backtest_basico` (ver ARQUITETURA.md).
 
-    Retorna a lista de resultados de poda (ou []).
+    Retorna `(poda_resultado, erro_elo)`: `poda_resultado` é a lista de
+    resultados de poda (ou `[]`); `erro_elo` é `None` se o ELO atualizou
+    normalmente, ou uma mensagem de erro se falhou — antes esse segundo
+    bloco engolia a exceção silenciosamente (`except: pass`), então uma
+    falha real no ELO (ex.: `salvar_elo` sem permissão de escrita) nunca
+    aparecia pro usuário, mesmo com a poda tendo funcionado e sido
+    logada como sucesso (ver 2026-07-23 no ARQUITETURA.md).
     """
     poda_resultado: list[dict] = []
     try:
@@ -559,6 +571,7 @@ def _alimentar_poda_e_elo(registros: list[dict]) -> list[dict]:
     except Exception:
         pass
 
+    erro_elo: str | None = None
     try:
         from .v21_5_meta_competitivo import atualizar_elo_concurso
         from .v21_5_auto_poda_full import avaliar_estados_modelos
@@ -571,10 +584,10 @@ def _alimentar_poda_e_elo(registros: list[dict]) -> list[dict]:
             elo_result = atualizar_elo_concurso(acertos_passo, concurso=concurso_num)
             elos_atuais = elo_result.get("elos_novos", {})
             avaliar_estados_modelos(acertos_passo, elos=elos_atuais, concurso=concurso_num)
-    except Exception:
-        pass
+    except Exception as e:
+        erro_elo = str(e)
 
-    return poda_resultado
+    return poda_resultado, erro_elo
 
 
 def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 50, geracoes: int = 16, pop_size: int = 40) -> dict:
@@ -660,7 +673,7 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
     dist = Counter(melhores)
 
     # ── V20.2/V21.5-FULL: registra acertos por modelo, poda e ELO ──────────
-    poda_resultado = _alimentar_poda_e_elo(resumo)
+    poda_resultado, erro_elo = alimentar_poda_e_elo(resumo)
 
     acertos_por_passo = [r["media_acertos"] for r in resumo]
     return {
@@ -674,6 +687,7 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
         "ultimos": resumo[-10:],
         "acertos_por_passo": acertos_por_passo,
         "poda_modelos": poda_resultado,
+        "erro_elo": erro_elo,
     }
 
 def gerar_jogos_aleatorios(qtd_jogos: int = 10) -> list[list[int]]:
@@ -1194,7 +1208,7 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
             presenca_modelos[modelo] += 1
 
         # Mesmo calculo de acertos por modelo que backtest_basico usa para
-        # alimentar poda inteligente/ELO (ver _alimentar_poda_e_elo) — antes
+        # alimentar poda inteligente/ELO (ver alimentar_poda_e_elo) — antes
         # só o modo <120 passos fazia isso, deixando o robô real sem
         # atualização de pesos sempre que "Ultra Massivo" era acionado.
         acertos_modelo: dict[str, float] = {}
@@ -1218,7 +1232,9 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
         if tarefa % 10 == 0 or tarefa == total_tarefas:
             avisar(f"Backtest ultra: {tarefa}/{total_tarefas} simulações concluídas.")
 
-    _alimentar_poda_e_elo(registros)
+    _poda_resultado_ultra, _erro_elo_ultra = alimentar_poda_e_elo(registros)
+    if _erro_elo_ultra:
+        avisar(f"⚠️ ELO/4-fases não pôde ser atualizado: {_erro_elo_ultra}")
 
     resumo = resumir_serie_backtest(registros)
     resumo.update({
@@ -1369,7 +1385,7 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
 
     Desde 2026-07-18, o campeonato de modelos (fase 2) também alimenta a
     poda inteligente (`pesos_modelos.json`) e o ELO/4-fases via
-    `_alimentar_poda_e_elo()` — a mesma infraestrutura que `backtest_basico`
+    `alimentar_poda_e_elo()` — a mesma infraestrutura que `backtest_basico`
     e `backtest_ultra_massivo` alimentam a cada rodada, só que aqui com uma
     medição mais rigorosa (pipeline completo por modelo isolado via
     `forcar_modelo`, não uma extração bruta de top-15). Funciona como
@@ -1475,7 +1491,9 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
                 idx = r["concurso_idx"]
                 entrada = por_passo.setdefault(idx, {"concurso_idx": idx, "acertos_modelo": {}})
                 entrada["acertos_modelo"][modelo] = r["media_acertos"]
-        _alimentar_poda_e_elo(list(por_passo.values()))
+        _, _erro_elo_cientifico = alimentar_poda_e_elo(list(por_passo.values()))
+        if _erro_elo_cientifico:
+            avisar(f"⚠️ ELO/4-fases não pôde ser atualizado: {_erro_elo_cientifico}")
     except Exception:
         pass
 

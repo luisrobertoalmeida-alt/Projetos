@@ -38,13 +38,13 @@ o chamava; cada script standalone reimplementava sua própria lógica de
 ## 🟡 MÓDULOS EXPERIMENTAIS (usar com cuidado)
 | Módulo | Status | Observação |
 |--------|--------|------------|
-| `v21_5_meta_competitivo.py` | Experimental | Não integrado à UI |
+| `v21_5_meta_competitivo.py` | Ativo | ELO por concurso, integrado ao pipeline real de poda/ELO (`alimentar_poda_e_elo()` em backtest.py) e ao ranking do "⚗️ Painel Científico" (`analise.py`). Tabela corrigida em 2026-07-23 — estava listada como "não integrado", desatualizado. |
 | `v21_5_montecarlo_cientifico.py` | Ativo (corrigido 2026-07-19) | Integrado ao "⚗️ Painel Científico"; agora usa dados reais do Backtest Científico quando disponíveis (antes sempre usava dados sintéticos) |
-| `v21_5_walkforward_profissional.py` | Ativo (corrigido 2026-07-19) | Complementa (não substitui) o v20_8: agora alimentado a cada Walk-Forward real, ver auditoria completa abaixo |
-| `v21_5_auto_poda_full.py` | Experimental | Derivado do v21_0_auto_poda |
+| `v21_5_walkforward_profissional.py` | Ativo (corrigido 2026-07-19/21) | Complementa (não substitui) o v20_8: agora alimentado a cada Walk-Forward real, sem recomputar o algoritmo genético (ver Sétima rodada) |
+| `v21_5_auto_poda_full.py` | Ativo (corrigido 2026-07-21) | Poda 4-estados, integrada ao pipeline real de poda/ELO (`alimentar_poda_e_elo()`). Tabela corrigida em 2026-07-23 — estava listada como "Experimental", desatualizado (ver Sexta rodada). |
 | `v21_3_1_hall_fama_auto.py` | Experimental | Não integrado à UI |
 | `v21_0_auto_poda.py` | Experimental | Substituído pelo v21_5_auto_poda_full |
-| `v21_0_meta_aprendizado.py` | Experimental | Não integrado à UI |
+| `v21_0_meta_aprendizado.py` | Ativo (reduzido 2026-07-23) | Só `probabilidade_recuperacao()` restou — é chamada de verdade por `analise.py`; as outras 4 funções do módulo nunca tinham chamador real e foram removidas. |
 
 **Removidos em 2026-07-19**: `v21_3_1_dashboard_real.py`,
 `v21_3_1_historico_combinacoes.py` — nunca tinham nenhum chamador real
@@ -672,3 +672,100 @@ Adicionados 5 testes em `test_v21_5_walkforward_profissional.py`
 confirma explicitamente que `registrar_walkforward_profissional` NÃO
 chama `fn_gerar` — a regressão de performance exata que motivou a
 correção.
+
+## 🔍 Oitava rodada — 2026-07-23 (nova varredura completa)
+
+Usuário pediu uma segunda auditoria completa, focada em três perguntas
+específicas: (1) ainda há inconsistências no código? (2) todas as
+etapas de calibração realmente alimentam o ensemble? (3) o algoritmo
+genético realmente influencia o aprendizado do robô? Lançados 4 agentes
+paralelos read-only: rastreamento completo do pipeline
+calibração→ensemble, verificação do algoritmo genético,
+re-auditoria dos arquivos remendados nesta sessão, e varredura de áreas
+não cobertas antes.
+
+**Pergunta 2 e 3 — respostas confirmadas:**
+- O algoritmo genético **realmente usa** `pesos_finais`: confirmado por
+  rastreamento de código E por execução real — dobrar (triplicar, no
+  teste automatizado) o peso de uma dezena elevou sua taxa de aparição
+  de ~55% para ~92% nos jogos finais. Mutação (sempre 20-68%) e elitismo
+  (sempre 12-34%) nunca zeram a evolução. Nenhum atalho contorna isso.
+  Antes só verificado manualmente pela auditoria; agora coberto por 2
+  testes novos em `test_analise_genetico.py`
+  (`TestSensibilidadeAoPeso`, `TestEvoluir.test_populacao_nao_fica_identica_entre_geracoes`).
+- Das etapas de calibração: 📊 Backtest, 🧪 Backtest Científico e (a
+  partir desta rodada) 🤖 BT Automático alimentam poda/ELO; ⚡ Aprender
+  e Conferir Jogos/Registrar Resultado alimentam a memória de
+  aprendizado permanente; 🎯 Calibrar IA, 🩺 Auto Diagnóstico, ⚖️
+  Comparador e o Otimizador são, por desenho, só medição/seleção (não
+  alimentam nada, e não fingem alimentar).
+
+**Bugs reais corrigidos:**
+
+1. **🤖 BT Automático nunca alimentava poda inteligente/ELO**, apesar
+   de fazer exatamente o mesmo tipo de trabalho que "📊 Backtest" (gera
+   jogos de histórico passado, confere contra o resultado real
+   seguinte). `executar_backtest_automatico()` (`ui.py`) agora monta
+   `acertos_modelo` por passo (mesmo cálculo de `backtest_basico`) e
+   chama `alimentar_poda_e_elo()` no final.
+2. **Falha silenciosa na atualização do ELO.** A função que alimenta
+   poda+ELO (renomeada de `_alimentar_poda_e_elo` para
+   `alimentar_poda_e_elo`, agora pública — passou a ser usada também
+   por `ui.py`) envolvia a parte do ELO num `except Exception: pass`
+   sem log nenhum, enquanto a poda (bloco separado) podia funcionar e
+   ser logada como sucesso, mascarando uma falha real do ELO. Agora
+   retorna `(poda_resultado, erro_elo)`; todo call site loga
+   `erro_elo` quando não é `None`.
+3. **Perda silenciosa de dados no banco de desempenho histórico.**
+   `salvar_ultimos_jogos_gerados()` (`ui.py`) persistia um `analise_min`
+   sem as chaves `ensemble.ranking`/`ensemble.consenso`, que
+   `registrar_desempenho_historico_robo()` (`backtest.py`) precisa pra
+   calcular `top5/10/15_acertos` e `top_consenso`. Resultado: toda vez
+   que o usuário fechava o app e no dia seguinte conferia um pacote
+   restaurado do disco (fluxo comum), esses campos ficavam vazios sem
+   nenhum aviso. Corrigido incluindo as duas chaves no `analise_min`.
+4. **Exportação em PDF implementada mas sem nenhum botão na tela.**
+   `exportar_apostas_pdf()` (`backtest.py`) já existia pronta (volante
+   visual da Lotofácil via reportlab, com fallback pra TXT se a
+   biblioteca não estiver instalada), mas nunca tinha wiring na UI.
+   Adicionado botão "🖨️ Exportar PDF" na linha de relatórios. De
+   brinde: corrigido o docstring/type hint da função, que afirmavam
+   "retorna caminho do arquivo" (`str | None`) quando na verdade sempre
+   retorna um dict (`{"arquivo", "formato", "jogos", ...}`).
+5. **Pacote restaurado ao abrir o app não aparecia na aba "Jogos
+   Gerados"** — 5ª instância do mesmo bug já corrigido 4 vezes esta
+   sessão (falta de chamar `_atualizar_tabela_jogos()` depois de setar
+   `self.jogos_gerados`/`analise`/`pesos`). Causa raiz: esse método tem
+   o efeito colateral de trocar de aba automaticamente
+   (`self._notebook_corpo.select(1)`), o que provavelmente levou
+   alguém a evitar chamá-lo na inicialização pra não roubar o foco da
+   tela. Corrigido com um parâmetro `mudar_aba: bool = True` — a
+   restauração inicial agora popula a tabela sem trocar de aba.
+
+**Correções menores:**
+
+6. `selecionar_csv()` usava a caixa de diálogo de "salvar" (necessário,
+   já que o campo também é usado por "⬆ Atualizar" pra apontar um CSV
+   que ainda não existe) mas sem suprimir o aviso de "sobrescrever?" —
+   adicionado `confirmoverwrite=False`.
+7. Mensagem de erro do Bootstrap IC recomendava rodar "🤖 BT Automático"
+   pra resolver a falta de dados, mas essa função nunca preenche
+   `self.info_backtest` (usa `self.info_backtest_automatico`, sem
+   `acertos_por_passo`) — recomendação corrigida pra só "📊 Backtest".
+8. `v21_0_meta_aprendizado.py` reduzido a só `probabilidade_recuperacao()`
+   (a única função com chamador real, em `analise.py`) —
+   `recomendar_status()`, `avaliar_todos()`, `score_estabilidade()` e
+   `calcular_peso_contextual()` nunca tinham chamador fora do próprio
+   arquivo.
+9. Tabela de módulos experimentais corrigida: `v21_5_meta_competitivo.py`
+   e `v21_5_auto_poda_full.py` estavam listados como "Experimental —
+   não integrado" quando na verdade ambos alimentam o pipeline real de
+   poda/ELO; `v21_0_meta_aprendizado.py` atualizado pra refletir a
+   redução do item 8.
+
+**Confirmado limpo nesta rodada**: `_atualizar_tabela_jogos`/
+`_atualizar_grafico_acertos`/`_atualizar_painel_info` (sem dados
+obsoletos), chaves do `TEMA` (todas existem), nenhum TODO/FIXME
+esquecido, `v21_5_meta_competitivo.py` (fórmulas de ELO corretas),
+callsites de todas as funções com assinatura alterada nesta sessão,
+nenhuma referência viva a módulos/constantes já removidos.

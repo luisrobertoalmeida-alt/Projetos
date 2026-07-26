@@ -195,6 +195,57 @@ class TestEvoluir(unittest.TestCase):
             self.assertEqual(len(j), 15)
             self.assertEqual(len(set(j)), 15)
 
+    def test_populacao_nao_fica_identica_entre_geracoes(self):
+        """
+        Regressão da auditoria de 2026-07-23: confirma que a evolução
+        realmente muda a população (não fica "congelada" por elitismo
+        excessivo ou mutação zerada) — achado verificado manualmente
+        pela auditoria, nunca coberto por teste automatizado até então.
+        """
+        random.seed(7)
+        pop0 = [jogo_rand(i) for i in range(20)]
+        pop0_set = {tuple(j) for j in pop0}
+        pop_evoluida = evoluir_populacao(
+            list(pop0), PESOS_UNI, ANALISE,
+            geracoes=8, tamanho_pop=20, elite=3,
+            estrategia={"taxa_mutacao": 0.5},
+        )
+        pop_evoluida_set = {tuple(j) for j in pop_evoluida}
+        # Elite=3 permite no máximo 3 sobreviventes idênticos; o resto da
+        # população precisa ter mudado por crossover/mutação.
+        self.assertLessEqual(len(pop0_set & pop_evoluida_set), 3)
+
+
+class TestSensibilidadeAoPeso(unittest.TestCase):
+    """
+    Regressão da auditoria de 2026-07-23: confirma que `pesos_finais`
+    (o resultado aprendido do ensemble/poda/ELO) realmente influencia o
+    que o algoritmo genético produz — o usuário perguntou explicitamente
+    se isso era verificável, e até então só tinha sido confirmado
+    manualmente pela auditoria, sem nenhum teste automatizado.
+    """
+
+    def test_dobrar_peso_de_uma_dezena_aumenta_taxa_de_aparicao(self):
+        random.seed(123)
+        dezena_alvo = 7
+        pesos_base = dict(PESOS_UNI)
+
+        pesos_altos = dict(PESOS_UNI)
+        pesos_altos[dezena_alvo] *= 3.0
+        soma = sum(pesos_altos.values())
+        pesos_altos = {n: v / soma for n, v in pesos_altos.items()}
+
+        n_amostras = 150
+        aparicoes_base = sum(
+            1 for _ in range(n_amostras)
+            if dezena_alvo in gerar_jogo_base(pesos_base, ANALISE, tentativas=20)
+        )
+        aparicoes_alto = sum(
+            1 for _ in range(n_amostras)
+            if dezena_alvo in gerar_jogo_base(pesos_altos, ANALISE, tentativas=20)
+        )
+        self.assertGreater(aparicoes_alto, aparicoes_base)
+
 
 class TestMapaCobertura(unittest.TestCase):
     def setUp(self):
