@@ -769,3 +769,38 @@ obsoletos), chaves do `TEMA` (todas existem), nenhum TODO/FIXME
 esquecido, `v21_5_meta_competitivo.py` (fórmulas de ELO corretas),
 callsites de todas as funções com assinatura alterada nesta sessão,
 nenhuma referência viva a módulos/constantes já removidos.
+
+## 🐛 Nona rodada — 2026-07-26 (crash real reportado pelo usuário)
+
+**A correção da "Oitava rodada" (item 5 — restaurar o pacote na aba
+"Jogos Gerados" ao abrir o app) tinha uma lacuna não coberta pelos
+agentes de auditoria: crashava com `KeyError: 'soma_media'`.**
+
+Usuário reportou o traceback completo do Tkinter. Causa raiz:
+`salvar_ultimos_jogos_gerados()` (`ui.py`) persiste um `analise_min`
+deliberadamente reduzido (só `estrategia`, `ensemble.*`,
+`cobertura_global`) — mas `score_jogo()` (`genetico.py`), chamado por
+`avaliar_jogos()` toda vez que a aba "Jogos Gerados" é desenhada,
+precisa também de `analise["soma_media"]` (indexação direta, sem
+`.get()`) e `analise["hist_usado"]` (idem). Enquanto
+`_atualizar_tabela_jogos()` nunca era chamada na inicialização (bug já
+corrigido), esse gap nunca era exercitado — a correção anterior expôs
+um problema pré-existente que estava "adormecido" há mais tempo.
+
+**Correção em duas camadas** (a segunda é a que resolve o problema pra
+quem já tem um arquivo salvo do jeito antigo, sem precisar apagar nada):
+1. `salvar_ultimos_jogos_gerados()` agora também persiste
+   `soma_media` e os últimos 30 concursos de `hist_usado` (suficiente
+   pra `score_repeticao_recente`, que só olha os últimos 10, e pra
+   impopularidade — evita persistir a janela histórica inteira).
+2. `score_jogo()` (`genetico.py`) trocou `analise["soma_media"]`/
+   `analise["hist_usado"]` por `.get(..., padrão)` — defensivo contra
+   qualquer `analise` incompleto, incluindo arquivos já salvos antes
+   desta correção (o usuário não precisa apagar nada; assim que gerar
+   um novo pacote, o arquivo passa a ter os campos completos).
+
+Adicionados 2 testes em `test_analise_genetico.py`
+(`TestScoreJogoComAnaliseRestaurada`) replicando exatamente o cenário
+do crash — `analise` mínimo sem `soma_media`/`hist_usado`, tanto via
+`score_jogo()` direto quanto via `avaliar_jogos()` (o caminho real
+usado pela tela).

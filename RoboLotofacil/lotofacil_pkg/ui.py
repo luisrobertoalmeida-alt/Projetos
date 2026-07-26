@@ -2286,6 +2286,16 @@ class RoboLotofacilUltraApp:
                     "consenso": _ensemble_atual.get("consenso", {}),
                 },
                 "cobertura_global": self.analise.get("cobertura_global", {}),
+                # soma_media/hist_usado são exigidos por score_jogo() (genetico.py),
+                # chamado por avaliar_jogos() sempre que a aba "Jogos Gerados" é
+                # atualizada — sem eles, restaurar um pacote ao abrir o app e ter
+                # a tabela populada automaticamente (correção anterior) quebrava
+                # com KeyError: 'soma_media' assim que a tela tentava desenhar a
+                # tabela (ver 2026-07-26 no ARQUITETURA.md). hist_usado é cortado
+                # pros últimos 30 concursos — score_repeticao_recente só olha os
+                # últimos 10, e isso evita persistir a janela histórica inteira.
+                "soma_media": self.analise.get("soma_media", 195.0),
+                "hist_usado": (self.analise.get("hist_usado") or [])[-30:],
             })
             dados = tornar_json_seguro({
                 "salvo_em": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),

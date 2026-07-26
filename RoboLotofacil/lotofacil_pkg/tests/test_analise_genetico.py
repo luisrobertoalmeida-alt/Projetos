@@ -158,6 +158,46 @@ class TestSamplePonderado(unittest.TestCase):
         self.assertTrue(all(1 <= n <= 25 for n in s))
 
 
+class TestScoreJogoComAnaliseRestaurada(unittest.TestCase):
+    """
+    Regressão de bug real reportado pelo usuário (2026-07-26): reabrir o
+    app restaura `self.analise` a partir de um `analise_min` salvo em
+    disco (ver `salvar_ultimos_jogos_gerados` em ui.py), que é um
+    subconjunto do `analise` completo. Antes da correção, faltando
+    `soma_media`/`hist_usado`, `score_jogo` quebrava com
+    `KeyError: 'soma_media'` assim que a aba "Jogos Gerados" tentava se
+    popular automaticamente na inicialização — crash real em produção.
+    """
+
+    def test_nao_quebra_com_analise_minima_sem_soma_media_ou_hist_usado(self):
+        jogo = jogo_rand(1)
+        analise_minima = {
+            "estrategia": {},
+            "ensemble": {"confianca_modelos": {}, "ranking": [], "consenso": {}},
+            "cobertura_global": {},
+            # soma_media e hist_usado deliberadamente ausentes.
+        }
+        try:
+            score = score_jogo(jogo, PESOS_UNI, analise_minima)
+        except KeyError as e:
+            self.fail(f"score_jogo não deveria quebrar com analise mínima: {e}")
+        self.assertIsInstance(score, float)
+
+    def test_avaliar_pacote_com_analise_minima(self):
+        """Mesmo cenário, mas pelo caminho real usado pela aba Jogos Gerados."""
+        from lotofacil_pkg.backtest import avaliar_jogos
+        jogos = [jogo_rand(i) for i in range(5)]
+        analise_minima = {
+            "estrategia": {},
+            "ensemble": {"confianca_modelos": {}, "ranking": [], "consenso": {}},
+            "cobertura_global": {},
+        }
+        linhas = avaliar_jogos(jogos, analise_minima, PESOS_UNI)
+        self.assertEqual(len(linhas), 5)
+        for linha in linhas:
+            self.assertIn("Score", linha)
+
+
 class TestGerarJogoBase(unittest.TestCase):
     def _jogo(self, seed=1):
         random.seed(seed)

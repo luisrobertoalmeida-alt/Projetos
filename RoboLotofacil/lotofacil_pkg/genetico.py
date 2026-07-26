@@ -326,7 +326,12 @@ def score_jogo(jogo: list[int], pesos: dict, analise: dict, jogos_existentes: li
     else:
         s_par = -1.6
 
-    dist_soma = abs(soma_ - analise["soma_media"])
+    # .get() com padrão em vez de indexação direta: um `analise` restaurado
+    # de um pacote salvo em disco (self.analise após reabrir o app) pode
+    # não ter esses campos se foi salvo antes de 2026-07-26 — sem o
+    # fallback, isso derrubava a tela com KeyError ao popular a aba
+    # "Jogos Gerados" (ver ARQUITETURA.md).
+    dist_soma = abs(soma_ - analise.get("soma_media", 195.0))
     s_soma = max(-2.0, 1.5 - dist_soma / 18.0)
 
     estrutural = score_matematico_estrutural(jogo, analise)
@@ -349,7 +354,7 @@ def score_jogo(jogo: list[int], pesos: dict, analise: dict, jogos_existentes: li
         + 1.6 * s_soma
         + 1.2 * score_linhas(jogo)
         + peso_estrutural * estrutural
-        + score_repeticao_recente(jogo, analise["hist_usado"])
+        + score_repeticao_recente(jogo, analise.get("hist_usado") or [])
         + score_diversidade(jogo, jogos_existentes, estrategia)
         + s_impop
     )
