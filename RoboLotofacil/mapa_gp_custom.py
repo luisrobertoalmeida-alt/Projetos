@@ -6,10 +6,14 @@ Mapa G x P com grade de valores de G customizavel via linha de comando.
 A tela principal (ui.py -> _executar_mapa_gp) sempre chama mapear_vale_gp()
 sem passar `pontos_g`, entao a grade fica presa no default hardcoded em
 mapear_vale_gp() (v21_5_melhorias_cientificas.py): G=[80,100,120,140,160,
-200,250,300]. Nao ha campo na UI para reduzir o G minimo. Este script
-chama a mesma funcao, mesmos dados reais e mesma metodologia (estatistica
-PAREADA: Cohen's d pareado, sign-flip, TOST -- ver v20_6_bootstrap.py),
-mas com `pontos_g` livre.
+200,250,16] -- o ultimo ponto (antes G=300/P=230, o extremo teorico do
+estudo original) foi trocado por G=16/P=40, a configuracao real e fixa
+do sistema desde 2026-07-18 (ver ARQUITETURA.md, 2026-07-27). Nao ha
+campo na UI para customizar a grade. Este script chama a mesma funcao,
+mesmos dados reais e mesma metodologia (estatistica PAREADA: Cohen's d
+pareado, sign-flip, TOST -- ver v20_6_bootstrap.py), mas com `pontos_g`
+livre. Qualquer G=16 na lista sempre usa P=40 (o real), nao o P
+proporcional da formula (que daria 12).
 
 Uso:
     python mapa_gp_custom.py <janela> <passos> <qtd_jogos> <g1,g2,g3,...>

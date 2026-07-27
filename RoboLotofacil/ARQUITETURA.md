@@ -804,3 +804,35 @@ Adicionados 2 testes em `test_analise_genetico.py`
 do crash — `analise` mínimo sem `soma_media`/`hist_usado`, tanto via
 `score_jogo()` direto quanto via `avaliar_jogos()` (o caminho real
 usado pela tela).
+
+## 🗺️ Mapa G×P — grade padrão troca G=300 por G=16 (config real) — 2026-07-27
+
+A pedido do usuário, o último ponto da grade padrão de
+`mapear_vale_gp()` (`v21_5_melhorias_cientificas.py`), que era
+G=300/P=230 (o extremo teórico do estudo original de 2026-07-14),
+virou **G=16/P=40 — a configuração real e fixa do sistema desde
+2026-07-18**. Grade padrão agora: `[80, 100, 120, 140, 160, 200, 250,
+16]`. Objetivo: em vez de mapear um extremo puramente teórico que
+ninguém roda de verdade, o Mapa passa a comparar diretamente a
+configuração de produção contra a grade de valores mais altos.
+
+Detalhe de implementação: o P de cada ponto é calculado
+proporcionalmente ao G (`P ≈ G × 0.767`, ratio do estudo original) —
+mas para G=16 isso daria P=12 (`round(16*0.767)`), um valor que o robô
+nunca usa de verdade. Por isso G=16 tem um caso especial na função:
+sempre usa P=40 (o real), não o proporcional. Isso vale tanto pra grade
+padrão quanto pra qualquer `pontos_g` customizado passado via
+`mapa_gp_custom.py` — um G=16 na lista sempre usa P=40.
+
+Efeito colateral esperado (não é bug, é o objetivo da mudança): como a
+comparação pareada usa o menor e o maior valor de G como "extremos" de
+referência (`g_min`/`g_max` depois de ordenar `pontos_g`), G=16 agora
+assume o papel de extremo inferior no lugar de G=80 — a análise passa a
+comparar diretamente "config real (G=16)" vs. "config mais alta com
+maior score", em vez de "extremo baixo (G=80)" vs. "extremo alto
+(G=300)" como antes.
+
+`mapa_gp_custom.py` (script standalone, sempre passa seu próprio
+`pontos_g` via linha de comando) não é afetado pela mudança do default,
+mas seu docstring foi atualizado para não descrever a grade antiga como
+atual.

@@ -380,8 +380,13 @@ def mapear_vale_gp(
     numeros = list(range(1, 26))
 
     if pontos_g is None:
-        # Grade: G=80,100,120,140,160,200,250,300 com P proporcional (ratio ~0.77)
-        pontos_g = [80, 100, 120, 140, 160, 200, 250, 300]
+        # Grade: G=80,100,120,140,160,200,250 com P proporcional (ratio ~0.77),
+        # mais G=16 no lugar do antigo extremo G=300/P=230 — G=16/P=40 é a
+        # configuração real e fixa do sistema desde 2026-07-18, então o Mapa
+        # passou a comparar diretamente a config de produção contra a grade,
+        # em vez de um extremo teórico que ninguém roda de verdade (a pedido
+        # do usuário, ver 2026-07-27 no ARQUITETURA.md).
+        pontos_g = [80, 100, 120, 140, 160, 200, 250, 16]
 
     total = len(concursos)
     inicio = max(janela, total - passos)
@@ -390,9 +395,15 @@ def mapear_vale_gp(
     linhas_por_g = {}  # g -> {concurso_idx: melhor_robo}, para as comparacoes pareadas
 
     for idx_g, g in enumerate(pontos_g):
-        # P proporcional ao G com o mesmo ratio de G300/P230 ≈ 0.767
-        p = max(20, round(g * 0.767))
-        nome = f"G={g}/P={p}"
+        if g == 16:
+            # Configuração real fixa do sistema (G=16/P=40) — não a
+            # proporcional (round(16*0.767)=12, valor que o robô nunca usa).
+            p = 40
+            nome = "G=16/P=40 (configuração real do sistema)"
+        else:
+            # P proporcional ao G com o mesmo ratio de G300/P230 ≈ 0.767
+            p = max(20, round(g * 0.767))
+            nome = f"G={g}/P={p}"
 
         if status_cb:
             status_cb(f"[{idx_g+1}/{len(pontos_g)}] Mapeando {nome}...")
