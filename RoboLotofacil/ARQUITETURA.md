@@ -836,3 +836,62 @@ maior score", em vez de "extremo baixo (G=80)" vs. "extremo alto
 `pontos_g` via linha de comando) não é afetado pela mudança do default,
 mas seu docstring foi atualizado para não descrever a grade antiga como
 atual.
+
+## 🔬 Auditoria matemática das fórmulas de cálculo — 2026-07-27
+
+Todas as auditorias anteriores desta sessão verificaram arquitetura,
+integração e fiação entre módulos — nenhuma tinha verificado se as
+próprias **fórmulas matemáticas/estatísticas** batem com suas
+definições padrão. A pedido do usuário, 4 agentes paralelos (em
+worktrees isolados, só leitura) reconferiram, com exemplos numéricos
+concretos (não só leitura de código): Cohen's d (independente e
+pareado), bootstrap percentile CI, TOST, testes de permutação
+sign-flip, ELO (fórmula logística + atualização por K-factor), os 7
+modelos do ensemble em `analise.py`, entropia de Shannon/score
+estrutural do genético, e a combinatória de fechamento. **Resultado:
+~90% das fórmulas conferem exatamente com a literatura/definição
+padrão.** Foram encontrados 2 bugs reais e 2 imprecisões de
+documentação, todos corrigidos nesta rodada:
+
+1. **Bug: p-valor de teste de permutação podia dar exatamente 0.0**
+   (`v20_6_bootstrap.py`, `teste_significancia()` e
+   `teste_significancia_pareado()`). A fórmula era
+   `contagem_extremos / n_reamostras`, mas a estatística observada é
+   sempre uma das `n_reamostras + 1` permutações possíveis (a original
+   está incluída) — então p=0.0 é logicamente impossível (afirmaria
+   certeza absoluta de que o efeito é real). Corrigido para a correção
+   +1 padrão da literatura de testes de permutação/randomização
+   (Davison & Hinkley, 1997; North et al., 2002):
+   `p_value = (contagem_extremos + 1) / (n_reamostras + 1)`. Não
+   quebra nenhum teste existente (só há uma asserção de `p_value==1.0`
+   exata, no caminho separado de "sem_dados", não afetado).
+
+2. **Bug: `calcular_scores_pares_trios()` (`analise.py`, Modelo 7)
+   nunca calculava trios de verdade.** Apesar do nome da função, do
+   docstring e do comentário interno, só existia `combinations(jogo,
+   2)` — o "bônus de trio" era, na real, a contagem bruta de quantos
+   pares cada dezena participava (sem checar se o par excedia a
+   expectativa hipergeométrica), aplicado incondicionalmente. Corrigido
+   para calcular `combinations(jogo_ordenado, 3)` de verdade, com sua
+   própria probabilidade esperada hipergeométrica
+   (`C(15,3)/C(25,3) = 455/2300 ≈ 0.1978`), e para os dois bônus (par e
+   trio) só serem aplicados quando a frequência observada realmente
+   excede a esperada (`excesso > 0.0`) — antes o bônus de par era
+   aplicado mesmo com `excesso == 0`.
+
+3. **Documentação: docstring de `fator_elo()` (`v21_5_meta_competitivo.py`)
+   tinha exemplos numéricos errados.** Afirmava ELO 1700 → fator ≈1.38
+   e ELO 1300 → fator ≈0.72; a fórmula real (`10^((elo-1500)/800)`) dá
+   1.7783 e 0.5623 respectivamente. Corrigido, e adicionados os valores
+   nos extremos do clamp (ELO 1000/2500) mostrando o valor que a
+   fórmula pura daria antes do `_clipar` entrar em ação.
+
+4. **Documentação: docstring de `calcular_scores_neural_leve()`
+   (`analise.py`, Modelo 5) sugeria uma rede neural treinada.** Na
+   real é um perceptron de um único neurônio com pesos e bias
+   *fixos/hardcoded* (1.10, 0.85, 0.55, 0.25, bias -0.35) — não há
+   treinamento nem ajuste a partir de dados. Docstring corrigido para
+   descrever o modelo honestamente.
+
+Suite completa (368+ testes) reexecutada após as 4 correções — nenhuma
+regressão.

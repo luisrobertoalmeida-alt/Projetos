@@ -183,10 +183,10 @@ def fator_elo(nome: str, elos: dict | None = None) -> float:
     Converte o ELO de um modelo em fator multiplicativo para o peso base.
 
     ELO 1500 (neutro)  → fator 1.00
-    ELO 1700 (+200)    → fator ~1.38
-    ELO 1300 (-200)    → fator ~0.72
-    ELO 1000 (mínimo)  → fator 0.50
-    ELO 2500 (máximo)  → fator 2.00
+    ELO 1700 (+200)    → fator ~1.7783
+    ELO 1300 (-200)    → fator ~0.5623
+    ELO 1000 (mínimo)  → fator 0.50 (clampado — a fórmula pura daria ~0.2371)
+    ELO 2500 (máximo)  → fator 2.00 (clampado — a fórmula pura daria ~17.7828)
 
     Fórmula: fator = 10^( (elo - 1500) / 800 )
     clampado em [FATOR_MIN, FATOR_MAX].
