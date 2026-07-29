@@ -319,6 +319,7 @@ def mapear_vale_gp(
     qtd_jogos: int = 20,
     pontos_g: list[int] | None = None,
     margem_equivalencia: float = 0.3,
+    metodo_correcao: str = "holm",
     status_cb: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """
@@ -335,13 +336,23 @@ def mapear_vale_gp(
     VALIDACAO_MAPA_GP_2026-07-14.md).
 
     `vale_confirmado` só é True se pelo menos um intermediário mostrar
-    uma diferença estatisticamente significativa (p<0.05, sign-flip),
-    não-equivalente ao extremo de referência dentro de `margem_equivalencia`
-    (TOST) e com tamanho de efeito pareado de pelo menos "pequeno"
-    (|d_z|>=0.2). Configurações que não atingem esse padrão, mas também
-    não passam no TOST, ficam marcadas como "INCONCLUSIVO" — não force
-    uma conclusão binária quando a amostra não tem poder suficiente para
-    nenhuma das duas alternativas.
+    uma diferença estatisticamente significativa (p_ajustado<0.05,
+    sign-flip), não-equivalente ao extremo de referência dentro de
+    `margem_equivalencia` (TOST) e com tamanho de efeito pareado de pelo
+    menos "pequeno" (|d_z|>=0.2). Configurações que não atingem esse
+    padrão, mas também não passam no TOST, ficam marcadas como
+    "INCONCLUSIVO" — não force uma conclusão binária quando a amostra
+    não tem poder suficiente para nenhuma das duas alternativas.
+
+    Correção para múltiplas comparações: como cada rodada testa vários
+    pontos de G contra a mesma referência ao mesmo tempo, o p-valor bruto
+    de cada comparação isolada (limiar 5%) infla a chance de pelo menos
+    um "POSSIVEL_VALE" aparecer só por acaso — mesmo problema que
+    `consolidar_rodada_experimentos()` já corrige em
+    `auditoria_cientifica.py`. Por isso o veredito usa `p_ajustado`
+    (Holm por padrão, controla a mesma taxa de erro família a família
+    que Bonferroni com menos perda de poder), não o `p_value` bruto.
+    Ambos ficam disponíveis em cada comparação, para transparência.
 
     Args:
         concursos:  histórico completo de concursos.
@@ -357,6 +368,11 @@ def mapear_vale_gp(
                     definida a priori — não ajuste depois de ver o
                     resultado. Padrão 0.3, mesma usada em
                     reanalise_pareada.py.
+        metodo_correcao: "holm" (padrão) ou "bonferroni" — método de
+                    correção para múltiplas comparações aplicado aos
+                    p-valores de todas as comparações pareadas desta
+                    rodada (ver `corrigir_multiplas_comparacoes` em
+                    auditoria_cientifica.py).
         status_cb:  callback de progresso (opcional).
 
     Returns:
@@ -368,13 +384,15 @@ def mapear_vale_gp(
             usado como referência nas comparações pareadas
           - comparacoes_pareadas: lista de comparações estatísticas
             (referência vs. cada outra configuração), cada uma com
-            cohen_d_pareado, p_value, tost_equivalente, ic_90 e veredito
+            cohen_d_pareado, p_value (bruto), p_ajustado (corrigido para
+            múltiplas comparações), tost_equivalente, ic_90 e veredito
             em {"POSSIVEL_VALE", "EQUIVALENTE", "INCONCLUSIVO"}
           - vale_confirmado: bool — True apenas se alguma comparação
-            tiver veredito "POSSIVEL_VALE" (teste estatístico real, não
-            heurística)
+            tiver veredito "POSSIVEL_VALE" (teste estatístico real, já
+            corrigido para múltiplas comparações, não heurística)
           - analise: texto descritivo
     """
+    from .auditoria_cientifica import corrigir_multiplas_comparacoes
     from .v20_6_bootstrap import cohen_d_pareado, teste_significancia_pareado, tost_equivalencia
 
     numeros = list(range(1, 26))
@@ -498,17 +516,19 @@ def mapear_vale_gp(
         referencia_extremo = g_max if media_por_g[g_max] >= media_por_g[g_min] else g_min
 
         ref_por_concurso = linhas_por_g[referencia_extremo]
+        comparacoes_por_g = {}
+        pendentes = []  # comparações com dados suficientes, aguardando correção
         for g in g_vals:
             if g == referencia_extremo:
                 continue
             outro_por_concurso = linhas_por_g[g]
             indices_comuns = sorted(set(ref_por_concurso) & set(outro_por_concurso))
             if len(indices_comuns) < 10:
-                comparacoes_pareadas.append({
+                comparacoes_por_g[g] = {
                     "g": g, "referencia": referencia_extremo, "n": len(indices_comuns),
                     "veredito": "INCONCLUSIVO",
                     "motivo": "menos de 10 passos em comum entre as duas configurações",
-                })
+                }
                 continue
 
             ref_dados = [{"acertos": ref_por_concurso[i]} for i in indices_comuns]
@@ -517,26 +537,41 @@ def mapear_vale_gp(
             cohen = cohen_d_pareado(ref_dados, outro_dados)
             sig = teste_significancia_pareado(ref_dados, outro_dados, n_reamostras=3000)
             tost = tost_equivalencia(ref_dados, outro_dados, margem=margem_equivalencia, n_reamostras=3000)
+            pendentes.append({"g": g, "n": len(indices_comuns), "cohen": cohen, "sig": sig, "tost": tost})
 
-            if tost["equivalente"]:
-                veredito = "EQUIVALENTE"
-            elif sig["rejeita_h0"] and abs(cohen["cohen_d_pareado"]) >= 0.2 and sig["delta_obs"] > 0:
-                veredito = "POSSIVEL_VALE"
-            else:
-                veredito = "INCONCLUSIVO"
+        # Correção para múltiplas comparações (Holm por padrão): testar vários
+        # G ao mesmo tempo contra a mesma referência infla a chance de um
+        # "POSSIVEL_VALE" por acaso -- corrige o p-valor de cada comparação
+        # pelo número de comparações feitas nesta rodada, mesma lógica já
+        # usada em consolidar_rodada_experimentos() (ver ARQUITETURA.md,
+        # 2026-07-29).
+        if pendentes:
+            p_values_brutos = [item["sig"]["p_value"] for item in pendentes]
+            corrigidos = corrigir_multiplas_comparacoes(p_values_brutos, metodo=metodo_correcao, alpha=0.05)
+            for item, corr in zip(pendentes, corrigidos):
+                cohen, sig, tost = item["cohen"], item["sig"], item["tost"]
+                if tost["equivalente"]:
+                    veredito = "EQUIVALENTE"
+                elif corr["significativo_corrigido"] and abs(cohen["cohen_d_pareado"]) >= 0.2 and sig["delta_obs"] > 0:
+                    veredito = "POSSIVEL_VALE"
+                else:
+                    veredito = "INCONCLUSIVO"
 
-            comparacoes_pareadas.append({
-                "g": g,
-                "referencia": referencia_extremo,
-                "n": len(indices_comuns),
-                "cohen_d_pareado": cohen["cohen_d_pareado"],
-                "magnitude": cohen["magnitude"],
-                "p_value": sig["p_value"],
-                "delta_obs": sig["delta_obs"],
-                "tost_equivalente": tost["equivalente"],
-                "ic_90": tost["ic_90"],
-                "veredito": veredito,
-            })
+                comparacoes_por_g[item["g"]] = {
+                    "g": item["g"],
+                    "referencia": referencia_extremo,
+                    "n": item["n"],
+                    "cohen_d_pareado": cohen["cohen_d_pareado"],
+                    "magnitude": cohen["magnitude"],
+                    "p_value": sig["p_value"],
+                    "p_ajustado": corr["p_ajustado"],
+                    "delta_obs": sig["delta_obs"],
+                    "tost_equivalente": tost["equivalente"],
+                    "ic_90": tost["ic_90"],
+                    "veredito": veredito,
+                }
+
+        comparacoes_pareadas = [comparacoes_por_g[g] for g in g_vals if g != referencia_extremo]
 
     vale_confirmado = any(c.get("veredito") == "POSSIVEL_VALE" for c in comparacoes_pareadas)
     todas_equivalentes = bool(comparacoes_pareadas) and all(
@@ -548,7 +583,8 @@ def mapear_vale_gp(
         candidatos = [c["g"] for c in comparacoes_pareadas if c["veredito"] == "POSSIVEL_VALE"]
         analise = (
             f"Vale G×P POSSÍVEL: G={referencia_extremo} supera estatisticamente "
-            f"(p<0.05, TOST rejeita equivalência, efeito >= pequeno) as configurações "
+            f"(p_ajustado<0.05 após correção {metodo_correcao} para múltiplas comparações, "
+            f"TOST rejeita equivalência, efeito >= pequeno) as configurações "
             f"G={candidatos} num teste pareado (mesmos {passos} sorteios reais em todas). "
             f"Recomenda-se validar essa comparação específica com mais passos antes de mudar "
             f"a configuração de produção — ver reanalise_pareada.py."

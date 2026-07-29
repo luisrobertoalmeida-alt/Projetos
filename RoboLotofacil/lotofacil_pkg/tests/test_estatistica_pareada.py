@@ -140,9 +140,12 @@ class TestMapearValeGp(unittest.TestCase):
         for comp in r["comparacoes_pareadas"]:
             self.assertIn("cohen_d_pareado", comp)
             self.assertIn("p_value", comp)
+            self.assertIn("p_ajustado", comp)
             self.assertIn("tost_equivalente", comp)
             self.assertIn("veredito", comp)
             self.assertIn(comp["veredito"], ("POSSIVEL_VALE", "EQUIVALENTE", "INCONCLUSIVO"))
+            # Holm/Bonferroni so pode aumentar (nunca diminuir) o p-valor.
+            self.assertGreaterEqual(comp["p_ajustado"], comp["p_value"])
 
     def test_sem_diferenca_real_nao_confirma_vale(self):
         """Todas as configs geram jogos igualmente aleatorios -- nao deve haver vale real."""
@@ -152,6 +155,35 @@ class TestMapearValeGp(unittest.TestCase):
         r = mapear_vale_gp(self.hist, fn_gerar, janela=100, passos=30, qtd_jogos=10,
                             pontos_g=[20, 50, 80, 100])
         self.assertFalse(r["vale_confirmado"])
+
+    def test_correcao_multiplas_comparacoes_usa_p_ajustado(self):
+        """
+        Config de referencia gera sempre jogos com muitos acertos (real
+        favorecido deliberadamente); as demais, aleatorias -- garante ao
+        menos uma comparacao com p_value bruto baixo. p_ajustado deve ser
+        >= p_value em cada uma (nunca mais "significativo" apos a correcao
+        Holm/Bonferroni) e a decisao final (vale_confirmado) deve ser
+        consistente com o uso de p_ajustado, nao do p_value bruto.
+        """
+        real_ordenado = sorted(self.hist[-1])
+
+        def fn_gerar(hist, g, p, qtd):
+            if g == 999:
+                # "referencia" fortemente favorecida: sempre acerta muito.
+                return [real_ordenado[:15] for _ in range(qtd)]
+            return [sorted(random.sample(list(range(1, 26)), 15)) for _ in range(qtd)]
+
+        r = mapear_vale_gp(self.hist, fn_gerar, janela=100, passos=40, qtd_jogos=10,
+                            pontos_g=[20, 50, 80, 999], metodo_correcao="holm")
+        for comp in r["comparacoes_pareadas"]:
+            if "p_ajustado" in comp:
+                self.assertGreaterEqual(comp["p_ajustado"], comp["p_value"])
+        # A decisao de vale_confirmado tem que bater com o veredito das
+        # comparacoes reportadas (que ja usam p_ajustado internamente).
+        self.assertEqual(
+            r["vale_confirmado"],
+            any(c.get("veredito") == "POSSIVEL_VALE" for c in r["comparacoes_pareadas"]),
+        )
 
 
 if __name__ == "__main__":

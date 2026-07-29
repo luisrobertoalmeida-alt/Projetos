@@ -11,7 +11,8 @@ estudo original) foi trocado por G=16/P=40, a configuracao real e fixa
 do sistema desde 2026-07-18 (ver ARQUITETURA.md, 2026-07-27). Nao ha
 campo na UI para customizar a grade. Este script chama a mesma funcao,
 mesmos dados reais e mesma metodologia (estatistica PAREADA: Cohen's d
-pareado, sign-flip, TOST -- ver v20_6_bootstrap.py), mas com `pontos_g`
+pareado, sign-flip, TOST, com correcao Holm para multiplas comparacoes
+-- ver v20_6_bootstrap.py e auditoria_cientifica.py), mas com `pontos_g`
 livre. Qualquer G=16 na lista sempre usa P=40 (o real), nao o P
 proporcional da formula (que daria 12).
 
@@ -98,6 +99,7 @@ for c in resultado.get("comparacoes_pareadas", []):
     print(
         f"  G={c['g']}: {c['veredito']} | d_z={c['cohen_d_pareado']:.3f} "
         f"({c['magnitude']}) | p={c['p_value']:.4f} | "
+        f"p_ajustado={c.get('p_ajustado', c['p_value']):.4f} | "
         f"IC90%={c['ic_90']} | n={c['n']}"
     )
 

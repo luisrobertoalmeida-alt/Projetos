@@ -4111,7 +4111,8 @@ class RoboLotofacilUltraApp:
                         continue
                     self.log_async(
                         f"   G={c['g']}: {c['veredito']} | d_z={c['cohen_d_pareado']:.3f} ({c.get('magnitude','')}) | "
-                        f"p={c['p_value']:.4f} | IC90%={c['ic_90']} | n={c['n']}"
+                        f"p={c['p_value']:.4f} | p_ajustado={c.get('p_ajustado', c['p_value']):.4f} | "
+                        f"IC90%={c['ic_90']} | n={c['n']}"
                     )
 
             self.log_async("")

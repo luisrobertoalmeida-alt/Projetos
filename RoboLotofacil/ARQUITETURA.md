@@ -895,3 +895,39 @@ documentação, todos corrigidos nesta rodada:
 
 Suite completa (368+ testes) reexecutada após as 4 correções — nenhuma
 regressão.
+
+## 🔬 Correção para múltiplas comparações no Mapa G×P — 2026-07-29
+
+A pedido do usuário, `mapear_vale_gp()` (`v21_5_melhorias_cientificas.py`)
+agora corrige seus p-valores para múltiplas comparações antes de decidir
+o veredito `POSSIVEL_VALE`.
+
+**Problema**: cada rodada do Mapa testa vários pontos de G (hoje, 7) ao
+mesmo tempo contra a mesma referência, cada comparação usando o limiar
+de significância padrão (5%) isoladamente. Testar várias hipóteses
+simultaneamente infla a chance de pelo menos um "POSSIVEL_VALE" aparecer
+só por acaso — o clássico problema de múltiplas comparações. O projeto
+já tinha essa lógica implementada e testada em
+`corrigir_multiplas_comparacoes()`/`consolidar_rodada_experimentos()`
+(`auditoria_cientifica.py`, usada por `reanalise_pareada.py`), mas
+`mapear_vale_gp()` nunca a chamava.
+
+**Correção**: depois de calcular cohen_d/sig/TOST pareados para cada
+comparação da rodada, os p-valores brutos são passados juntos para
+`corrigir_multiplas_comparacoes()` (método Holm por padrão, mesmo
+método já usado em `consolidar_rodada_experimentos()`), e o veredito
+`POSSIVEL_VALE` passa a exigir `p_ajustado<0.05` em vez de `p_value<0.05`
+bruto. Novo parâmetro opcional `metodo_correcao` ("holm" ou
+"bonferroni"). Cada comparação em `comparacoes_pareadas` agora expõe os
+dois valores (`p_value` bruto e `p_ajustado`) para transparência —
+atualizado em `ui.py` e `mapa_gp_custom.py`.
+
+Sem efeito no comportamento em nenhum caso já observado até aqui: o
+único ponto que já cruzou o limiar bruto (5%) num mapa real (G=250,
+p=0.0117 vs. G=16) tinha efeito "desprezível" e já não gerava
+`POSSIVEL_VALE`; a correção só reforça essa margem de segurança contra
+falsos positivos daqui pra frente. Testes adicionados em
+`test_estatistica_pareada.py` (`TestMapearValeGp`): verificam que
+`p_ajustado>=p_value` sempre (propriedade matemática de Holm/Bonferroni)
+e que `vale_confirmado` é consistente com os vereditos reportados
+mesmo quando uma configuração é deliberadamente favorecida no teste.
