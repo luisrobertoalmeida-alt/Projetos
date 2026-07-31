@@ -590,7 +590,7 @@ def alimentar_poda_e_elo(registros: list[dict]) -> tuple[list[dict], str | None]
     return poda_resultado, erro_elo
 
 
-def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 50, geracoes: int = 16, pop_size: int = 40) -> dict:
+def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 50, geracoes: int = 100, pop_size: int = 77) -> dict:
     """
     Backtest basico blindado com execucao paralela para maior velocidade.
     Ao final, registra a media de acertos de cada modelo no historico e
@@ -834,7 +834,7 @@ def salvar_relatorio_calibracao(resultado: dict) -> str:
     return resultado
 
 
-def calibrar_robo_vs_aleatorio(concursos: list, janela: int = 120, qtd_jogos: int = 10, passos: int = 50, geracoes: int = 20, pop_size: int = 40, status_cb=None) -> dict:
+def calibrar_robo_vs_aleatorio(concursos: list, janela: int = 120, qtd_jogos: int = 10, passos: int = 50, geracoes: int = 100, pop_size: int = 77, status_cb=None) -> dict:
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
     if total < MIN_HIST + 10:
@@ -1141,22 +1141,22 @@ def salvar_relatorio_backtest_ultra(resultado: dict) -> str:
     return caminho
 
 
-def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 200, status_cb=None, geracoes: int = 16, pop_size: int = 40) -> dict:
+def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 200, status_cb=None, geracoes: int = 100, pop_size: int = 77) -> dict:
     """
     Backtest pesado blindado, com a configuração G/P real do robô.
 
     Até 2026-07-18 esta função comparava 3 variantes que só diferiam por
     escala de gerações/população ("Ultra Rápido" G=16/P=36, "Ultra
     Equilibrado" G=24/P=52, "Ultra Forte" G=34/P=70) — nenhuma delas era a
-    configuração fixa de verdade (G=16/P=40), e o Mapa G×P já confirmou
-    equivalência estatística nessa faixa toda, então a comparação só
-    custava tempo (3x as simulações) para declarar um "vencedor" arbitrário
-    entre configs que sabemos indistinguíveis. Pior: esse resultado
-    (baseado em G/P que não é o do robô) não alimentava a poda de modelos
-    — mas dava a falsa impressão de estar validando "o robô". Reduzido
-    para uma única simulação com a configuração real (`geracoes`/`pop_size`,
-    parâmetros repassados por quem chama — normalmente `self.geracoes`/
-    `self.pop_size` da UI).
+    configuração fixa de verdade, e o Mapa G×P já confirmou equivalência
+    estatística nessa faixa toda, então a comparação só custava tempo (3x
+    as simulações) para declarar um "vencedor" arbitrário entre configs que
+    sabemos indistinguíveis. Pior: esse resultado (baseado em G/P que não é
+    o do robô) não alimentava a poda de modelos — mas dava a falsa
+    impressão de estar validando "o robô". Reduzido para uma única
+    simulação com a configuração real (`geracoes`/`pop_size`, parâmetros
+    repassados por quem chama — normalmente `self.geracoes`/`self.pop_size`
+    da UI; G=16/P=40 até 2026-07-18, G=100/P=77 desde 2026-07-31).
     """
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
@@ -1361,16 +1361,19 @@ def montar_configuracoes_cientificas() -> list[dict]:
     mais `geracoes`/`pop_size` do chamador (2026-07-19): recebê-los sem
     usá-los para nada dava a falsa impressão de que o G/P configurado na
     tela influenciava as variantes testadas, quando na prática elas
-    sempre foram G=16/P=40 fixo — que é, coincidentemente, a própria
-    configuração real do robô.
+    sempre foram G/P fixo — que é, coincidentemente, a própria
+    configuração real do robô (G=16/P=40 até 2026-07-18; G=100/P=77
+    desde 2026-07-31, a pedido do usuário — ver ARQUITETURA.md; a
+    equivalência estatística entre os dois vale igual, então a troca não
+    muda o desempenho esperado).
 
-    Mantém só a comparação que ainda faz sentido: G/P fixo (16/40) vs.
+    Mantém só a comparação que ainda faz sentido: G/P fixo (100/77) vs.
     a mesma config com diversidade ampliada (parâmetro não testado até
     agora).
     """
     candidatos = [
-        {"nome": "Configuração validada (G=16/P=40)", "geracoes": 16, "pop_size": 40},
-        {"nome": "Diversidade ampliada", "geracoes": 16, "pop_size": 40, "override": {"diversidade": 0.86, "limite_intersecao": 11}},
+        {"nome": "Configuração validada (G=100/P=77)", "geracoes": 100, "pop_size": 77},
+        {"nome": "Diversidade ampliada", "geracoes": 100, "pop_size": 77, "override": {"diversidade": 0.86, "limite_intersecao": 11}},
     ]
     return candidatos
 
@@ -1394,7 +1397,8 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
 
     `geracoes`/`pop_size` (parâmetros desta função) são validados/limitados
     mas não influenciam mais nenhuma fase: a fase 1
-    (`montar_configuracoes_cientificas()`) sempre testa G=16/P=40 fixo, e a
+    (`montar_configuracoes_cientificas()`) sempre testa G/P fixo (G=100/P=77
+    desde 2026-07-31), e a
     fase 2 (campeonato de modelos) sempre herda G/P do vencedor da fase 1
     (`vencedor_config`), que também já vem com "geracoes"/"pop_size"
     preenchidos — o fallback para os parâmetros do caller nunca dispara na

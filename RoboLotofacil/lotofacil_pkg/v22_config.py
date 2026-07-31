@@ -7,7 +7,7 @@ Fallback automático para os defaults do config.py se o YAML não existir.
 
 Uso:
     from .v22_config import cfg
-    geracoes = cfg.genetico("geracoes", 16)
+    geracoes = cfg.genetico("geracoes", 100)
     limiar   = cfg.validacao("limiar_vitoria", 0.55)
 """
 
@@ -102,11 +102,11 @@ class ConfigV22:
 
     @property
     def geracoes(self) -> int:
-        return int(self.genetico("geracoes", 16))
+        return int(self.genetico("geracoes", 100))
 
     @property
     def populacao(self) -> int:
-        return int(self.genetico("populacao", 40))
+        return int(self.genetico("populacao", 77))
 
     @property
     def janela(self) -> int:

@@ -931,3 +931,53 @@ falsos positivos daqui pra frente. Testes adicionados em
 `p_ajustado>=p_value` sempre (propriedade matemática de Holm/Bonferroni)
 e que `vale_confirmado` é consistente com os vereditos reportados
 mesmo quando uma configuração é deliberadamente favorecida no teste.
+
+## 🔧 Configuração real fixa trocada de G=16/P=40 para G=100/P=77 — 2026-07-31
+
+A pedido do usuário ("deixa o robô fixo com o G=100 e P=77"), a
+configuração real e fixa do sistema — usada por "Gerar Jogos", Dual-Perfil,
+Fechamento, 📊 Backtest, 🤖 BT Automático, Backtest Científico V11 e
+Calibração vs. Aleatório — mudou de **G=16/P=40** (fixo desde 2026-07-18)
+para **G=100/P=77**.
+
+**Base para a decisão, não uma recomendação estatística**: todas as
+rodadas do Mapa G×P feitas até aqui (incluindo com correção Holm para
+múltiplas comparações, ver seção anterior) confirmaram repetidamente que
+G=100/P=77 é estatisticamente **equivalente** a G=16/P=40 e a qualquer
+outro ponto testado entre G=16 e G=300 — não há vale estrutural nessa
+faixa. Ou seja, a troca não é uma correção de um problema nem uma
+melhoria de desempenho esperada; é uma preferência do usuário sobre uma
+faixa onde qualquer ponto já testado é equivalente. Efeito colateral
+esperado: G=100×P=77 = 7.700 avaliações do genético por pacote, contra
+640 de G=16/P=40 — cerca de 12x mais processamento por geração, sem
+ganho estatístico esperado.
+
+**Arquivos alterados** (todos os pontos que hardcoded a configuração
+"real fixa", localizados por varredura de `G=16`/`P=40`/`value=16`/
+`value=40` no repositório):
+- `ui.py`: `self.geracoes`/`self.pop_size` (IntVars sem campo editável na
+  tela, decisão de 2026-07-18 mantida — ver seção "G=16/P=40 fixo,
+  removido da tela principal"), tooltips e comentários.
+- `config_v22.yaml` e `v22_config.py`: valores e defaults de fallback
+  (`geracoes`/`populacao`).
+- `v21_5_melhorias_cientificas.py` (`mapear_vale_gp`): removido o caso
+  especial que existia só porque G=16 quebrava a fórmula proporcional
+  (`round(16×0.767)=12`, diferente do real 40) — G=100/P=77 já cai
+  naturalmente na grade padrão (`round(100×0.767)=77`, exatamente o
+  real), então a grade voltou a ser `[80,100,120,140,160,200,250]` sem
+  ponto extra, só com G=100 relabelado como "configuração real do
+  sistema".
+- `mapa_gp_custom.py`: docstring atualizado (mesma simplificação).
+- `backtest.py`: `montar_configuracoes_cientificas()` (candidato
+  "Configuração validada"), defaults de `backtest_basico`,
+  `backtest_ultra_massivo` e `calibrar_robo_vs_aleatorio`, e docstrings
+  relacionadas.
+- `test_backtest.py`: dois testes que não passavam `geracoes`/`pop_size`
+  explícitos (contando com o default da função) receberam valores
+  pequenos explícitos (G=5/P=15) para não herdar o aumento de ~12x no
+  custo computacional só por causa da troca do default — a suite de
+  testes deve continuar rápida independente da configuração real.
+
+Documentação histórica (`VALIDACAO_MAPA_GP_2026-07-14.md`, entradas
+antigas deste arquivo) não foi reescrita — continua descrevendo
+corretamente o que foi validado com G=16/P=40 na época.

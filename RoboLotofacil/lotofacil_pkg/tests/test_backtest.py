@@ -343,7 +343,7 @@ class TestBacktestBasico(unittest.TestCase):
     def setUpClass(cls):
         """Roda o backtest uma vez para todos os testes desta classe."""
         cls.resultado = backtest_basico(
-            _HIST, janela=80, qtd_jogos=5, passos=5
+            _HIST, janela=80, qtd_jogos=5, passos=5, geracoes=5, pop_size=15
         )
 
     def test_retorna_dict(self):
@@ -415,7 +415,7 @@ class TestBacktestUltra(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.resultado = backtest_ultra_massivo(
-            _HIST, janela=80, qtd_jogos=5, passos=3
+            _HIST, janela=80, qtd_jogos=5, passos=3, geracoes=5, pop_size=15
         )
 
     def test_retorna_dict(self):

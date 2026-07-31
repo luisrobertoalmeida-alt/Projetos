@@ -184,14 +184,17 @@ class RoboLotofacilUltraApp:
         self.caminho_csv = tk.StringVar(value=ARQUIVO_CSV_PADRAO)
         self.qtd_jogos = tk.IntVar(value=20)
         self.janela_hist = tk.IntVar(value=120)
-        # G=16/P=40: fixo desde 2026-07-18 -- Mapa G x P (n=300, TOST
-        # margem=0.3) confirmou equivalencia estatistica na faixa G=16-300;
-        # nao ha vale estrutural, entao nao faz sentido expor como ajuste
-        # manual na tela principal (ver ARQUITETURA.md). Ainda pode ser
-        # sobrescrito via estrategia_override/mapa_gp_custom.py para quem
-        # quiser reabrir essa investigacao.
-        self.geracoes = tk.IntVar(value=16)
-        self.pop_size = tk.IntVar(value=40)
+        # G=100/P=77: fixo desde 2026-07-31 (a pedido do usuario; antes
+        # G=16/P=40 desde 2026-07-18). Mapa G x P (n=300, TOST margem=0.3)
+        # confirmou repetidamente equivalencia estatistica na faixa
+        # G=16-300 -- nao ha vale estrutural, entao a troca nao muda o
+        # desempenho esperado (ver ARQUITETURA.md, 2026-07-31). Continua
+        # sem campo editavel na tela principal pelo mesmo motivo de
+        # 2026-07-18: expor como ajuste manual sugeriria falsamente que
+        # vale a pena mexer. Ainda pode ser reaberto rodando
+        # mapa_gp_custom.py diretamente.
+        self.geracoes = tk.IntVar(value=100)
+        self.pop_size = tk.IntVar(value=77)
         self.passos_backtest = tk.IntVar(value=50)
         self.tamanho_jogo = tk.IntVar(value=TAMANHO_JOGO)
         # Fechamento combinatório (V22.1 experimental) — tamanho do pool (16-20)
@@ -497,7 +500,7 @@ class RoboLotofacilUltraApp:
         _tips_linha3 = {
             "⬆ Atualizar":      "Baixa os últimos resultados da API da CAIXA e atualiza o CSV.",
             "📂 Carregar":       "Lê o CSV do disco e carrega o histórico em memória.",
-            "🎲 Gerar Jogos":    "Gera o pacote de apostas usando ensemble multi-IA + algoritmo genético, já na configuração G/P validada (16/40). (F5)",
+            "🎲 Gerar Jogos":    "Gera o pacote de apostas usando ensemble multi-IA + algoritmo genético, já na configuração G/P validada (100/77). (F5)",
             "🧪 Simulador":      "Audita a qualidade estrutural do pacote com simulações artificiais.",
             "✅ Conferir Jogos": "Confere os jogos gerados contra o último sorteio real.",
             "🎯 Dual-Perfil":   "Gera pacote misto: 70% otimizado para 11+/12+ e 30% exploração para 13+ (Pares/Trios + Cobertura).",
@@ -1546,7 +1549,7 @@ class RoboLotofacilUltraApp:
 
             qtd    = min(max(1, int(self.qtd_jogos.get())), 100)
             janela = min(max(MIN_HIST, int(self.janela_hist.get())), len(self.concursos))
-            # Item 4: lê G e P (self.geracoes/self.pop_size, fixos em 16/40) em
+            # Item 4: lê G e P (self.geracoes/self.pop_size, fixos em 100/77) em
             # vez de valores hardcoded, para que o Dual-Perfil honre a configuração validada.
             ger_ui = max(5,  int(self.geracoes.get()))
             pop_ui = max(20, int(self.pop_size.get()))
