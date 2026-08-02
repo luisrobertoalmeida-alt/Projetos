@@ -566,7 +566,7 @@ class RoboLotofacilUltraApp:
         _tips_linha5 = {
             "📈 Dashboard":      "Abre o painel analítico completo com análise do pacote e relatório.",
             "📊 Desempenho":     "Exibe o banco histórico de acertos reais registrados e o ranking de modelos do ensemble.",
-            "💾 Salvar TXT":     "Salva só os números dos jogos gerados em TXT (sem relatório, score ou logs).",
+            "💾 Salvar TXT":     "Salva só os números dos jogos gerados em TXT (sem relatório, score ou logs). Também marca este pacote como o \"atual\" para restauração ao reabrir o app e avaliação automática contra o próximo sorteio.",
             "🖨️ Exportar PDF":   "Exporta os jogos gerados em PDF com o volante da Lotofácil marcado visualmente.",
             "📋 Excel":          "Exporta o histórico de resultados para planilha Excel.",
             "🎰 Probabilidades": "Calculadora de probabilidades reais baseada em combinatória.",
@@ -1377,7 +1377,6 @@ class RoboLotofacilUltraApp:
                     f"Pares={row['Pares']} | Ímpares={row['Ímpares']} | "
                     f"Soma={row['Soma']} | Perfil={row.get('Perfil', '')} | Score={row['Score']}"
                 )
-            self.salvar_ultimos_jogos_gerados()
             self._atualizar_progresso(100, "Concluído!")
             self.root.after(0, self._parar_progresso)
             self.root.after(0, self._atualizar_tabela_jogos)
@@ -1468,7 +1467,6 @@ class RoboLotofacilUltraApp:
             if resultado["qtd_jogos"] > limite_exibicao:
                 self.log(f"... e mais {resultado['qtd_jogos'] - limite_exibicao} jogos (todos em self.jogos_gerados / tabela de jogos).")
 
-            self.salvar_ultimos_jogos_gerados()
             self._atualizar_progresso(100, "Concluído!")
             self.root.after(0, self._parar_progresso)
             self.root.after(0, self._atualizar_tabela_jogos)
@@ -1607,7 +1605,6 @@ class RoboLotofacilUltraApp:
                          f" | mín/máx: {cobertura.get('min_sobreposicao', 0)}"
                          f"/{cobertura.get('max_sobreposicao', 0)}")
 
-            self.salvar_ultimos_jogos_gerados()
             self._atualizar_progresso(95, "Exibindo jogos...")
             self.root.after(0, self._atualizar_tabela_jogos)
             self.root.after(0, self._atualizar_painel_info)
@@ -2269,7 +2266,16 @@ class RoboLotofacilUltraApp:
         }
 
     def salvar_ultimos_jogos_gerados(self) -> None:
-        """Salva o último pacote para avaliação automática quando sair concurso novo."""
+        """
+        Salva o pacote atual para avaliação automática quando sair concurso
+        novo e para restaurar a aba "Jogos Gerados" ao reabrir o app.
+
+        Chamada só por `salvar_txt()` desde 2026-08-01 — antes disparava
+        sozinha a cada geração (Gerar Jogos, Fechamento, Dual-Perfil,
+        Otimizador) e também ao fechar o app, então qualquer geração
+        descartável (ex.: só pra olhar o resultado no Simulador) virava "o
+        pacote atual" sem o usuário ter pedido isso (ver ARQUITETURA.md).
+        """
         try:
             if not self.jogos_gerados or self.analise is None or self.pesos is None or not self.concursos:
                 return
@@ -3388,6 +3394,14 @@ class RoboLotofacilUltraApp:
         """
         Salva apenas os números dos jogos gerados em TXT.
         Não inclui cabeçalho, relatório, score, métricas ou logs.
+
+        Também é o único gatilho de `salvar_ultimos_jogos_gerados()` (JSON
+        usado para restaurar a aba "Jogos Gerados" ao abrir o app e para a
+        avaliação automática contra o próximo sorteio real). Até 2026-08-01
+        esse JSON era gravado a cada geração — inclusive gerações
+        descartáveis feitas só para checar o Simulador —, então qualquer
+        teste virava "o pacote atual" e podia ser avaliado/restaurado sem o
+        usuário ter escolhido isso (a pedido do usuário, ver ARQUITETURA.md).
         """
         try:
             if not self.jogos_gerados:
@@ -3409,6 +3423,7 @@ class RoboLotofacilUltraApp:
                     linha = " ".join(f"{int(n):02d}" for n in sorted(jogo))
                     f.write(f"Jogo {idx}: {linha}" + chr(10))
 
+            self.salvar_ultimos_jogos_gerados()
             self.log(f"✅ Jogos salvos em TXT limpo: {caminho}")
             self.set_status("TXT limpo salvo com sucesso.", "green")
 
@@ -3887,11 +3902,6 @@ class RoboLotofacilUltraApp:
                 self.auto_diagnostico_ativo = False
                 self._geracao_ativa = False
                 self._backtest_simples_ativo = False
-                # Salva estado atual
-                try:
-                    self.salvar_ultimos_jogos_gerados()
-                except Exception:
-                    pass
                 # Persiste preferencia do Turbo para a proxima sessao
                 try:
                     _cache = ler_json(ARQUIVO_CACHE, default={})
@@ -4213,7 +4223,6 @@ class RoboLotofacilUltraApp:
                 self.log_async("📋 Jogos otimizados:")
                 for i, jogo in enumerate(jogos_otimizados, 1):
                     self.log_async(f"   Jogo {i:02d}: {' '.join(f'{d:02d}' for d in sorted(jogo))}")
-                self.salvar_ultimos_jogos_gerados()
                 self.root.after(0, self._atualizar_tabela_jogos)
                 self.root.after(0, self._atualizar_painel_info)
                 self.set_status_async("Otimizador concluído.", "green")

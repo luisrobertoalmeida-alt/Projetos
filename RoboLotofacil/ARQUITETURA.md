@@ -981,3 +981,29 @@ ganho estatístico esperado.
 Documentação histórica (`VALIDACAO_MAPA_GP_2026-07-14.md`, entradas
 antigas deste arquivo) não foi reescrita — continua descrevendo
 corretamente o que foi validado com G=16/P=40 na época.
+
+## 💾 Persistência do pacote gerado passa a ser manual (só no Salvar TXT) — 2026-08-01
+
+A pedido do usuário: `salvar_ultimos_jogos_gerados()` (`ui.py`) — que
+grava `dados/lotofacil_ultimos_jogos_gerados.json`, usado para (1)
+restaurar a aba "Jogos Gerados" ao reabrir o app e (2) avaliar
+automaticamente o pacote contra o próximo sorteio real assim que ele
+sair — disparava sozinha a cada geração (🎲 Gerar Jogos, 🔒 Fechamento,
+Dual-Perfil, Otimizador) e também ao fechar o app.
+
+**Problema relatado**: o usuário gera vários pacotes só para ver o
+resultado no Simulador (auditoria estrutural, não geração "de verdade")
+— e cada uma dessas gerações descartáveis sobrescrevia o JSON, virando
+"o pacote atual" sem ele ter escolhido isso. Na prática, o pacote
+restaurado ao reabrir o app, ou avaliado automaticamente contra o
+próximo concurso, podia ser um teste qualquer, não o que o usuário
+realmente pretendia acompanhar.
+
+**Correção**: removidas as 5 chamadas automáticas (4 após gerações +
+1 ao fechar o app). `salvar_ultimos_jogos_gerados()` agora só é chamada
+por `salvar_txt()` — ou seja, o pacote só vira "o atual" quando o
+usuário explicitamente clica em "💾 Salvar TXT". Tooltip do botão e
+docstrings atualizados para deixar esse acoplamento explícito. Nenhuma
+mudança em `carregar_ultimos_jogos_gerados()`/`avaliar_ultimo_sorteio_automatico()`
+— continuam lendo o mesmo arquivo, só que agora ele reflete uma escolha
+explícita do usuário, não a última geração (mesmo que descartável).
