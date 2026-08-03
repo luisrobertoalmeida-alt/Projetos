@@ -107,6 +107,7 @@ from .fechamento import (
     gerar_apostas_fechamento,
     qtd_jogos_fechamento,
     garantia_minima,
+    tamanho_pool_minimo,
     TAMANHO_POOL_MINIMO,
     TAMANHO_POOL_MAXIMO,
 )
@@ -504,8 +505,9 @@ class RoboLotofacilUltraApp:
             "🧪 Simulador":      "Audita a qualidade estrutural do pacote com simulações artificiais.",
             "✅ Conferir Jogos": "Confere os jogos gerados contra o último sorteio real.",
             "🎯 Dual-Perfil":   "Gera pacote misto: 70% otimizado para 11+/12+ e 30% exploração para 13+ (Pares/Trios + Cobertura).",
-            "🔒 Fechamento":    "Fechamento combinatório: escolhe um pool de dezenas (campo 'Pool Fecht.', 16-20) pelo ranking do "
-                                "ensemble e joga TODAS as combinações de 15 dentro dele. Garantia matemática (não estatística) "
+            "🔒 Fechamento":    "Fechamento combinatório: escolhe um pool de dezenas (campo 'Pool Fecht.') pelo ranking do "
+                                "ensemble e joga TODAS as combinações do tamanho definido em '✦ Dezenas' (15-18) dentro dele. "
+                                "Pool mínimo = Dezenas + 1. Garantia matemática (não estatística) "
                                 "condicionada às 15 sorteadas estarem dentro do pool escolhido — ver VALIDACAO_ESCALA_REAL "
                                 "e docstring de fechamento.py.",
             "⚡ Otimizador": "Gera pacotes candidatos com a mesma configuração até atingir 95% de 11+ na simulação "
@@ -1404,27 +1406,36 @@ class RoboLotofacilUltraApp:
             messagebox.showwarning("Fechamento", "Carregue o histórico (📂 Carregar) antes de gerar o fechamento.")
             return
 
+        # Tamanho de cada jogo do fechamento (15-18, campo "Dezenas por jogo"
+        # da tela) -- até 2026-08-03 esse campo era lido só por "Gerar Jogos"
+        # e nunca chegava até o Fechamento, que sempre usava 15 dezenas por
+        # jogo mesmo com o campo em 16/17/18 (achado de usuário, ver
+        # ARQUITETURA.md).
+        tamanho_jogo = min(max(15, int(self.tamanho_jogo.get())), 18)
+        _config_module.TAMANHO_JOGO = tamanho_jogo
+        minimo_pool = tamanho_pool_minimo(tamanho_jogo)
+
         try:
             tamanho_pool = int(self.tamanho_pool_fechamento.get())
         except Exception:
-            tamanho_pool = TAMANHO_POOL_MINIMO
-        if not (TAMANHO_POOL_MINIMO <= tamanho_pool <= TAMANHO_POOL_MAXIMO):
+            tamanho_pool = minimo_pool
+        if not (minimo_pool <= tamanho_pool <= TAMANHO_POOL_MAXIMO):
             messagebox.showerror(
                 "Fechamento",
-                f"Pool Fecht. precisa estar entre {TAMANHO_POOL_MINIMO} e {TAMANHO_POOL_MAXIMO} "
-                f"(recebido: {tamanho_pool})."
+                f"Pool Fecht. precisa estar entre {minimo_pool} e {TAMANHO_POOL_MAXIMO} "
+                f"para jogos de {tamanho_jogo} dezenas (recebido: {tamanho_pool})."
             )
             return
 
-        qtd = qtd_jogos_fechamento(tamanho_pool)
-        if tamanho_pool > TAMANHO_POOL_MINIMO:
-            # Pools acima de 16 geram muitos jogos (136 a 15.504) — confirma
-            # antes de gerar/exibir, já que cada jogo tem custo real se apostado.
+        qtd = qtd_jogos_fechamento(tamanho_pool, tamanho_jogo)
+        if tamanho_pool > minimo_pool:
+            # Pools acima do mínimo geram muitos jogos — confirma antes de
+            # gerar/exibir, já que cada jogo tem custo real se apostado.
             confirmado = messagebox.askyesno(
                 "Fechamento — confirmar quantidade de jogos",
-                f"Pool de {tamanho_pool} dezenas gera {qtd:,} jogos "
-                f"(garantia mínima de {garantia_minima(tamanho_pool)} pontos SE as 15 dezenas "
-                f"sorteadas estiverem todas dentro do pool escolhido).\n\n"
+                f"Pool de {tamanho_pool} dezenas, jogos de {tamanho_jogo} dezenas cada, "
+                f"gera {qtd:,} jogos (garantia mínima de {garantia_minima(tamanho_pool, tamanho_jogo)} "
+                f"pontos SE as 15 dezenas sorteadas estiverem todas dentro do pool escolhido).\n\n"
                 f"Isso é MUITO mais que os 20 jogos do seu uso normal. Deseja continuar?"
             )
             if not confirmado:
@@ -1435,16 +1446,18 @@ class RoboLotofacilUltraApp:
         self.set_status("Gerando fechamento combinatório...", "blue")
         self.log("=" * 72)
         self.log("🔒 FECHAMENTO COMBINATÓRIO — GARANTIA TOTAL")
-        th = threading.Thread(target=self._executar_fechamento, args=(tamanho_pool,), daemon=True)
+        th = threading.Thread(target=self._executar_fechamento, args=(tamanho_pool, tamanho_jogo), daemon=True)
         th.start()
 
-    def _executar_fechamento(self, tamanho_pool: int) -> None:
+    def _executar_fechamento(self, tamanho_pool: int, tamanho_jogo: int = 15) -> None:
         try:
             janela = min(max(MIN_HIST, int(self.janela_hist.get())), len(self.concursos))
             self.root.after(0, self._iniciar_progresso)
             self._atualizar_progresso(20, "Escolhendo pool pelo ranking do ensemble...")
 
-            resultado = gerar_apostas_fechamento(self.concursos, tamanho_pool=tamanho_pool, janela_analise=janela)
+            resultado = gerar_apostas_fechamento(
+                self.concursos, tamanho_pool=tamanho_pool, janela_analise=janela, tamanho_jogo=tamanho_jogo
+            )
 
             self._atualizar_progresso(80, "Montando jogos do fechamento...")
             self.jogos_gerados = resultado["jogos"]
@@ -1453,7 +1466,7 @@ class RoboLotofacilUltraApp:
             self.info_backtest = None
 
             self.log(f"Pool escolhido ({tamanho_pool} dezenas): {' '.join(f'{n:02d}' for n in resultado['pool'])}")
-            self.log(f"Jogos no fechamento: {resultado['qtd_jogos']:,}")
+            self.log(f"Jogos no fechamento: {resultado['qtd_jogos']:,} (cada um com {resultado['tamanho_jogo']} dezenas)")
             self.log(f"Garantia mínima SE as 15 sorteadas estiverem no pool: {resultado['garantia_minima']} pontos")
             self.log(
                 "⚠️ A garantia é condicional: escolher quais dezenas entram no pool continua sendo uma "

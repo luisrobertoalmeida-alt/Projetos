@@ -8,7 +8,11 @@ import os
 
 API_BASE = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
 NUMEROS = list(range(1, 26))
-TAMANHO_JOGO = 15  # Lotofácil padrão: 15 | Aceita 15–18 para testes
+TAMANHO_SORTEIO = 15  # Fixo -- a Lotofácil SEMPRE sorteia 15 dezenas, isso nunca muda.
+TAMANHO_JOGO = 15  # Tamanho de CADA jogo gerado/apostado (15-18/20) -- diferente de
+                    # TAMANHO_SORTEIO: apostar com mais de 15 dezenas é uma aposta
+                    # "estendida" válida na Lotofácil, mas o sorteio em si continua
+                    # tendo sempre 15 números.
 MIN_HIST = 60
 
 BASE_APP_DIR  = os.path.join(os.path.expanduser("~"), "Documents", "RoboLotofacilPro")

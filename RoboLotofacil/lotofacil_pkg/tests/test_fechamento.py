@@ -24,6 +24,7 @@ from lotofacil_pkg.fechamento import (
     gerar_fechamento_garantia_total,
     escolher_pool_por_ranking,
     gerar_apostas_fechamento,
+    tamanho_pool_minimo,
     TAMANHO_POOL_MINIMO,
     TAMANHO_POOL_MAXIMO,
 )
@@ -132,6 +133,82 @@ class TestGerarApostasFechamento(unittest.TestCase):
             gerar_apostas_fechamento(self.hist, tamanho_pool=TAMANHO_POOL_MINIMO - 1)
         with self.assertRaises(ValueError):
             gerar_apostas_fechamento(self.hist, tamanho_pool=TAMANHO_POOL_MAXIMO + 1)
+
+
+class TestTamanhoJogoDiferenteDe15(unittest.TestCase):
+    """
+    Regressão do achado do usuário (2026-08-03): o Fechamento sempre gerava
+    jogos de 15 dezenas mesmo com o campo "Dezenas por jogo" em 16/17/18,
+    porque tamanho_jogo nunca era repassado até gerar_fechamento_garantia_total().
+    Também cobre a correção da fórmula de garantia_minima() para
+    tamanho_jogo != 15 (a fórmula antiga confundia tamanho do jogo com
+    tamanho do sorteio real, que são conceitos diferentes).
+    """
+
+    def test_tamanho_pool_minimo(self):
+        self.assertEqual(tamanho_pool_minimo(15), 16)
+        self.assertEqual(tamanho_pool_minimo(16), 17)
+        self.assertEqual(tamanho_pool_minimo(18), 19)
+
+    def test_garantia_minima_com_tamanho_jogo_15_igual_ao_antigo(self):
+        # tamanho_jogo=15 tem que continuar batendo com os valores conhecidos.
+        for m, esperado in [(16, 14), (17, 13), (18, 12), (19, 11), (20, 10)]:
+            self.assertEqual(garantia_minima(m, tamanho_jogo=15), esperado)
+
+    def test_garantia_minima_com_tamanho_jogo_maior_que_15(self):
+        # formula geral: tamanho_jogo + 15 - tamanho_pool
+        self.assertEqual(garantia_minima(17, tamanho_jogo=16), 16 + 15 - 17)
+        self.assertEqual(garantia_minima(20, tamanho_jogo=18), 18 + 15 - 20)
+        # no pool minimo (tamanho_jogo+1), a garantia eh sempre 14,
+        # independente de tamanho_jogo (propriedade matematica do fechamento).
+        for k in (15, 16, 17, 18):
+            self.assertEqual(garantia_minima(tamanho_pool_minimo(k), tamanho_jogo=k), 14)
+
+    def test_gerar_fechamento_garantia_total_com_tamanho_jogo_16(self):
+        pool = list(range(1, 18))  # 17 dezenas
+        jogos = gerar_fechamento_garantia_total(pool, tamanho_jogo=16)
+        self.assertEqual(len(jogos), comb(17, 16))
+        for j in jogos:
+            self.assertEqual(len(set(j)), 16)
+            self.assertTrue(set(j) <= set(pool))
+
+    def test_garantia_matematica_com_tamanho_jogo_maior_que_15(self):
+        """
+        Mesma propriedade central do fechamento (ver
+        TestGerarFechamentoGarantiaTotal), mas com tamanho_jogo=16/17 --
+        precisa continuar valendo com a formula corrigida.
+        """
+        rng = random.Random(23)
+        universo = list(range(1, 26))
+        for tamanho_jogo in (16, 17):
+            for m in (tamanho_jogo + 1, tamanho_jogo + 2):
+                pool = sorted(rng.sample(universo, m))
+                sorteio = set(rng.sample(pool, 15))  # sorteio real: sempre 15, 100% no pool
+                jogos = gerar_fechamento_garantia_total(pool, tamanho_jogo=tamanho_jogo)
+                acertos = [len(set(j) & sorteio) for j in jogos]
+                self.assertGreaterEqual(min(acertos), garantia_minima(m, tamanho_jogo))
+                self.assertEqual(max(acertos), 15)
+
+    def test_gerar_apostas_fechamento_repassa_tamanho_jogo(self):
+        r = gerar_apostas_fechamento(self.hist_padrao(), tamanho_pool=17, tamanho_jogo=16)
+        self.assertEqual(r["tamanho_jogo"], 16)
+        self.assertEqual(r["qtd_jogos"], comb(17, 16))
+        self.assertEqual(r["garantia_minima"], 16 + 15 - 17)
+        for j in r["jogos"]:
+            self.assertEqual(len(j), 16)
+
+    def test_gerar_apostas_fechamento_valida_pool_pelo_minimo_dinamico(self):
+        # pool=17 eh valido para tamanho_jogo=15 (minimo 16) mas invalido
+        # para tamanho_jogo=17 (minimo 18) -- a validacao tem que refletir isso.
+        gerar_apostas_fechamento(self.hist_padrao(), tamanho_pool=17, tamanho_jogo=15)  # nao levanta
+        with self.assertRaises(ValueError):
+            gerar_apostas_fechamento(self.hist_padrao(), tamanho_pool=17, tamanho_jogo=17)
+
+    @staticmethod
+    def hist_padrao():
+        random.seed(29)
+        numeros = list(range(1, 26))
+        return [sorted(random.sample(numeros, 15)) for _ in range(200)]
 
 
 if __name__ == "__main__":

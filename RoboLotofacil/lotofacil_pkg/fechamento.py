@@ -8,18 +8,21 @@ heuristicamente a diversidade/cobertura de um pacote de jogos independentes,
 o fechamento de garantia total é uma técnica puramente combinatória, com
 garantia MATEMÁTICA (não estatística, não aproximada):
 
-    Escolha um grupo ("pool") de `m` dezenas (m > 15). Jogue TODAS as
-    C(m, 15) combinações possíveis de 15 dezenas dentro desse grupo.
+    Escolha um grupo ("pool") de `m` dezenas (m > k, onde k = tamanho de
+    cada jogo, padrão 15). Jogue TODAS as C(m, k) combinações possíveis
+    de `k` dezenas dentro desse grupo.
 
-    SE as 15 dezenas sorteadas estiverem TODAS dentro do seu grupo de `m`
-    escolhidas, então, garantidamente:
-        - o jogo que exclui exatamente as (m-15) dezenas do grupo que NÃO
-          saíram acerta os 15 pontos (o pacote inteiro contém a aposta
-          vencedora);
+    SE as 15 dezenas sorteadas (o sorteio real da Lotofácil SEMPRE tem
+    15 dezenas, independente de `k`) estiverem TODAS dentro do seu grupo
+    de `m` escolhidas, então, garantidamente:
+        - pelo menos um jogo do pacote acerta os 15 pontos (o pacote
+          inteiro contém a aposta vencedora);
         - todos os demais jogos do fechamento acertam pelo menos
-          `30 - m` pontos.
+          `k + 15 - m` pontos.
 
-Números de jogos e garantia mínima por tamanho de grupo (m):
+Números de jogos e garantia mínima por tamanho de grupo (m), para o caso
+padrão k=15 (cada jogo com 15 dezenas — ver `garantia_minima()` para o
+caso geral com `k` != 15, ex.: apostas "estendidas" de 16-18 dezenas):
 
     m=16 ->    16 jogos  | garantia mínima: 14 pontos
     m=17 ->   136 jogos  | garantia mínima: 13 pontos
@@ -48,37 +51,58 @@ from __future__ import annotations
 from itertools import combinations
 from math import comb
 
-from .config import NUMEROS, TAMANHO_JOGO
+from . import config as _cfg
+from .config import NUMEROS
 from .historico import analisar_historico
 from .analise import calcular_motor_estrategico, calcular_ensemble_multi_ia
 from .genetico import recortar_historico_para_analise
 
 
-TAMANHO_POOL_MINIMO = TAMANHO_JOGO + 1   # 16
+TAMANHO_POOL_MINIMO = _cfg.TAMANHO_JOGO + 1   # 16 (padrão) — ver tamanho_pool_minimo() para o valor dinâmico
 TAMANHO_POOL_MAXIMO = 20                  # C(20,15) = 15.504 jogos — já é um limite prático alto
 
 
-def qtd_jogos_fechamento(tamanho_pool: int, tamanho_jogo: int = TAMANHO_JOGO) -> int:
+def tamanho_pool_minimo(tamanho_jogo: int | None = None) -> int:
+    """Menor pool válido (tamanho_jogo + 1) para o `tamanho_jogo` efetivo (padrão: config.TAMANHO_JOGO atual)."""
+    return (tamanho_jogo if tamanho_jogo is not None else _cfg.TAMANHO_JOGO) + 1
+
+
+def qtd_jogos_fechamento(tamanho_pool: int, tamanho_jogo: int | None = None) -> int:
     """Quantidade exata de jogos de um fechamento de garantia total: C(tamanho_pool, tamanho_jogo)."""
+    if tamanho_jogo is None:
+        tamanho_jogo = _cfg.TAMANHO_JOGO
     return comb(tamanho_pool, tamanho_jogo)
 
 
-def garantia_minima(tamanho_pool: int, tamanho_jogo: int = TAMANHO_JOGO) -> int:
+def garantia_minima(tamanho_pool: int, tamanho_jogo: int | None = None) -> int:
     """
-    Pontuação mínima garantida SE as `tamanho_jogo` dezenas sorteadas
-    estiverem todas dentro do pool. Fórmula: tamanho_jogo - (tamanho_pool - tamanho_jogo),
-    ou seja, 2*tamanho_jogo - tamanho_pool (para Lotofácil: 30 - tamanho_pool).
+    Pontuação mínima garantida SE as `config.TAMANHO_SORTEIO` (15, fixo —
+    a Lotofácil sempre sorteia 15 dezenas) dezenas sorteadas estiverem
+    todas dentro do pool. Fórmula: tamanho_jogo - (tamanho_pool - TAMANHO_SORTEIO),
+    ou seja, tamanho_jogo + TAMANHO_SORTEIO - tamanho_pool.
+
+    Até 2026-08-03 essa fórmula era `2*tamanho_jogo - tamanho_pool` —
+    coincide com a correta quando tamanho_jogo==15 (o único caso já usado
+    de verdade, por causa do bug corrigido nesta mesma data que impedia
+    tamanho_jogo != 15 de chegar até aqui), mas dava resultado ERRADO para
+    tamanho_jogo != 15: confundia "tamanho de cada jogo apostado" com
+    "tamanho do sorteio real", que são conceitos diferentes (ver
+    ARQUITETURA.md).
     """
-    return 2 * tamanho_jogo - tamanho_pool
+    if tamanho_jogo is None:
+        tamanho_jogo = _cfg.TAMANHO_JOGO
+    return max(0, tamanho_jogo + _cfg.TAMANHO_SORTEIO - tamanho_pool)
 
 
-def gerar_fechamento_garantia_total(pool: list[int], tamanho_jogo: int = TAMANHO_JOGO) -> list[list[int]]:
+def gerar_fechamento_garantia_total(pool: list[int], tamanho_jogo: int | None = None) -> list[list[int]]:
     """
     Gera TODAS as combinações de `tamanho_jogo` dezenas dentro de `pool`.
 
     Levanta ValueError se o pool for pequeno demais (nenhuma garantia real,
     é só um jogo) ou grande demais (explosão combinatória impraticável).
     """
+    if tamanho_jogo is None:
+        tamanho_jogo = _cfg.TAMANHO_JOGO
     pool = sorted(set(int(n) for n in pool))
     if not all(1 <= n <= 25 for n in pool):
         raise ValueError("Pool de fechamento contém dezena fora do intervalo 1–25.")
@@ -118,26 +142,41 @@ def escolher_pool_por_ranking(concursos_completos: list, tamanho_pool: int = 16,
     return pool, analise
 
 
-def gerar_apostas_fechamento(concursos_completos: list, tamanho_pool: int = 16, janela_analise: int = 120) -> dict:
+def gerar_apostas_fechamento(concursos_completos: list, tamanho_pool: int = 16, janela_analise: int = 120, tamanho_jogo: int | None = None) -> dict:
     """
     Pipeline completo: escolhe o pool pelo ranking do ensemble multi-IA e
     gera o fechamento de garantia total sobre esse pool.
 
-    Retorna um dict com jogos, pool, garantia mínima, quantidade de jogos
-    e a análise/ensemble usados para escolher o pool (auditoria).
+    `tamanho_jogo` (padrão: `config.TAMANHO_JOGO` atual, geralmente 15) é o
+    tamanho de CADA jogo do fechamento — não confundir com `tamanho_pool`
+    (o grupo maior do qual os jogos são formados). Até 2026-08-03 esse
+    parâmetro nem existia aqui: `gerar_fechamento_garantia_total()` era
+    chamada sem ele, então o fechamento sempre usava 15 dezenas por jogo
+    mesmo quando o usuário configurava "Dezenas por jogo" para 16, 17 ou 18
+    na tela — o campo era lido em `gerar_apostas()` (Gerar Jogos normal)
+    mas nunca chegava até o Fechamento (achado de usuário, ver
+    ARQUITETURA.md).
+
+    Retorna um dict com jogos, pool, garantia mínima, quantidade de jogos,
+    o tamanho_jogo efetivo e a análise/ensemble usados para escolher o
+    pool (auditoria).
     """
-    if not (TAMANHO_POOL_MINIMO <= tamanho_pool <= TAMANHO_POOL_MAXIMO):
+    if tamanho_jogo is None:
+        tamanho_jogo = _cfg.TAMANHO_JOGO
+    minimo = tamanho_pool_minimo(tamanho_jogo)
+    if not (minimo <= tamanho_pool <= TAMANHO_POOL_MAXIMO):
         raise ValueError(
-            f"tamanho_pool deve estar entre {TAMANHO_POOL_MINIMO} e {TAMANHO_POOL_MAXIMO} "
-            f"(recebido: {tamanho_pool})."
+            f"tamanho_pool deve estar entre {minimo} e {TAMANHO_POOL_MAXIMO} "
+            f"para tamanho_jogo={tamanho_jogo} (recebido: {tamanho_pool})."
         )
     pool, analise = escolher_pool_por_ranking(concursos_completos, tamanho_pool=tamanho_pool, janela_analise=janela_analise)
-    jogos = gerar_fechamento_garantia_total(pool)
+    jogos = gerar_fechamento_garantia_total(pool, tamanho_jogo=tamanho_jogo)
     return {
         "pool": pool,
         "tamanho_pool": tamanho_pool,
+        "tamanho_jogo": tamanho_jogo,
         "jogos": jogos,
         "qtd_jogos": len(jogos),
-        "garantia_minima": garantia_minima(tamanho_pool),
+        "garantia_minima": garantia_minima(tamanho_pool, tamanho_jogo),
         "analise": analise,
     }

@@ -1007,3 +1007,65 @@ docstrings atualizados para deixar esse acoplamento explícito. Nenhuma
 mudança em `carregar_ultimos_jogos_gerados()`/`avaliar_ultimo_sorteio_automatico()`
 — continuam lendo o mesmo arquivo, só que agora ele reflete uma escolha
 explícita do usuário, não a última geração (mesmo que descartável).
+
+## 🔒 Fechamento ignorava o campo "Dezenas por jogo" (sempre 15) — 2026-08-03
+
+Achado do usuário: o Fechamento sempre gerava jogos de 15 dezenas, mesmo
+alterando o campo "✦ Dezenas" (que no "Gerar Jogos" normal já aceitava
+15-18) para 16, 17 ou 18.
+
+**Causa raiz, dupla**:
+1. `fechamento.py` importava `TAMANHO_JOGO` com `from .config import
+   TAMANHO_JOGO` — uma cópia congelada no momento do import. Diferente de
+   `genetico.py`, que corretamente usa `_cfg.TAMANHO_JOGO` (atributo do
+   módulo, lido em tempo real) em todo lugar, `fechamento.py` usava o
+   nome congelado como valor padrão de parâmetro (`tamanho_jogo: int =
+   TAMANHO_JOGO`) — e valores padrão de parâmetro são avaliados uma única
+   vez, na definição da função, não a cada chamada. Mesmo a UI mudando
+   `config.TAMANHO_JOGO` em tempo de execução (`_executar_gerar_jogos()`),
+   `fechamento.py` nunca via essa mudança.
+2. Mais grave: `gerar_apostas_fechamento()` nem tinha parâmetro
+   `tamanho_jogo` — nunca repassava nada para
+   `gerar_fechamento_garantia_total()`, então mesmo corrigindo o item 1
+   sozinho não resolveria nada.
+
+**Correção**:
+- `fechamento.py` agora importa o módulo `config` inteiro (`from . import
+  config as _cfg`) e todas as funções (`qtd_jogos_fechamento`,
+  `garantia_minima`, `gerar_fechamento_garantia_total`,
+  `gerar_apostas_fechamento`) usam `tamanho_jogo: int | None = None`,
+  resolvendo para `_cfg.TAMANHO_JOGO` (lido em tempo real) só quando não
+  informado explicitamente.
+- `gerar_apostas_fechamento()` ganhou o parâmetro `tamanho_jogo`, repassa
+  para `gerar_fechamento_garantia_total()` e inclui o valor efetivo no
+  dict de retorno.
+- Nova função `tamanho_pool_minimo(tamanho_jogo)` — o pool mínimo válido
+  passa a ser `tamanho_jogo + 1`, não mais o `TAMANHO_POOL_MINIMO=16`
+  fixo (que só era válido para `tamanho_jogo=15`).
+- `ui.py` (`iniciar_fechamento`/`_executar_fechamento`): lê `self.tamanho_jogo`
+  (mesmo clamp 15-18 do "Gerar Jogos"), valida o pool contra o mínimo
+  dinâmico, e repassa `tamanho_jogo` para `gerar_apostas_fechamento()`.
+
+**Bug matemático adicional encontrado e corrigido no caminho**: a fórmula
+de `garantia_minima()` era `2*tamanho_jogo - tamanho_pool`. Isso só está
+certo quando `tamanho_jogo==15` (o único caso já usado de verdade, por
+causa do bug acima) — a fórmula geral confunde "tamanho de cada jogo
+apostado" com "tamanho do sorteio real" (que na Lotofácil é **sempre**
+15, independente de quantas dezenas você aposta por jogo). A fórmula
+correta, derivada e verificada (docstring de `garantia_minima()` e nova
+classe de testes `TestTamanhoJogoDiferenteDe15`): `tamanho_jogo +
+TAMANHO_SORTEIO - tamanho_pool` (com `max(0, ...)` de segurança), onde
+`TAMANHO_SORTEIO=15` é uma nova constante fixa em `config.py`,
+deliberadamente separada de `TAMANHO_JOGO` (que é o tamanho de cada
+aposta, configurável 15-18/20). As duas fórmulas coincidem exatamente
+quando `tamanho_jogo=15` — por isso o bug nunca dava resultado visivelmente
+errado antes (o parâmetro nunca chegava a ser diferente de 15).
+
+Testes novos em `test_fechamento.py` (`TestTamanhoJogoDiferenteDe15`):
+verificam `tamanho_pool_minimo()`, a fórmula corrigida de
+`garantia_minima()` (inclusive a propriedade de que a garantia no pool
+mínimo é sempre 14, independente de `tamanho_jogo`), geração de
+fechamento com `tamanho_jogo=16`, a propriedade matemática central do
+fechamento (garantia real via simulação, não só a fórmula) para
+`tamanho_jogo` 16 e 17, e que `gerar_apostas_fechamento()` de fato
+repassa e valida `tamanho_jogo` corretamente.
