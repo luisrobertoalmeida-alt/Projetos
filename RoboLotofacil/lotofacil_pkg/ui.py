@@ -105,11 +105,13 @@ from .v21_5_melhorias_cientificas import (
 from .v20_5_validacao_cientifica import benchmark_vs_aleatorio, ganho_estatistico
 from .fechamento import (
     gerar_apostas_fechamento,
+    gerar_apostas_fechamento_reduzido,
     qtd_jogos_fechamento,
     garantia_minima,
     tamanho_pool_minimo,
     TAMANHO_POOL_MINIMO,
     TAMANHO_POOL_MAXIMO,
+    TAMANHO_POOL_MAXIMO_REDUZIDO,
 )
 # V21.1: SQLite + Meta-Aprendizado + Auto-Poda + Dashboard Científico
 try:
@@ -200,6 +202,12 @@ class RoboLotofacilUltraApp:
         self.tamanho_jogo = tk.IntVar(value=TAMANHO_JOGO)
         # Fechamento combinatório (V22.1 experimental) — tamanho do pool (16-20)
         self.tamanho_pool_fechamento = tk.IntVar(value=TAMANHO_POOL_MINIMO)
+        # Fechamento REDUZIDO (desde 2026-08-08, ver fechamento.py e ARQUITETURA.md):
+        # garantia mais fraca/condicional (pelo menos 1 jogo, não todos; condicionada
+        # a t_garantia dezenas no pool, não as 15) com muito menos jogos.
+        self.fechamento_reduzido_ativo = tk.BooleanVar(value=False)
+        self.fechamento_t_garantia = tk.IntVar(value=13)
+        self.fechamento_g_garantia = tk.IntVar(value=11)
         self.auto_update_on_open = tk.BooleanVar(value=True)
         self.modo_turbo = tk.BooleanVar(value=True)
         self.auto_aprender_on_open = tk.BooleanVar(value=True)
@@ -493,6 +501,19 @@ class RoboLotofacilUltraApp:
         tk.Entry(linha2, textvariable=self.seed_valor, width=5,
                  bg=bg2, fg=fg, insertbackground=fg, relief="flat",
                  font=("Segoe UI", 9)).pack(side="left")
+        # Fechamento reduzido (2026-08-08) — garantia mais fraca/condicional
+        # (pelo menos 1 jogo, não todos; condicionada a t_garantia dezenas no
+        # pool, não as 15), com muito menos jogos que a garantia total.
+        tk.Checkbutton(linha2, text="  Fechamento Reduzido (t/g):", variable=self.fechamento_reduzido_ativo,
+                       bg=bg, fg=fg2, activebackground=bg, selectcolor=bg3,
+                       font=("Segoe UI", 9)).pack(side="left", padx=(10, 2))
+        tk.Entry(linha2, textvariable=self.fechamento_t_garantia, width=3,
+                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
+                 font=("Segoe UI", 9)).pack(side="left")
+        tk.Label(linha2, text="/", bg=bg, fg=fg2, font=("Segoe UI", 9)).pack(side="left")
+        tk.Entry(linha2, textvariable=self.fechamento_g_garantia, width=3,
+                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
+                 font=("Segoe UI", 9)).pack(side="left")
 
         # ── Linha 3: operação principal ───────────────────────
         tk.Label(topo, text="▶ Operação principal", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
@@ -509,7 +530,9 @@ class RoboLotofacilUltraApp:
                                 "ensemble e joga TODAS as combinações do tamanho definido em '✦ Dezenas' (15-18) dentro dele. "
                                 "Pool mínimo = Dezenas + 1. Garantia matemática (não estatística) "
                                 "condicionada às 15 sorteadas estarem dentro do pool escolhido — ver VALIDACAO_ESCALA_REAL "
-                                "e docstring de fechamento.py.",
+                                "e docstring de fechamento.py. Marque 'Fechamento Reduzido (t/g)' pra usar um wheel "
+                                "reduzido (bem menos jogos, garantia mais fraca: pelo menos 1 jogo acerta g dezenas "
+                                "SE t das sorteadas estiverem no pool) — pool máximo 19 nesse modo.",
             "⚡ Otimizador": "Gera pacotes candidatos com a mesma configuração até atingir 95% de 11+ na simulação "
                                 "(ou esgotar as tentativas); entre os candidatos, escolhe o melhor priorizando 12+/13+ "
                                 "e média do melhor jogo (mais raros e discriminantes que 11+) — investigação, não "
@@ -1413,18 +1436,53 @@ class RoboLotofacilUltraApp:
         # ARQUITETURA.md).
         tamanho_jogo = min(max(15, int(self.tamanho_jogo.get())), 18)
         _config_module.TAMANHO_JOGO = tamanho_jogo
+
+        reduzido = bool(self.fechamento_reduzido_ativo.get())
+        maximo_pool = TAMANHO_POOL_MAXIMO_REDUZIDO if reduzido else TAMANHO_POOL_MAXIMO
         minimo_pool = tamanho_pool_minimo(tamanho_jogo)
 
         try:
             tamanho_pool = int(self.tamanho_pool_fechamento.get())
         except Exception:
             tamanho_pool = minimo_pool
-        if not (minimo_pool <= tamanho_pool <= TAMANHO_POOL_MAXIMO):
+        if not (minimo_pool <= tamanho_pool <= maximo_pool):
             messagebox.showerror(
                 "Fechamento",
-                f"Pool Fecht. precisa estar entre {minimo_pool} e {TAMANHO_POOL_MAXIMO} "
-                f"para jogos de {tamanho_jogo} dezenas (recebido: {tamanho_pool})."
+                f"Pool Fecht. precisa estar entre {minimo_pool} e {maximo_pool} "
+                f"para jogos de {tamanho_jogo} dezenas"
+                f"{' (fechamento reduzido)' if reduzido else ''} (recebido: {tamanho_pool})."
             )
+            return
+
+        if reduzido:
+            try:
+                t_garantia = int(self.fechamento_t_garantia.get())
+                g_garantia = int(self.fechamento_g_garantia.get())
+            except Exception:
+                messagebox.showerror("Fechamento Reduzido", "Valores de t/g inválidos.")
+                return
+            if not (1 <= t_garantia <= tamanho_pool):
+                messagebox.showerror("Fechamento Reduzido", f"t (garantia) precisa estar entre 1 e {tamanho_pool} (recebido: {t_garantia}).")
+                return
+            if not (1 <= g_garantia <= min(t_garantia, tamanho_jogo)):
+                messagebox.showerror(
+                    "Fechamento Reduzido",
+                    f"g (garantia) precisa estar entre 1 e min(t, dezenas por jogo)="
+                    f"{min(t_garantia, tamanho_jogo)} (recebido: {g_garantia})."
+                )
+                return
+
+            self._fechamento_ativo = True
+            self.set_status("Gerando fechamento reduzido...", "blue")
+            self.log("=" * 72)
+            self.log(f"🔒 FECHAMENTO REDUZIDO — pool={tamanho_pool}/jogo={tamanho_jogo}/t={t_garantia}/g={g_garantia}")
+            self.log("(a construção + verificação exaustiva da garantia pode levar alguns segundos)")
+            th = threading.Thread(
+                target=self._executar_fechamento,
+                args=(tamanho_pool, tamanho_jogo, True, t_garantia, g_garantia),
+                daemon=True,
+            )
+            th.start()
             return
 
         qtd = qtd_jogos_fechamento(tamanho_pool, tamanho_jogo)
@@ -1449,15 +1507,24 @@ class RoboLotofacilUltraApp:
         th = threading.Thread(target=self._executar_fechamento, args=(tamanho_pool, tamanho_jogo), daemon=True)
         th.start()
 
-    def _executar_fechamento(self, tamanho_pool: int, tamanho_jogo: int = 15) -> None:
+    def _executar_fechamento(
+        self, tamanho_pool: int, tamanho_jogo: int = 15,
+        reduzido: bool = False, t_garantia: int | None = None, g_garantia: int | None = None,
+    ) -> None:
         try:
             janela = min(max(MIN_HIST, int(self.janela_hist.get())), len(self.concursos))
             self.root.after(0, self._iniciar_progresso)
             self._atualizar_progresso(20, "Escolhendo pool pelo ranking do ensemble...")
 
-            resultado = gerar_apostas_fechamento(
-                self.concursos, tamanho_pool=tamanho_pool, janela_analise=janela, tamanho_jogo=tamanho_jogo
-            )
+            if reduzido:
+                resultado = gerar_apostas_fechamento_reduzido(
+                    self.concursos, tamanho_pool=tamanho_pool, janela_analise=janela,
+                    tamanho_jogo=tamanho_jogo, t_garantia=t_garantia, g_garantia=g_garantia,
+                )
+            else:
+                resultado = gerar_apostas_fechamento(
+                    self.concursos, tamanho_pool=tamanho_pool, janela_analise=janela, tamanho_jogo=tamanho_jogo
+                )
 
             self._atualizar_progresso(80, "Montando jogos do fechamento...")
             self.jogos_gerados = resultado["jogos"]
@@ -1466,13 +1533,25 @@ class RoboLotofacilUltraApp:
             self.info_backtest = None
 
             self.log(f"Pool escolhido ({tamanho_pool} dezenas): {' '.join(f'{n:02d}' for n in resultado['pool'])}")
-            self.log(f"Jogos no fechamento: {resultado['qtd_jogos']:,} (cada um com {resultado['tamanho_jogo']} dezenas)")
-            self.log(f"Garantia mínima SE as 15 sorteadas estiverem no pool: {resultado['garantia_minima']} pontos")
-            self.log(
-                "⚠️ A garantia é condicional: escolher quais dezenas entram no pool continua sendo uma "
-                "aposta. O fechamento redistribui o resultado entre vários jogos, não muda a chance de "
-                "acertar quais dezenas saem — ver VALIDACAO_ESCALA_REAL_2026-07-14.md."
-            )
+            self.log(f"Jogos no fechamento: {resultado['qtd_jogos']:,} (cada um com {tamanho_jogo} dezenas)")
+            if reduzido:
+                self.log(
+                    f"Garantia (verificada por força bruta): SE pelo menos {resultado['t_garantia']} das "
+                    f"dezenas sorteadas estiverem no pool, pelo menos UM jogo do fechamento acerta pelo "
+                    f"menos {resultado['g_garantia']} delas."
+                )
+                self.log(
+                    "⚠️ Garantia mais fraca que a do fechamento de garantia total: vale pra PELO MENOS UM "
+                    "jogo (não todos), e é condicionada a t dezenas no pool (não as 15 todas). Escolher "
+                    "quais dezenas entram no pool continua sendo uma aposta — ver docstring de fechamento.py."
+                )
+            else:
+                self.log(f"Garantia mínima SE as 15 sorteadas estiverem no pool: {resultado['garantia_minima']} pontos")
+                self.log(
+                    "⚠️ A garantia é condicional: escolher quais dezenas entram no pool continua sendo uma "
+                    "aposta. O fechamento redistribui o resultado entre vários jogos, não muda a chance de "
+                    "acertar quais dezenas saem — ver VALIDACAO_ESCALA_REAL_2026-07-14.md."
+                )
             self.log("-" * 72)
             limite_exibicao = 30
             for idx, jogo in enumerate(resultado["jogos"][:limite_exibicao], start=1):

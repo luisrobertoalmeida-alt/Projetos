@@ -1191,3 +1191,53 @@ Testado também end-to-end com dados reais (script rodado manualmente com
 grade pequena) — funciona e produz resultado plausível. Nenhuma rodada
 com grade completa/estatisticamente poderosa foi executada nesta sessão
 (fica pra quando o usuário quiser rodar de verdade).
+
+## 🔒 Fechamento reduzido (wheel "m-k-t-g") — 2026-08-08
+
+A pedido do usuário ("pode executar tudo"), implementado o fechamento
+REDUZIDO que a docstring de `fechamento.py` já citava como pendência.
+Diferente da garantia total (todas as C(m,k) combinações do pool), o
+reduzido joga um subconjunto bem menor, com uma garantia mais fraca e
+mais condicional: **SE pelo menos `t` das dezenas sorteadas estiverem no
+pool de `m` escolhidas, então GARANTIDAMENTE pelo menos UM jogo do
+fechamento acerta pelo menos `g` dessas `t` dezenas** (nomenclatura
+clássica "wheel m-k-t-g" da literatura de loteria). Exemplo real testado:
+m=18,k=15,t=13,g=11 usa só 5 jogos, contra 816 da garantia total do
+mesmo pool.
+
+**Construção**: heurística gulosa de cobertura de conjuntos (greedy set
+cover, representação por bitmask + `int.bit_count()` pra velocidade) —
+não é garantida ótima (pode não achar o menor número de jogos possível),
+mas **toda garantia é verificada por força bruta antes de ser aceita**
+(`_verificar_garantia_reduzida()`, testando literalmente cada subconjunto
+de `t` dezenas do pool contra cada jogo construído). Se a verificação
+falhar, levanta `RuntimeError` em vez de devolver uma garantia falsa —
+decisão deliberada: uma garantia matemática incorreta seria um bug grave
+pra este projeto, não um detalhe de acabamento.
+
+**Limite prático**: pool até 19 dezenas (`TAMANHO_POOL_MAXIMO_REDUZIDO`),
+um a menos que a garantia total (20). A verificação exaustiva cresce
+rápido com o pool — testado empiricamente: m=18 leva <1s, m=19 leva até
+~12s (dependendo de t/g), m=20 já passa de 1-2 minutos em Python puro
+pra várias combinações — não compensou o custo agora.
+
+**Novo na API** (`fechamento.py`): `gerar_fechamento_reduzido()` (função
+pura), `gerar_apostas_fechamento_reduzido()` (pipeline completo, escolhe
+pool pelo ranking do ensemble — mesmo padrão de `gerar_apostas_fechamento()`),
+`_verificar_garantia_reduzida()` (a verificação de força bruta),
+`TAMANHO_POOL_MAXIMO_REDUZIDO`.
+
+**Integrado à tela** (diferente do Mapa de Diversidade, que ficou só
+como script): checkbox "Fechamento Reduzido (t/g)" + campos t/g na linha
+de checkboxes, ao lado do "Pool Fecht." já existente. Quando marcado,
+`iniciar_fechamento()`/`_executar_fechamento()` chamam
+`gerar_apostas_fechamento_reduzido()` em vez de `gerar_apostas_fechamento()`,
+com mensagens de log específicas explicando a garantia mais fraca
+(diferente da garantia total: aqui vale só pra PELO MENOS UM jogo, não
+todos, e a condição é sobre `t` dezenas, não as 15 todas).
+
+9 testes novos em `test_fechamento.py`: verificação de força bruta
+isolada (aceita/rejeita casos conhecidos), caso pequeno exaustivamente
+reconferido de fora da função, o wheel 18-15-13-11 conhecido na
+literatura, validações de parâmetro (pool/t/g fora do intervalo,
+`max_jogos` insuficiente) e o pipeline completo.

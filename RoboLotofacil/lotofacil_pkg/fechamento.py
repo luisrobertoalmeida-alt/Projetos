@@ -40,11 +40,38 @@ IMPORTANTE — o que essa garantia NÃO significa:
     Isto é matematicamente neutro em valor esperado — é a natureza de
     qualquer sistema de fechamento, aqui ou em qualquer outro lugar.
 
-Este módulo cobre apenas o fechamento de GARANTIA TOTAL (todas as
-combinações do grupo). Fechamentos "reduzidos" (menos jogos, garantia
-condicionada a menos dezenas acertadas dentro do grupo) são desenhos
-combinatórios conhecidos na literatura de loteria, mas não estão
-implementados aqui — ver ARQUITETURA.md.
+FECHAMENTO REDUZIDO (desde 2026-08-08 — ver ARQUITETURA.md):
+
+    Além da garantia total acima, este módulo também implementa
+    fechamentos REDUZIDOS — o desenho combinatório clássico conhecido na
+    literatura de loteria como wheel "m-k-t-g": em vez de jogar TODAS as
+    C(m,k) combinações, joga-se um subconjunto bem menor, construído para
+    garantir que:
+
+        SE pelo menos `t` das dezenas sorteadas estiverem dentro do
+        grupo de `m` escolhidas, então GARANTIDAMENTE pelo menos UM jogo
+        do fechamento acerta pelo menos `g` dessas `t` dezenas.
+
+    Repare a diferença para a garantia total: ali a condição e a garantia
+    valem para TODOS os jogos do pacote; aqui a garantia vale pra PELO
+    MENOS UM jogo, e a condição é sobre `t` dezenas (não as 15 todas).
+    É uma garantia mais fraca e mais condicional, mas com uma fração
+    pequena do custo (ex.: m=18,k=15,t=13,g=11 usa só 5 jogos, contra
+    816 da garantia total do mesmo pool).
+
+    Construção: heurística gulosa de cobertura de conjuntos (greedy set
+    cover) — não é garantida ótima (pode não ser o menor número de jogos
+    possível pra aquela garantia), mas TODA garantia retornada é
+    verificada por força bruta antes de ser aceita (`_verificar_garantia_reduzida()`)
+    — testando literalmente todo subconjunto de `t` dezenas do pool contra
+    todos os jogos construídos. Nunca confia só na construção: uma
+    garantia matemática falsa seria um bug grave, não um detalhe.
+
+    Limite prático: pool até 19 dezenas (`TAMANHO_POOL_MAXIMO_REDUZIDO`).
+    A verificação exaustiva por força bruta cresce rápido com o tamanho
+    do pool (C(pool, t) subconjuntos-alvo × C(pool, k) jogos candidatos
+    a cada passo da construção) — m=20 já passa de 1-2 minutos em Python
+    puro para várias combinações de t/g testadas; não vale o custo agora.
 """
 from __future__ import annotations
 
@@ -60,6 +87,7 @@ from .genetico import recortar_historico_para_analise
 
 TAMANHO_POOL_MINIMO = _cfg.TAMANHO_JOGO + 1   # 16 (padrão) — ver tamanho_pool_minimo() para o valor dinâmico
 TAMANHO_POOL_MAXIMO = 20                  # C(20,15) = 15.504 jogos — já é um limite prático alto
+TAMANHO_POOL_MAXIMO_REDUZIDO = 19         # ver docstring do módulo — custo da verificação exaustiva
 
 
 def tamanho_pool_minimo(tamanho_jogo: int | None = None) -> int:
@@ -120,6 +148,149 @@ def gerar_fechamento_garantia_total(pool: list[int], tamanho_jogo: int | None = 
     return [sorted(c) for c in combinations(pool, tamanho_jogo)]
 
 
+def _popcount(x: int) -> int:
+    """int.bit_count() (Python >=3.10) com fallback pra versões mais antigas."""
+    try:
+        return x.bit_count()
+    except AttributeError:
+        return bin(x).count("1")
+
+
+def _verificar_garantia_reduzida(
+    pool_size: int, jogos_idx: list[tuple[int, ...]], t_garantia: int, g_garantia: int
+) -> bool:
+    """
+    Verifica por FORÇA BRUTA que todo subconjunto de `t_garantia` posições
+    (0..pool_size-1) é coberto (interseção >= g_garantia) por pelo menos
+    um dos `jogos_idx`.
+
+    Nunca pule esta verificação: é a única coisa que separa uma garantia
+    matemática real de uma alegação falsa vinda de uma heurística gulosa
+    que pode ter parado cedo demais ou tem um bug.
+    """
+    jogos_bits = [sum(1 << p for p in j) for j in jogos_idx]
+    for alvo in combinations(range(pool_size), t_garantia):
+        alvo_bits = sum(1 << p for p in alvo)
+        if not any(_popcount(jb & alvo_bits) >= g_garantia for jb in jogos_bits):
+            return False
+    return True
+
+
+def gerar_fechamento_reduzido(
+    pool: list[int],
+    tamanho_jogo: int | None = None,
+    t_garantia: int = 13,
+    g_garantia: int = 11,
+    max_jogos: int | None = None,
+) -> dict:
+    """
+    Gera um fechamento REDUZIDO (wheel "m-k-t-g") sobre `pool`: um
+    subconjunto de jogos de `tamanho_jogo` dezenas tal que, SE pelo menos
+    `t_garantia` das dezenas sorteadas estiverem dentro do pool, então
+    GARANTIDAMENTE pelo menos um jogo do fechamento acerta pelo menos
+    `g_garantia` dessas `t_garantia` dezenas (ver docstring do módulo
+    pra a diferença em relação à garantia total).
+
+    Construção gulosa (greedy set cover): a cada passo, escolhe o jogo
+    candidato (dentre todas as C(pool, tamanho_jogo) combinações) que
+    cobre o maior número de alvos (subconjuntos de t_garantia dezenas)
+    ainda não cobertos, até cobrir todos. Não é garantido ser o menor
+    número de jogos possível — é uma heurística — mas o resultado é
+    sempre verificado por força bruta antes de retornar
+    (`_verificar_garantia_reduzida`); se a verificação falhar, levanta
+    RuntimeError em vez de devolver uma garantia que não é real.
+
+    Args:
+        pool: dezenas do grupo (m > tamanho_jogo).
+        tamanho_jogo: tamanho de cada jogo (k). Padrão: config.TAMANHO_JOGO.
+        t_garantia: quantas dezenas sorteadas precisam estar no pool para
+            a garantia valer (t <= m).
+        g_garantia: quantas dessas t_garantia dezenas algum jogo garante
+            acertar (g <= min(t_garantia, tamanho_jogo)).
+        max_jogos: teto de jogos a tentar (padrão: sem teto, roda até
+            cobrir tudo ou esgotar candidatos). Se o teto for atingido
+            sem cobertura completa, levanta ValueError — não devolve um
+            fechamento com garantia incompleta silenciosamente.
+
+    Returns:
+        Dict com "jogos", "qtd_jogos", "pool", "tamanho_jogo",
+        "t_garantia", "g_garantia", "garantia_verificada" (sempre True
+        se a função retornar sem erro).
+    """
+    if tamanho_jogo is None:
+        tamanho_jogo = _cfg.TAMANHO_JOGO
+    pool = sorted(set(int(n) for n in pool))
+    m = len(pool)
+    k = tamanho_jogo
+
+    if not all(1 <= n <= 25 for n in pool):
+        raise ValueError("Pool de fechamento contém dezena fora do intervalo 1–25.")
+    if m <= k:
+        raise ValueError(f"Pool precisa ter mais de {k} dezenas para formar um fechamento (recebido: {m}).")
+    if m > TAMANHO_POOL_MAXIMO_REDUZIDO:
+        raise ValueError(
+            f"Pool de {m} dezenas acima do limite prático de fechamento reduzido "
+            f"({TAMANHO_POOL_MAXIMO_REDUZIDO} — ver docstring do módulo)."
+        )
+    if not (1 <= t_garantia <= m):
+        raise ValueError(f"t_garantia precisa estar entre 1 e {m} (recebido: {t_garantia}).")
+    if not (1 <= g_garantia <= min(t_garantia, k)):
+        raise ValueError(
+            f"g_garantia precisa estar entre 1 e min(t_garantia, tamanho_jogo)="
+            f"{min(t_garantia, k)} (recebido: {g_garantia})."
+        )
+
+    posicoes = list(range(m))
+    alvos_idx = list(combinations(posicoes, t_garantia))
+    alvos_bits = [sum(1 << p for p in a) for a in alvos_idx]
+    candidatos_idx = list(combinations(posicoes, k))
+    candidatos_bits = [sum(1 << p for p in c) for c in candidatos_idx]
+
+    nao_cobertos = list(range(len(alvos_bits)))
+    selecionados: list[tuple[int, ...]] = []
+    limite = max_jogos if max_jogos is not None else len(candidatos_idx)
+
+    while nao_cobertos and len(selecionados) < limite:
+        melhor_i = -1
+        melhor_cobertura = -1
+        melhor_cobertos_agora: list[int] = []
+        for ci, cbits in enumerate(candidatos_bits):
+            cobertos_agora = [ai for ai in nao_cobertos if _popcount(cbits & alvos_bits[ai]) >= g_garantia]
+            if len(cobertos_agora) > melhor_cobertura:
+                melhor_cobertura = len(cobertos_agora)
+                melhor_i = ci
+                melhor_cobertos_agora = cobertos_agora
+        if melhor_i < 0 or melhor_cobertura <= 0:
+            break
+        selecionados.append(candidatos_idx[melhor_i])
+        cobertos_set = set(melhor_cobertos_agora)
+        nao_cobertos = [a for a in nao_cobertos if a not in cobertos_set]
+
+    if nao_cobertos:
+        raise ValueError(
+            f"Não foi possível atingir a garantia t={t_garantia}/g={g_garantia} para "
+            f"pool={m}/jogo={k} dentro do limite de {limite} jogos "
+            f"({len(nao_cobertos)} de {len(alvos_bits)} alvos ficaram descobertos)."
+        )
+
+    if not _verificar_garantia_reduzida(m, selecionados, t_garantia, g_garantia):
+        raise RuntimeError(
+            "Falha na verificação exaustiva da garantia do fechamento reduzido -- "
+            "bug na construção, não confie neste resultado."
+        )
+
+    jogos = [sorted(pool[p] for p in c) for c in selecionados]
+    return {
+        "pool": pool,
+        "jogos": jogos,
+        "qtd_jogos": len(jogos),
+        "tamanho_jogo": k,
+        "t_garantia": t_garantia,
+        "g_garantia": g_garantia,
+        "garantia_verificada": True,
+    }
+
+
 def escolher_pool_por_ranking(concursos_completos: list, tamanho_pool: int = 16, janela_analise: int = 120) -> tuple[list[int], dict]:
     """
     Escolhe o pool de `tamanho_pool` dezenas a partir do ranking do ensemble
@@ -178,5 +349,50 @@ def gerar_apostas_fechamento(concursos_completos: list, tamanho_pool: int = 16, 
         "jogos": jogos,
         "qtd_jogos": len(jogos),
         "garantia_minima": garantia_minima(tamanho_pool, tamanho_jogo),
+        "analise": analise,
+    }
+
+
+def gerar_apostas_fechamento_reduzido(
+    concursos_completos: list,
+    tamanho_pool: int = 18,
+    janela_analise: int = 120,
+    tamanho_jogo: int | None = None,
+    t_garantia: int = 13,
+    g_garantia: int = 11,
+    max_jogos: int | None = None,
+) -> dict:
+    """
+    Pipeline completo do fechamento REDUZIDO: escolhe o pool pelo ranking
+    do ensemble multi-IA (mesma lógica de `gerar_apostas_fechamento`) e
+    gera um fechamento reduzido "m-k-t-g" sobre esse pool (ver docstring
+    do módulo e de `gerar_fechamento_reduzido`).
+
+    Retorna um dict com jogos, pool, t_garantia, g_garantia, quantidade
+    de jogos, o tamanho_jogo efetivo e a análise/ensemble usados pra
+    escolher o pool (auditoria) -- mesmo formato de
+    `gerar_apostas_fechamento`, mais os campos específicos do reduzido.
+    """
+    if tamanho_jogo is None:
+        tamanho_jogo = _cfg.TAMANHO_JOGO
+    minimo = tamanho_pool_minimo(tamanho_jogo)
+    if not (minimo <= tamanho_pool <= TAMANHO_POOL_MAXIMO_REDUZIDO):
+        raise ValueError(
+            f"tamanho_pool deve estar entre {minimo} e {TAMANHO_POOL_MAXIMO_REDUZIDO} "
+            f"para fechamento reduzido com tamanho_jogo={tamanho_jogo} (recebido: {tamanho_pool})."
+        )
+    pool, analise = escolher_pool_por_ranking(concursos_completos, tamanho_pool=tamanho_pool, janela_analise=janela_analise)
+    resultado_reduzido = gerar_fechamento_reduzido(
+        pool, tamanho_jogo=tamanho_jogo, t_garantia=t_garantia, g_garantia=g_garantia, max_jogos=max_jogos
+    )
+    return {
+        "pool": pool,
+        "tamanho_pool": tamanho_pool,
+        "tamanho_jogo": tamanho_jogo,
+        "jogos": resultado_reduzido["jogos"],
+        "qtd_jogos": resultado_reduzido["qtd_jogos"],
+        "t_garantia": t_garantia,
+        "g_garantia": g_garantia,
+        "garantia_verificada": resultado_reduzido["garantia_verificada"],
         "analise": analise,
     }

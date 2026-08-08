@@ -25,8 +25,12 @@ from lotofacil_pkg.fechamento import (
     escolher_pool_por_ranking,
     gerar_apostas_fechamento,
     tamanho_pool_minimo,
+    gerar_fechamento_reduzido,
+    gerar_apostas_fechamento_reduzido,
+    _verificar_garantia_reduzida,
     TAMANHO_POOL_MINIMO,
     TAMANHO_POOL_MAXIMO,
+    TAMANHO_POOL_MAXIMO_REDUZIDO,
 )
 
 
@@ -209,6 +213,110 @@ class TestTamanhoJogoDiferenteDe15(unittest.TestCase):
         random.seed(29)
         numeros = list(range(1, 26))
         return [sorted(random.sample(numeros, 15)) for _ in range(200)]
+
+
+class TestVerificarGarantiaReduzida(unittest.TestCase):
+    """
+    Testa a verificação por força bruta isoladamente -- ela é a única
+    coisa que separa uma garantia real de uma alegação falsa, então
+    precisa ser correta tanto pra aceitar um sistema válido quanto pra
+    rejeitar um inválido.
+    """
+
+    def test_aceita_fechamento_completo_como_caso_trivial(self):
+        # Com t=k=tamanho do jogo e g=k, jogar TODAS as combinações de k
+        # sempre cobre qualquer alvo de tamanho k (ele PRÓPRIO é um jogo).
+        m, k = 6, 4
+        jogos_idx = list(combinations(range(m), k))
+        self.assertTrue(_verificar_garantia_reduzida(m, jogos_idx, t_garantia=k, g_garantia=k))
+
+    def test_rejeita_sistema_insuficiente(self):
+        # Só um jogo não pode garantir cobertura de TODOS os alvos de t=5
+        # dezenas com g=4 num pool de 7 -- existem alvos que não intersectam
+        # esse jogo o suficiente.
+        m = 7
+        jogos_idx = [tuple(range(5))]  # um único jogo de 5 dezenas (posições 0-4)
+        self.assertFalse(_verificar_garantia_reduzida(m, jogos_idx, t_garantia=5, g_garantia=4))
+
+    def test_sistema_vazio_nunca_cobre_nada(self):
+        self.assertFalse(_verificar_garantia_reduzida(6, [], t_garantia=3, g_garantia=2))
+
+
+class TestGerarFechamentoReduzido(unittest.TestCase):
+    def test_caso_pequeno_exaustivamente_verificavel(self):
+        """
+        Pool pequeno (7 dezenas) onde dá pra confirmar manualmente, além
+        da verificação interna, que a garantia é real: para TODO
+        subconjunto de 6 dezenas do pool, pelo menos um jogo (de 5
+        dezenas) do fechamento acerta pelo menos 4 delas.
+        """
+        pool = [1, 2, 3, 4, 5, 6, 7]
+        resultado = gerar_fechamento_reduzido(pool, tamanho_jogo=5, t_garantia=6, g_garantia=4)
+        self.assertTrue(resultado["garantia_verificada"])
+        jogos = resultado["jogos"]
+        self.assertGreater(len(jogos), 0)
+        # Confirma a garantia de novo, de fora, sem depender da função interna.
+        for alvo in combinations(pool, 6):
+            alvo_set = set(alvo)
+            self.assertTrue(
+                any(len(set(j) & alvo_set) >= 4 for j in jogos),
+                f"Nenhum jogo cobre o alvo {alvo} com pelo menos 4 acertos.",
+            )
+
+    def test_wheel_18_15_13_11_conhecido_na_literatura(self):
+        """
+        m=18,k=15,t=13,g=11 é um fechamento reduzido clássico e publicado
+        na literatura de loteria -- usa muito menos que os 816 jogos da
+        garantia total do mesmo pool.
+        """
+        pool = list(range(1, 19))  # 18 dezenas
+        resultado = gerar_fechamento_reduzido(pool, tamanho_jogo=15, t_garantia=13, g_garantia=11)
+        self.assertTrue(resultado["garantia_verificada"])
+        self.assertLess(resultado["qtd_jogos"], comb(18, 15))  # bem menos que 816
+        for j in resultado["jogos"]:
+            self.assertEqual(len(j), 15)
+            self.assertTrue(set(j) <= set(pool))
+
+    def test_rejeita_pool_maior_que_limite_reduzido(self):
+        pool = list(range(1, 22))  # 21 dezenas
+        with self.assertRaises(ValueError):
+            gerar_fechamento_reduzido(pool, tamanho_jogo=15, t_garantia=13, g_garantia=11)
+
+    def test_rejeita_g_maior_que_t(self):
+        pool = list(range(1, 19))
+        with self.assertRaises(ValueError):
+            gerar_fechamento_reduzido(pool, tamanho_jogo=15, t_garantia=11, g_garantia=13)
+
+    def test_rejeita_t_maior_que_pool(self):
+        pool = list(range(1, 8))
+        with self.assertRaises(ValueError):
+            gerar_fechamento_reduzido(pool, tamanho_jogo=5, t_garantia=10, g_garantia=4)
+
+    def test_max_jogos_insuficiente_levanta_erro_em_vez_de_garantia_incompleta(self):
+        pool = list(range(1, 19))
+        with self.assertRaises(ValueError):
+            gerar_fechamento_reduzido(pool, tamanho_jogo=15, t_garantia=13, g_garantia=11, max_jogos=1)
+
+
+class TestGerarApostasFechamentoReduzido(unittest.TestCase):
+    def setUp(self):
+        random.seed(31)
+        numeros = list(range(1, 26))
+        self.hist = [sorted(random.sample(numeros, 15)) for _ in range(200)]
+
+    def test_estrutura_do_resultado(self):
+        r = gerar_apostas_fechamento_reduzido(
+            self.hist, tamanho_pool=18, tamanho_jogo=15, t_garantia=13, g_garantia=11
+        )
+        self.assertTrue(r["garantia_verificada"])
+        self.assertEqual(r["tamanho_pool"], 18)
+        self.assertEqual(len(r["pool"]), 18)
+        self.assertLess(r["qtd_jogos"], comb(18, 15))
+        self.assertEqual(set(r["pool"]), set(n for j in r["jogos"] for n in j))
+
+    def test_rejeita_tamanho_pool_acima_do_limite_reduzido(self):
+        with self.assertRaises(ValueError):
+            gerar_apostas_fechamento_reduzido(self.hist, tamanho_pool=TAMANHO_POOL_MAXIMO_REDUZIDO + 1)
 
 
 if __name__ == "__main__":
