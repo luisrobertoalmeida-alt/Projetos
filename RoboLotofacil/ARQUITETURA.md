@@ -1130,3 +1130,64 @@ mortas — nenhum lugar do código faz `INSERT` nelas. Provavelmente schema
 de uma versão anterior, substituído por `elo_modelos` (tabela) e
 `dados/pesos_modelos.json` (arquivo, usado por `v20_2_poda_inteligente.py`).
 Não removidas nesta rodada — é só schema não usado, não um bug ativo.
+
+## 🧪 Mapa de Diversidade — primeiro passo do "Nível 4" (Meta-Cientista) — 2026-08-08
+
+O usuário trouxe uma proposta de 5 níveis de "meta-aprendizado" pro robô,
+do nível 1 (memória + ajustes automáticos, já existente) até o nível 5
+(hipótese + experimentação + validação automatizada). Discussão completa
+não repetida aqui (ver histórico da conversa), mas o resumo da análise:
+
+- Níveis 1-2 já existem (memória, ensemble, ELO, autocalibração).
+- Nível 4 ("Meta-Cientista" rodando pequenos experimentos e só mantendo
+  o que sobrevive fora da amostra) já existe parcialmente — é exatamente
+  o que o Mapa G×P + `auditoria_cientifica.py` fazem, só que aplicado a
+  um parâmetro (G/P).
+- Níveis 3 e 5 (o robô "explicando por que" uma estratégia ganhou/perdeu,
+  em linguagem natural) foram desaconselhados: como não há sinal real
+  nesse domínio (confirmado repetidamente por todas as calibrações), um
+  sistema assim tende a gerar explicações plausíveis para puro ruído.
+- Risco identificado no próprio Nível 4 se rodar sem controle: um
+  "Cientista" testando vários hiperparâmetros continuamente, ao longo do
+  tempo, acumula tentativas sem correção — a correção Holm que já existe
+  corrige uma *rodada*, não o acumulado de todas as rodadas já feitas na
+  vida do robô. Sem orçamento fixo de experimentos e sem holdout nunca
+  tocado durante a busca, o sistema eventualmente "descobre" uma melhoria
+  falsa só pelo volume de tentativas.
+
+**Passo concreto implementado** (usuário autorizou "faça o que achar
+melhor"): `mapear_vale_diversidade()` (`v21_5_melhorias_cientificas.py`),
+espelhando `mapear_vale_gp()` linha por linha na metodologia estatística
+(Cohen's d pareado, sign-flip, TOST, correção Holm/Bonferroni) — só que
+varrendo `diversidade` (parâmetro estratégico interno do algoritmo
+genético, `estrategia.get("diversidade", 0.75)` em `genetico.py`) em vez
+de G/P, que ficam FIXOS na configuração real (G=100/P=77). A variação é
+injetada via `estrategia_override={"diversidade": d}` — mecanismo que já
+existia em `gerar_apostas()`, usado antes só internamente.
+
+Diferença chave em relação a G×P: `diversidade` não tem uma "config real
+fixa" única (é recalibrada automaticamente por `aplicar_aprendizado_na_estrategia()`
+a cada geração — ver "Ajustes atuais: diversidade=+0.019" no Dashboard
+Analítico), então não há ponto de grade especial como o antigo G=100.
+Grade padrão: `[0.5, 0.6, 0.7, 0.75, 0.8, 0.9]` (0.75 é o fallback
+hardcoded histórico).
+
+Script standalone `mapa_diversidade_custom.py` (mesmo padrão de
+`mapa_gp_custom.py`) permite rodar com grade customizada via linha de
+comando. **Não integrado à tela ainda** — mesma decisão de
+`mapa_gp_custom.py` originalmente: prototipar fora da UI primeiro, só
+integrar depois de uso e validação.
+
+**Disciplina documentada na própria função e no script** (não é só nota
+de arquitetura — está no código): grade de valores deve ser fixada a
+priori e mantida entre rodadas; qualquer "POSSIVEL_VALE" deve ser tratado
+como hipótese a confirmar numa amostra nova, não como conclusão
+definitiva — a correção Holm já embutida só protege contra múltiplas
+comparações *dentro* de uma rodada.
+
+4 testes novos em `test_estatistica_pareada.py`
+(`TestMapearValeDiversidade`), mesmo padrão de `TestMapearValeGp`.
+Testado também end-to-end com dados reais (script rodado manualmente com
+grade pequena) — funciona e produz resultado plausível. Nenhuma rodada
+com grade completa/estatisticamente poderosa foi executada nesta sessão
+(fica pra quando o usuário quiser rodar de verdade).

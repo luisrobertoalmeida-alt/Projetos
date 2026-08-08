@@ -626,6 +626,265 @@ def mapear_vale_gp(
     }
 
 
+def mapear_vale_diversidade(
+    concursos: list[list[int]],
+    fn_gerar: Callable,
+    janela: int = 150,
+    passos: int = 30,
+    qtd_jogos: int = 20,
+    pontos_diversidade: list[float] | None = None,
+    margem_equivalencia: float = 0.3,
+    metodo_correcao: str = "holm",
+    status_cb: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """
+    Mapeia o espaço de `diversidade` (parâmetro estratégico interno do
+    algoritmo genético — ver `estrategia.get("diversidade", ...)` em
+    `genetico.py`) com a mesma metodologia PAREADA de `mapear_vale_gp()`:
+    Cohen's d pareado, teste de permutação sign-flip, TOST e correção
+    Holm/Bonferroni para múltiplas comparações.
+
+    Este é o primeiro passo concreto do "Nível 4" discutido com o
+    usuário (2026-08-08, ver ARQUITETURA.md): em vez de um "Meta-Cientista"
+    genérico testando vários hiperparâmetros de uma vez (risco real de
+    p-hacking acumulado ao longo do tempo, sem controle), começa com UM
+    parâmetro por vez, reaproveitando a mesma infraestrutura estatística
+    já validada do Mapa G×P. G/P ficam FIXOS na configuração real de
+    produção (não variam aqui) — só `diversidade` varia, isolando o
+    efeito desse parâmetro especificamente.
+
+    Diferente de G×P, `diversidade` não tem uma "configuração real fixa"
+    única para servir de referência natural (é recalibrada
+    automaticamente por `aplicar_aprendizado_na_estrategia()` a cada
+    geração, ver Dashboard Analítico — "Ajustes atuais: diversidade=+0.019").
+    A referência aqui é escolhida da mesma forma que em G×P: o extremo
+    (mínimo ou máximo) da grade com a maior média observada.
+
+    IMPORTANTE — disciplina experimental (ver a conversa que motivou esta
+    função): a grade de valores testados deve ser decidida ANTES de rodar
+    e mantida fixa entre rodadas — não adicione pontos novos "pra ver se
+    acha algo" depois de observar um resultado promissor, isso reintroduz
+    o problema de múltiplas comparações que a correção Holm desta função
+    já resolve *dentro* de uma rodada, mas não entre rodadas diferentes
+    ao longo do tempo. Se rodar este mapa mais de uma vez com grades
+    diferentes, trate qualquer "POSSIVEL_VALE" como hipótese a confirmar
+    numa amostra nova (concursos ainda não usados em nenhuma rodada
+    anterior), não como conclusão definitiva.
+
+    Args:
+        concursos:  histórico completo de concursos.
+        fn_gerar:   função(hist, diversidade, qtd) -> list[list[int]] que
+                    gera jogos com G/P fixos (via closure do chamador) e
+                    `estrategia_override={"diversidade": diversidade}`.
+        janela:     tamanho da janela de histórico para cada passo.
+        passos:     número de concursos de teste por configuração.
+        qtd_jogos:  jogos por pacote.
+        pontos_diversidade: lista de valores de diversidade a testar.
+                    Padrão: [0.5, 0.6, 0.7, 0.75, 0.8, 0.9] — 0.75 é o
+                    fallback histórico hardcoded em genetico.py.
+        margem_equivalencia: margem do TOST (mesma unidade de "melhor
+                    jogo do pacote"). Definir a priori.
+        metodo_correcao: "holm" (padrão) ou "bonferroni".
+        status_cb:  callback de progresso (opcional).
+
+    Returns:
+        Mesma estrutura de `mapear_vale_gp()`, com "d" no lugar de "g" em
+        cada entrada de `resultados` e `referencia_extremo`.
+    """
+    from .auditoria_cientifica import corrigir_multiplas_comparacoes
+    from .v20_6_bootstrap import cohen_d_pareado, teste_significancia_pareado, tost_equivalencia
+
+    numeros = list(range(1, 26))
+
+    if pontos_diversidade is None:
+        pontos_diversidade = [0.5, 0.6, 0.7, 0.75, 0.8, 0.9]
+
+    total = len(concursos)
+    inicio = max(janela, total - passos)
+
+    resultados = []
+    linhas_por_d = {}  # diversidade -> {concurso_idx: melhor_robo}
+
+    for idx_d, d in enumerate(pontos_diversidade):
+        nome = f"diversidade={d}"
+        if status_cb:
+            status_cb(f"[{idx_d+1}/{len(pontos_diversidade)}] Mapeando {nome}...")
+
+        linhas_cfg = []
+        por_concurso = {}
+        for i in range(inicio, total):
+            base = concursos[:i]
+            real = sorted(concursos[i])
+
+            try:
+                jogos_robo = fn_gerar(base, d, qtd_jogos)
+            except Exception:
+                continue
+
+            jogos_ale = [sorted(random.sample(numeros, 15)) for _ in range(qtd_jogos)]
+
+            acertos_robo = [_acertos(j, real) for j in jogos_robo]
+            acertos_ale = [_acertos(j, real) for j in jogos_ale]
+
+            melhor_robo = max(acertos_robo) if acertos_robo else 0
+            melhor_ale = max(acertos_ale) if acertos_ale else 0
+
+            linhas_cfg.append({
+                "melhor_robo": melhor_robo,
+                "melhor_ale": melhor_ale,
+                "vantagem": melhor_robo - melhor_ale,
+            })
+            por_concurso[i] = melhor_robo
+
+        if not linhas_cfg:
+            continue
+
+        linhas_por_d[d] = por_concurso
+
+        n = len(linhas_cfg)
+        media_melhor = round(mean(r["melhor_robo"] for r in linhas_cfg), 4)
+        pct_12 = round(100 * sum(1 for r in linhas_cfg if r["melhor_robo"] >= 12) / n, 2)
+        pct_13 = round(100 * sum(1 for r in linhas_cfg if r["melhor_robo"] >= 13) / n, 2)
+        vit_robo = sum(1 for r in linhas_cfg if r["vantagem"] > 0)
+        vantagem_pct = round(100 * vit_robo / n, 2)
+
+        resultados.append({
+            "nome": nome,
+            "d": d,
+            "passos_executados": n,
+            "media_melhor": media_melhor,
+            "pct_12_mais": pct_12,
+            "pct_13_mais": pct_13,
+            "vit_robo": vit_robo,
+            "vantagem_pct": vantagem_pct,
+            "score": round(
+                media_melhor * 1.0 + pct_12 * 0.10 + pct_13 * 0.25 + vantagem_pct * 0.05,
+                4
+            ),
+        })
+
+        if status_cb:
+            status_cb(
+                f"  {nome}: média_melhor={media_melhor} | 12+={pct_12}% "
+                f"| vantagem={vantagem_pct}%"
+            )
+
+    if not resultados:
+        return {"resultados": [], "erro": "Nenhuma configuração executada."}
+
+    resultados_ord = sorted(resultados, key=lambda r: r["score"], reverse=True)
+    melhor = resultados_ord[0]
+
+    d_vals = sorted(linhas_por_d.keys())
+    comparacoes_pareadas = []
+    referencia_extremo = None
+
+    if len(d_vals) >= 2:
+        d_min, d_max = d_vals[0], d_vals[-1]
+        media_por_d = {r["d"]: r["media_melhor"] for r in resultados}
+        referencia_extremo = d_max if media_por_d[d_max] >= media_por_d[d_min] else d_min
+
+        ref_por_concurso = linhas_por_d[referencia_extremo]
+        comparacoes_por_d = {}
+        pendentes = []
+        for d in d_vals:
+            if d == referencia_extremo:
+                continue
+            outro_por_concurso = linhas_por_d[d]
+            indices_comuns = sorted(set(ref_por_concurso) & set(outro_por_concurso))
+            if len(indices_comuns) < 10:
+                comparacoes_por_d[d] = {
+                    "d": d, "referencia": referencia_extremo, "n": len(indices_comuns),
+                    "veredito": "INCONCLUSIVO",
+                    "motivo": "menos de 10 passos em comum entre as duas configurações",
+                }
+                continue
+
+            ref_dados = [{"acertos": ref_por_concurso[i]} for i in indices_comuns]
+            outro_dados = [{"acertos": outro_por_concurso[i]} for i in indices_comuns]
+
+            cohen = cohen_d_pareado(ref_dados, outro_dados)
+            sig = teste_significancia_pareado(ref_dados, outro_dados, n_reamostras=3000)
+            tost = tost_equivalencia(ref_dados, outro_dados, margem=margem_equivalencia, n_reamostras=3000)
+            pendentes.append({"d": d, "n": len(indices_comuns), "cohen": cohen, "sig": sig, "tost": tost})
+
+        if pendentes:
+            p_values_brutos = [item["sig"]["p_value"] for item in pendentes]
+            corrigidos = corrigir_multiplas_comparacoes(p_values_brutos, metodo=metodo_correcao, alpha=0.05)
+            for item, corr in zip(pendentes, corrigidos):
+                cohen, sig, tost = item["cohen"], item["sig"], item["tost"]
+                if tost["equivalente"]:
+                    veredito = "EQUIVALENTE"
+                elif corr["significativo_corrigido"] and abs(cohen["cohen_d_pareado"]) >= 0.2 and sig["delta_obs"] > 0:
+                    veredito = "POSSIVEL_VALE"
+                else:
+                    veredito = "INCONCLUSIVO"
+
+                comparacoes_por_d[item["d"]] = {
+                    "d": item["d"],
+                    "referencia": referencia_extremo,
+                    "n": item["n"],
+                    "cohen_d_pareado": cohen["cohen_d_pareado"],
+                    "magnitude": cohen["magnitude"],
+                    "p_value": sig["p_value"],
+                    "p_ajustado": corr["p_ajustado"],
+                    "delta_obs": sig["delta_obs"],
+                    "tost_equivalente": tost["equivalente"],
+                    "ic_90": tost["ic_90"],
+                    "veredito": veredito,
+                }
+
+        comparacoes_pareadas = [comparacoes_por_d[d] for d in d_vals if d != referencia_extremo]
+
+    vale_confirmado = any(c.get("veredito") == "POSSIVEL_VALE" for c in comparacoes_pareadas)
+    todas_equivalentes = bool(comparacoes_pareadas) and all(
+        c.get("veredito") == "EQUIVALENTE" for c in comparacoes_pareadas
+    )
+
+    if vale_confirmado:
+        candidatos = [c["d"] for c in comparacoes_pareadas if c["veredito"] == "POSSIVEL_VALE"]
+        analise = (
+            f"Vale de diversidade POSSÍVEL: diversidade={referencia_extremo} supera "
+            f"estatisticamente (p_ajustado<0.05 após correção {metodo_correcao}, TOST "
+            f"rejeita equivalência, efeito >= pequeno) as configurações "
+            f"diversidade={candidatos} num teste pareado (mesmos {passos} sorteios reais "
+            f"em todas, G/P fixos). Trate como hipótese a confirmar numa amostra nova "
+            f"antes de mudar a configuração de produção — ver docstring desta função."
+        )
+    elif todas_equivalentes:
+        analise = (
+            f"Vale de diversidade NÃO CONFIRMADO: TOST (margem=±{margem_equivalencia}) "
+            f"confirma equivalência prática entre diversidade={referencia_extremo} e "
+            f"todas as demais configurações testadas. Melhor por score heurístico: "
+            f"{melhor['nome']}, mas qualquer configuração testada é estatisticamente "
+            f"equivalente."
+        )
+    else:
+        analise = (
+            f"Vale de diversidade INCONCLUSIVO com {passos} passos: nem significância "
+            f"nem equivalência (TOST) foram estabelecidas para todas as comparações. "
+            f"Aumentar `passos` antes de decidir. Melhor por score heurístico nesta "
+            f"triagem: {melhor['nome']} (score={melhor['score']:.3f})."
+        )
+
+    return {
+        "resultados": resultados_ord,
+        "melhor_config": melhor,
+        "referencia_extremo": referencia_extremo,
+        "comparacoes_pareadas": comparacoes_pareadas,
+        "vale_confirmado": vale_confirmado,
+        "todas_equivalentes": todas_equivalentes,
+        "analise": analise,
+        "parametros": {
+            "janela": janela,
+            "passos": passos,
+            "qtd_jogos": qtd_jogos,
+            "pontos_diversidade_testados": pontos_diversidade,
+            "margem_equivalencia": margem_equivalencia,
+        },
+    }
+
+
 # ─── RELATÓRIO CONSOLIDADO ────────────────────────────────────────────────────
 
 def relatorio_melhorias_cientificas(
