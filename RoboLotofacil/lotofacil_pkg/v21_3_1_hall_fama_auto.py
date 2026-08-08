@@ -38,13 +38,35 @@ def _score_composto(
     Score composto para o Hall da Fama.
     Combina ELO normalizado + acertos médios + taxas de prêmio.
     Escala: quanto maior, melhor.
+
+    `pct_11`/`pct_12`/`pct_13` chegam em escala 0-100 (ex.: 92.0, não 0.92
+    -- mesma convenção de `pct_11_mais` em backtest.py). Até 2026-08-08 essa
+    função tratava esses valores como se já estivessem em 0-1, o que
+    inflava `taxa_premio` em ~100x e fazia o score composto ser dominado
+    quase inteiramente por ele, ignorando ELO e acertos médios na prática
+    (achado do usuário, ver ARQUITETURA.md).
     """
     elo_norm    = (elo - 1000.0) / 1500.0          # 0→0, 1500→0.33, 2500→1.0
     acertos_norm = max(0.0, (media_acertos - 9.0) / 4.0)  # 9→0, 13→1.0
-    taxa_premio  = 0.50 * pct_11 + 0.35 * pct_12 + 0.15 * pct_13
+    taxa_premio  = (0.50 * pct_11 + 0.35 * pct_12 + 0.15 * pct_13) / 100.0
     return round(
         0.35 * elo_norm + 0.40 * acertos_norm + 0.25 * taxa_premio, 6
     )
+
+
+def _nome_para_elo(nome: str) -> str:
+    """
+    Normaliza o nome de uma entrada do ranking científico para a chave usada
+    no banco de ELO.
+
+    O campeonato de modelos isolados nomeia as entradas como "Modelo
+    isolado: {modelo}" (ver backtest.py), mas o banco de ELO usa só o nome
+    puro do modelo -- sem essa normalização, `elos.get(nome, 1500.0)` nunca
+    batia com nada e todo modelo aparecia com ELO=1500 fixo no Hall da
+    Fama, mesmo com ELOs reais bem diferentes entre si (achado do usuário,
+    ver ARQUITETURA.md, 2026-08-08).
+    """
+    return nome.split(": ", 1)[-1] if ": " in nome else nome
 
 
 def registrar_hall_fama(
@@ -74,7 +96,7 @@ def registrar_hall_fama(
     entradas = []
     for r in ranking_cientifico:
         nome = r.get("nome", "")
-        elo  = elos.get(nome, 1500.0)
+        elo  = elos.get(_nome_para_elo(nome), elos.get(nome, 1500.0))
         media_acertos = r.get("media_geral", r.get("media_melhor", 0.0))
         pct_11 = r.get("pct_11_mais", 0.0)
         pct_12 = r.get("pct_12_mais", 0.0)
@@ -194,12 +216,15 @@ def relatorio_hall_fama(janela: str = "geral") -> str:
         "-" * 60,
     ]
     for e in ranking:
+        # pct_11_mais/pct_12_mais ja vem em escala 0-100 (ver registrar_hall_fama);
+        # nao multiplicar por 100 de novo aqui (bug ate 2026-08-08, dava
+        # "9200.0%" -- ver ARQUITETURA.md).
         linhas.append(
             f"  {e['posicao']:<3} {e['nome']:<14} "
             f"{e['elo']:>6.0f} "
             f"{e['media_acertos']:>6.3f} "
-            f"{e['pct_11_mais']*100:>4.1f}% "
-            f"{e['pct_12_mais']*100:>4.1f}% "
+            f"{e['pct_11_mais']:>4.1f}% "
+            f"{e['pct_12_mais']:>4.1f}% "
             f"{e['score_composto']:>7.4f}"
         )
     return "\n".join(linhas)

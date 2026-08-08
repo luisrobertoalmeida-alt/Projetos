@@ -135,7 +135,23 @@ def registrar_desempenho_historico_robo(jogos: list, resultado_real: list[int], 
     if len(resultado) != 15:
         raise ValueError("Resultado real inválido para registro de desempenho.")
 
-    jogos_limpos = [sorted(set(int(n) for n in j)) for j in jogos if len(set(j)) == 15]
+    # Aceita qualquer tamanho de jogo válido na Lotofácil (15-20 -- apostas
+    # "estendidas" via o campo "Dezenas por jogo" da tela, 15-18 hoje), não
+    # só 15 fixo. Até 2026-08-08 o filtro exigia `len(set(j)) == 15`
+    # exatamente: se "Dezenas por jogo" estivesse configurado com 16, 17 ou
+    # 18 no momento da geração, TODOS os jogos do pacote eram descartados
+    # aqui silenciosamente, e a função seguia adiante calculando
+    # melhor_acerto=0/media_acertos=0.0 sobre uma lista vazia -- um
+    # resultado matematicamente impossível (o mínimo de acertos possível
+    # para um jogo de 15 dezenas contra um sorteio de 15 é 5, não 0),
+    # registrado como se fosse real (achado do usuário, ver ARQUITETURA.md).
+    jogos_limpos = [sorted(set(int(n) for n in j)) for j in jogos]
+    jogos_limpos = [j for j in jogos_limpos if 15 <= len(j) <= 20]
+    if not jogos_limpos:
+        raise ValueError(
+            "Nenhum jogo com 15-20 dezenas válidas para registrar desempenho "
+            f"(pacote recebido tinha {len(jogos)} jogo(s), nenhum no tamanho esperado)."
+        )
     acertos = [intersecao(j, resultado) for j in jogos_limpos]
     dist = dict(sorted(Counter(acertos).items()))
     melhor = max(acertos) if acertos else 0

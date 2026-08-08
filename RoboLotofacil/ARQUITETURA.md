@@ -1069,3 +1069,64 @@ fechamento com `tamanho_jogo=16`, a propriedade matemática central do
 fechamento (garantia real via simulação, não só a fórmula) para
 `tamanho_jogo` 16 e 17, e que `gerar_apostas_fechamento()` de fato
 repassa e valida `tamanho_jogo` corretamente.
+
+## 🐛 3 bugs achados pelo usuário em relatórios reais — 2026-08-08
+
+O usuário mandou vários relatórios reais do robô (Banco Histórico de
+Desempenho, Hall da Fama, Dashboard) pra análise. Três continham dados
+incorretos, todos com causa raiz encontrada e corrigida.
+
+**1. Banco Histórico de Desempenho registrava resultado impossível.**
+Dois registros do concurso 3753 mostravam `melhor_acerto=0/média=0.0` —
+matematicamente impossível: com jogos de 15 dezenas contra um sorteio de
+15 (de 25), o mínimo de acertos garantido é 5 (só existem 10 dezenas
+"erradas" no total). Causa: `registrar_desempenho_historico_robo()`
+(`backtest.py`) filtrava `if len(set(j)) == 15` antes de calcular
+acertos — se o campo "Dezenas por jogo" estivesse em 16/17/18 no momento
+da geração (bem provável, coincide com os testes do Fechamento da mesma
+semana), TODOS os jogos eram descartados, sobrava lista vazia, e a
+função registrava o zero como se fosse real em vez de avisar "nenhum
+jogo válido". Confirmado com dado concreto: um CSV de calibração enviado
+pelo usuário mostra o resultado *real* do concurso 3753 sendo
+`melhor_acerto=11`, não 0.
+
+Corrigido: aceita qualquer tamanho de jogo válido na Lotofácil (15-20,
+não só 15 fixo) e levanta `ValueError` explícito quando nenhum jogo
+sobra após a limpeza, em vez de prosseguir com uma lista vazia. Os 3
+callers em `ui.py` já tratavam exceção dessa função com try/except e log
+de aviso, então o comportamento visível pro usuário é só a mensagem de
+erro ficar mais clara — não silenciosamente poluir o banco.
+
+**2 e 3. Hall da Fama com porcentagens e ELO errados** (mesma raiz: uma
+convenção de escala, `pct_11_mais`/`pct_12_mais` em 0-100, não 0-1).
+`relatorio_hall_fama()` (`v21_3_1_hall_fama_auto.py`) multiplicava esses
+valores por 100 de novo na exibição, produzindo "9200.0%"/"3667.0%" em
+vez de "92.0%"/"36.7%". `_score_composto()` tinha o mesmo problema na
+fórmula (`taxa_premio = 0.50*pct_11 + ...` sem dividir por 100), o que
+inflava esse termo em ~100x e fazia o score composto ser dominado quase
+inteiramente por ele — ELO e média de acertos praticamente não pesavam
+na prática, apesar da intenção documentada de ser um blend equilibrado.
+
+Separadamente: `registrar_hall_fama()` sempre mostrava ELO=1500 fixo
+para todos os 7 modelos, mesmo com ELOs reais bem diferentes entre si
+(1747 a 1603, visíveis no relatório "Modelo Campeão"). Causa: o
+campeonato de modelos isolados nomeia as entradas como `"Modelo isolado:
+{modelo}"` (`backtest.py`), mas o banco de ELO usa só o nome puro do
+modelo — `elos.get(nome, 1500.0)` nunca batia com nada, caindo sempre no
+default. Corrigido com nova função `_nome_para_elo()` que remove esse
+prefixo antes de buscar no banco de ELO.
+
+Nova suíte `test_hall_fama.py` (7 testes) cobre as 3 correções sem tocar
+o SQLite real (`registrar_hall_fama()`/`get_hall_fama()` persistem via
+`get_db()`, que usa `config.PASTA_DADOS` sem nenhum isolamento de teste
+— diferente de `ROBOLOTOFACIL_DADOS_DIR`, que só `v18_1b_ia_adaptativa.py`/
+`v20_2_poda_inteligente.py` respeitam; ver nota em `tests/__init__.py`.
+Ficou fora do escopo desta correção resolver esse gap de isolamento —
+os testes novos testam a lógica pura e mockam `get_hall_fama()`).
+
+**Verificação extra pedida pelo usuário**: as tabelas SQLite `modelos` e
+`pesos_modelos` (0 registros no status do banco) foram confirmadas como
+mortas — nenhum lugar do código faz `INSERT` nelas. Provavelmente schema
+de uma versão anterior, substituído por `elo_modelos` (tabela) e
+`dados/pesos_modelos.json` (arquivo, usado por `v20_2_poda_inteligente.py`).
+Não removidas nesta rodada — é só schema não usado, não um bug ativo.
