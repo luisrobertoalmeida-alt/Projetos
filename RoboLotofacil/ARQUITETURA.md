@@ -1241,3 +1241,48 @@ isolada (aceita/rejeita casos conhecidos), caso pequeno exaustivamente
 reconferido de fora da função, o wheel 18-15-13-11 conhecido na
 literatura, validações de parâmetro (pool/t/g fora do intervalo,
 `max_jogos` insuficiente) e o pipeline completo.
+
+## 🧹 Quality pass — cobertura de testes (parcial, deliberadamente) — 2026-08-08
+
+Parte da lista de "mais qualidade" discutida com o usuário. Varredura
+identificou 11 módulos sem nenhum teste: `persistencia.py`,
+`v21_0_auto_poda.py`, `v21_0_meta_aprendizado.py`, `v21_0_sqlite.py`,
+`v21_5_meta_competitivo.py`, `v21_5_montecarlo_cientifico.py`,
+`v21_6_impopularidade.py`, `v22_config.py`, `v22_otimizador.py`,
+`v22_pipeline.py`, `v22_relatorio.py`.
+
+**Coberto nesta rodada**: `persistencia.py` — só as funções puras
+(`resposta_parece_html`, `normalizar_df_resultados`); as demais
+(`salvar_csv_blindado`, `criar_backup_do_arquivo`, download da API
+CAIXA) fazem I/O real em `PASTA_DADOS`/`PASTA_BACKUP` — caminhos fixos
+de produção **sem isolamento via `ROBOLOTOFACIL_DADOS_DIR`** (diferente
+de outros módulos do projeto). Testar essas funções escreveria arquivos
+de verdade na pasta de produção de quem rodar a suíte — não fiz isso
+sem antes adicionar isolamento adequado, que é um trabalho à parte.
+
+**Deliberadamente NÃO coberto nesta rodada** (ficam como próximos
+passos, não como "esquecido"):
+- `v21_0_sqlite.py`: mesmo problema de isolamento — `get_db()` sempre
+  abre o SQLite real de produção, sem parâmetro de override nem respeito
+  a `ROBOLOTOFACIL_DADOS_DIR` (é a mesma causa raiz por trás dos testes
+  de `test_hall_fama.py` terem que mockar `get_hall_fama()` em vez de
+  testar `registrar_hall_fama()` direto).
+- `v22_config.py`/`v22_otimizador.py`/`v22_pipeline.py`/`v22_relatorio.py`:
+  status de uso ainda misto (parte confirmada ativa em auditorias
+  anteriores, parte historicamente marcada como órfã/experimental —
+  ver seção "🟡 MÓDULOS EXPERIMENTAIS" mais acima). Cobrir com testes
+  sem antes confirmar o que está realmente vivo arriscaria formalizar
+  comportamento de código morto.
+- `v21_5_meta_competitivo.py` (ELO), `v21_6_impopularidade.py`,
+  `v21_0_auto_poda.py`, `v21_0_meta_aprendizado.py`: código ativo e
+  testável sem grandes obstáculos, mas ficaram de fora só por escopo de
+  tempo desta rodada — bons candidatos pra uma próxima passada.
+
+**Fora de escopo por decisão deliberada** (risco alto, não por
+dificuldade): consolidar os sistemas paralelos de persistência (Hall da
+Fama/ELO em SQLite, `pesos_modelos.json`, aprendizado permanente, banco
+histórico de desempenho — a causa raiz por trás de mais de um bug já
+corrigido nesta sessão) e otimizar performance do algoritmo genético.
+Ambos tocam dado de produção real do usuário e/ou mudam comportamento
+observável — merecem sessão dedicada com escopo explícito, não um
+refactor silencioso dentro de uma resposta "faça tudo".
