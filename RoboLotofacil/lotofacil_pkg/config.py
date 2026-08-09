@@ -15,6 +15,18 @@ TAMANHO_JOGO = 15  # Tamanho de CADA jogo gerado/apostado (15-18/20) -- diferent
                     # tendo sempre 15 números.
 MIN_HIST = 60
 
+# Nomes canônicos dos 7 modelos do ensemble. Fonte única de verdade --
+# outros módulos (v21_5_meta_competitivo.MODELOS_PADRAO, o campeonato de
+# modelos isolados em backtest.py, etc.) devem importar esta tupla em vez
+# de re-digitar a lista. Motivação (2026-08-09, ver ARQUITETURA.md): um
+# nome duplicado por digitação em apenas um dos lugares nunca dá erro --
+# só faz aquele modelo "sumir" silenciosamente dali (mesma classe de bug
+# do ELO da Hall da Fama, corrigido em 2026-08-08).
+MODELOS_ENSEMBLE = (
+    "estatistico", "markov", "bayesiano",
+    "tendencia", "neural_leve", "cobertura", "pares_trios",
+)
+
 BASE_APP_DIR  = os.path.join(os.path.expanduser("~"), "Documents", "RoboLotofacilPro")
 PASTA_DADOS   = os.path.join(BASE_APP_DIR, "dados")
 PASTA_BACKUP  = os.path.join(BASE_APP_DIR, "backup")

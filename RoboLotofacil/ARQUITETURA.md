@@ -1286,3 +1286,91 @@ corrigido nesta sessão) e otimizar performance do algoritmo genético.
 Ambos tocam dado de produção real do usuário e/ou mudam comportamento
 observável — merecem sessão dedicada com escopo explícito, não um
 refactor silencioso dentro de uma resposta "faça tudo".
+
+## 🧹 Os 5 itens pendentes do fechamento do projeto — 2026-08-09
+
+Depois da rodada anterior ("já dá pra fechar o projeto?"), o usuário
+pediu pra resolver os 5 itens que eu tinha deixado deliberadamente em
+aberto. Nenhum deles mexe na parte preditiva (essa está mesmo fechada,
+ver rodada anterior) — são todos de qualidade/robustez de engenharia.
+
+**1. Oscilação da poda 4-estados** — `RODADAS_DEGRADAR`/`RODADAS_RECUPERAR`
+subiram de 2 para 3 em `v21_5_auto_poda_full.py`. Achado do próprio
+usuário: o log de "Eventos" mostrava dezenas de transições de estado em
+poucos segundos. Causa: como nenhum modelo tem vantagem real persistente
+em Lotofácil, o delta de cada modelo contra a média do grupo por rodada
+é essencialmente ruído — 2 rodadas seguidas abaixo da média bastavam pra
+degradar por puro acaso. 3 rodadas reduz a chance disso sem eliminar a
+poda de casos genuinamente ruins. Teste de regressão novo em
+`test_v21_5_auto_poda_full.py` (`test_duas_rodadas_seguidas_nao_bastam_mais_para_degradar`).
+
+**2. Registros impossíveis no Banco Histórico** — `limpar_registros_impossiveis.py`
+(raiz do projeto), script standalone que identifica e remove (com backup
+automático antes) registros com `melhor_acerto < 5` — matematicamente
+impossível pra qualquer jogo válido de Lotofácil (princípio da casa dos
+pombos: só existem 10 dezenas "erradas" no sorteio, um jogo de 15+ não
+consegue evitar todas). São os registros gerados pelo bug corrigido em
+2026-08-08. Roda em modo dry-run por padrão (`python
+limpar_registros_impossiveis.py`); só remove de fato com `--aplicar`.
+6 testes em `test_limpar_registros_impossiveis.py`.
+
+**3. Cobertura de testes para ELO/impopularidade/auto-poda/meta-aprendizado**
+— os 4 módulos ativos que tinham ficado de fora da rodada anterior de
+qualidade por escopo de tempo, agora cobertos:
+- `v21_0_auto_poda.py` (15 testes) — confirmado ativo (`calcular_limiares`
+  usado por `ui.py`, `decidir_poda_adaptativa` usado por `analise.py`).
+  `db_limiar_dinamico`/`db_prob_recuperacao` mockados (tocam SQLite real).
+- `v21_5_meta_competitivo.py` (24 testes) — ranking ELO. SQLite isolado
+  via mock de `get_db`; a camada de fallback JSON isolada redirecionando
+  `_ARQ_ELO` pra um arquivo temporário (mesma técnica já usada em
+  `_ARQ_ESTADOS` da poda 4-estados).
+- `v21_6_impopularidade.py` (23 testes) — módulo 100% puro, sem
+  necessidade de isolamento.
+- `v21_0_meta_aprendizado.py` (7 testes) — só `probabilidade_recuperacao()`,
+  a única função viva depois da limpeza de 2026-07-23.
+
+Nenhum desses módulos tinha teste antes. Todos os testes tocam apenas
+dados sintéticos/mockados — nenhum lê ou escreve nos arquivos reais de
+produção do usuário.
+
+**4. Registro canônico de nomes de modelo** — auditoria por outros bugs
+da mesma classe do ELO da Hall da Fama (nome com prefixo != nome usado
+como chave em outro lugar): achado apenas um outro ponto com esse
+padrão (`f"Modelo isolado: {modelo}"` em `backtest.py`, usado só pro
+nome de exibição no ranking científico) e ele já alimenta poda/ELO
+através da chave `modelo` sem prefixo — não é um bug, é o mesmo caso já
+corrigido. Como fatia seguramente isolável de "consolidar persistência"
+(que continua fora de escopo — ver seção anterior), criei uma única
+fonte de verdade pros 7 nomes de modelo do ensemble:
+`config.MODELOS_ENSEMBLE`. Antes essa lista de 7 strings estava
+redigitada em pelo menos 3 lugares (`v21_5_meta_competitivo.MODELOS_PADRAO`,
+o campeonato de modelos isolados em `backtest.py`, e implicitamente nos
+dicts de peso de `analise.py`/`apostas.py`). Migrei os dois primeiros
+(listas literais de nomes) pra importar de `config.MODELOS_ENSEMBLE` —
+os dicts de peso calibrado em `analise.py`/`apostas.py` ficaram de fora
+por decisão deliberada: não são listas de nomes, são valores numéricos
+ajustados a dedo por modelo, reescrever a chave de acesso ali é uma
+mudança de escopo maior e mais arriscada do que o pedido justificava.
+
+**5. Investigação de performance** — profiling com `cProfile` de um
+`gerar_apostas()` em escala de produção (G=100/P=77, histórico de 300
+concursos) achou um gargalo real e seguro de corrigir:
+`coef_variacao()` dentro de `detectar_equilíbrio_forcado()`
+(`v21_6_impopularidade.py`) usava `statistics.mean`/`statistics.stdev`,
+que internamente fazem aritmética exata com `Fraction` — muito mais
+lenta que float puro — pra calcular a média/desvio-padrão de listas de
+exatamente 5 inteiros (contagem por linha/coluna do volante 5×5). Como
+essa função roda uma vez por jogo candidato avaliado pelo algoritmo
+genético (dezenas de milhares de chamadas por execução), era o maior
+gargalo real de todo o pipeline: no profiling, sozinha respondia por
+~10s de ~24s de tempo de CPU. Reescrita em float puro (mesma fórmula de
+desvio-padrão amostral, `ddof=1`, resultado numericamente equivalente —
+os 23 testes de `test_v21_6_impopularidade.py` continuam batendo sem
+nenhuma mudança de valor esperado). Medição fim-a-fim antes/depois do
+mesmo `gerar_apostas()`: **~24s → ~5,5s** (cerca de 4,3× mais rápido).
+Não mexi no próximo maior consumidor de tempo
+(`sample_ponderado_sem_reposicao()`/`gerar_jogo_base()` em
+`genetico.py`) — é lógica central do algoritmo genético em si, não uma
+função auxiliar isolada; otimizá-la com segurança exigiria entender e
+preservar o comportamento probabilístico exato, o que é trabalho de
+escopo maior do que "um ganho seguro".

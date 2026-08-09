@@ -15,9 +15,16 @@ Arquivos:
   test_v20_novos_modulos.py          — V20.6 bootstrap e V20.8 walk-forward
   test_v20_5_validacao_cientifica.py — validação científica V20.5
   test_calibracao_estatistica.py     — V21.6: p-valor, IC95%, Cohen's d, critério aprovação
-  test_fechamento.py                 — fechamento combinatório de garantia total
-  test_estatistica_pareada.py        — Cohen's d pareado, sign-flip, TOST, mapear_vale_gp()
+  test_fechamento.py                 — fechamento combinatório de garantia total e reduzido
+  test_estatistica_pareada.py        — Cohen's d pareado, sign-flip, TOST, mapear_vale_gp/diversidade()
   test_auditoria_cientifica.py       — auditoria científica contínua
+  test_hall_fama.py                  — Hall da Fama (normalização de nome p/ ELO, score composto)
+  test_persistencia.py               — persistencia.py (funções puras, sem I/O real)
+  test_limpar_registros_impossiveis.py — detecção de registros impossíveis no Banco Histórico
+  test_v21_0_auto_poda.py            — poda adaptativa por limiar dinâmico SQLite
+  test_v21_5_meta_competitivo.py     — ranking ELO dos modelos
+  test_v21_6_impopularidade.py       — score de valor esperado por impopularidade
+  test_v21_0_meta_aprendizado.py     — probabilidade de recuperação por modelo
 
   Nota (2026-07-19): test_v19_modulos.py, test_v20_modulos.py e
   test_execucao_paralela.py foram removidos junto com os módulos órfãos

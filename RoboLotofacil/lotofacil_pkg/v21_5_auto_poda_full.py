@@ -68,9 +68,24 @@ DELTA_OBSERVACAO  = -0.05   # abaixo da média do grupo → conta como "abaixo"
 DELTA_SUSPENSO    = -0.15   # abaixo da média do grupo por margem maior → pode suspender
 DELTA_RECUPERACAO = 0.05    # acima da média do grupo → conta como "acima"/recuperação
 
-# Rodadas consecutivas necessárias para degradar / recuperar
-RODADAS_DEGRADAR   = 2
-RODADAS_RECUPERAR  = 2
+# Rodadas consecutivas necessárias para degradar / recuperar.
+#
+# Até 2026-08-09 eram 2 -- achado do usuário (log de "Eventos" mostrando
+# os 7 modelos trocando de estado dezenas de vezes em poucos segundos,
+# durante um Backtest/BT Automático processando muitos passos rápido):
+# como nenhum modelo tem vantagem real sobre os outros neste domínio
+# (todos giram em torno da mesma média, diferença é ruído -- ver
+# comentário de DELTA_OBSERVACAO acima), o delta "modelo vs. média do
+# grupo" a cada passo é essencialmente ruído oscilando em torno de zero.
+# Com só 2 rodadas seguidas na mesma direção pra transicionar, esse ruído
+# already produz falsas transições com frequência alta o suficiente pra
+# tornar o estado final mais reflexo de "onde o ruído parou" do que de
+# desempenho persistente real. Subir pra 3 reduz a taxa de transições
+# espúrias por ruído (a probabilidade de 3 rodadas seguidas na mesma
+# direção só por acaso é menor que a de 2), sem exigir tantas rodadas que
+# a recuperação real fique impraticável.
+RODADAS_DEGRADAR   = 3
+RODADAS_RECUPERAR  = 3
 
 _ARQ_ESTADOS = Path(PASTA_DADOS) / "estados_modelos_v21.json"
 _LOCK = threading.Lock()

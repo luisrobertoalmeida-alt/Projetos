@@ -43,7 +43,7 @@ from .config import (
     NUMEROS, MIN_HIST, PASTA_EXPORT, PASTA_DADOS, TAMANHO_JOGO,
     ARQUIVO_DESEMPENHO_HISTORICO, ARQUIVO_CONHECIMENTO_CIENTIFICO,
     ARQUIVO_PERFORMANCE_ESTRATEGIA, ARQUIVO_APRENDIZADO,
-    VERSAO_ROBO,
+    VERSAO_ROBO, MODELOS_ENSEMBLE,
 )
 from .utils import (
     formatar_jogo, intersecao, contar_pares, soma_jogo,
@@ -1485,7 +1485,7 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
     vencedor_config = ranking_config[0] if ranking_config else {}
 
     avisar("Fase 2/4: Campeonato entre modelos do ensemble...")
-    modelos = ["estatistico", "markov", "bayesiano", "tendencia", "neural_leve", "cobertura", "pares_trios"]
+    modelos = list(MODELOS_ENSEMBLE)
     resultados_modelos = []
     registros_por_modelo: dict[str, list[dict]] = {}
     ger_v = int(vencedor_config.get("geracoes", geracoes) or geracoes)

@@ -50,7 +50,7 @@ class TestTransicaoRelativaAoGrupo(unittest.TestCase):
     def test_modelo_consistentemente_pior_que_grupo_degrada(self):
         info = _estado_inicial()
         # Delta bem abaixo do limiar de observação em toda rodada
-        for _ in range(3):
+        for _ in range(poda_full.RODADAS_DEGRADAR):
             info = _transicao(info, media_recente=8.8, media_grupo=9.0)
         self.assertNotEqual(info["estado"], ESTADO_ATIVO)
 
@@ -62,12 +62,12 @@ class TestTransicaoRelativaAoGrupo(unittest.TestCase):
 
     def test_recuperacao_apos_degradar(self):
         info = _estado_inicial()
-        # Degrada até OBSERVAÇÃO
-        for _ in range(2):
+        # Degrada até OBSERVAÇÃO (RODADAS_DEGRADAR rodadas seguidas abaixo)
+        for _ in range(poda_full.RODADAS_DEGRADAR):
             info = _transicao(info, media_recente=8.8, media_grupo=9.0)
         self.assertEqual(info["estado"], ESTADO_OBSERVACAO)
-        # Recupera com desempenho acima do grupo por 2 rodadas seguidas
-        for _ in range(2):
+        # Recupera com desempenho acima do grupo por RODADAS_RECUPERAR rodadas seguidas
+        for _ in range(poda_full.RODADAS_RECUPERAR):
             info = _transicao(info, media_recente=9.1, media_grupo=9.0)
         self.assertEqual(info["estado"], ESTADO_ATIVO)
 
@@ -78,6 +78,19 @@ class TestTransicaoRelativaAoGrupo(unittest.TestCase):
         info = _transicao(info, media_recente=9.0 + delta_neutro, media_grupo=9.0)
         self.assertEqual(info["rodadas_abaixo"], 0)
         self.assertEqual(info["rodadas_acima"], 0)
+        self.assertEqual(info["estado"], ESTADO_ATIVO)
+
+    def test_duas_rodadas_seguidas_nao_bastam_mais_para_degradar(self):
+        """
+        Regressão do achado do usuário (2026-08-09, log de "Eventos" com
+        dezenas de transições em poucos segundos): RODADAS_DEGRADAR subiu
+        de 2 para 3 justamente pra que ruído de curto prazo (2 rodadas
+        abaixo por acaso) não seja mais suficiente sozinho pra degradar.
+        """
+        self.assertGreater(poda_full.RODADAS_DEGRADAR, 2)
+        info = _estado_inicial()
+        for _ in range(2):
+            info = _transicao(info, media_recente=8.8, media_grupo=9.0)
         self.assertEqual(info["estado"], ESTADO_ATIVO)
 
 

@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from statistics import mean, stdev
+from statistics import mean
 from typing import Sequence
 
 
@@ -151,13 +151,23 @@ def detectar_equilíbrio_forcado(jogo: list[int]) -> float:
         colunas[(n - 1) % 5] += 1
 
     def coef_variacao(vals: list[int]) -> float:
-        m = mean(vals) if vals else 1
+        # Implementado em float puro (em vez de statistics.mean/stdev, que
+        # usam aritmética exata com Fraction internamente) -- essa função
+        # roda uma vez por linha/coluna do volante para CADA jogo avaliado
+        # pelo algoritmo genético, e o profiling (2026-08-09, ver
+        # ARQUITETURA.md) mostrou que era o maior gargalo real de todo o
+        # pipeline de geração. Mesma fórmula de stdev amostral (ddof=1)
+        # que statistics.stdev, resultado numericamente equivalente.
+        n = len(vals)
+        if n == 0:
+            return 0.0
+        m = sum(vals) / n
         if m == 0:
             return 0.0
-        try:
-            s = stdev(vals)
-        except Exception:
-            s = 0.0
+        if n < 2:
+            return 0.0
+        variancia = sum((v - m) ** 2 for v in vals) / (n - 1)
+        s = variancia ** 0.5
         return s / m
 
     cv_lin = coef_variacao(linhas)

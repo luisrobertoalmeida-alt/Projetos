@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from statistics import mean, stdev
 from pathlib import Path
 
-from .config import PASTA_DADOS
+from .config import PASTA_DADOS, MODELOS_ENSEMBLE
 
 # ── Parâmetros ELO ─────────────────────────────────────────────────────────
 ELO_INICIAL    = 1500.0
@@ -39,10 +39,7 @@ ELO_REFERENCIA = 1500.0    # ponto neutro → fator = 1.0
 _ARQ_ELO = Path(PASTA_DADOS) / "elo_modelos.json"
 
 # ── Modelos conhecidos ──────────────────────────────────────────────────────
-MODELOS_PADRAO = [
-    "estatistico", "markov", "bayesiano",
-    "tendencia", "neural_leve", "cobertura", "pares_trios",
-]
+MODELOS_PADRAO = list(MODELOS_ENSEMBLE)
 
 
 def _now() -> str:
