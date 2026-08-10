@@ -968,8 +968,15 @@ def calibrar_robo_vs_aleatorio(concursos: list, janela: int = 120, qtd_jogos: in
         )
 
         resultado["estatistica"] = {
-            "p_valor":        round(sig.get("p_valor", 1.0), 4),
-            "significativo":  sig.get("significativo", False),
+            # teste_significancia() retorna "p_value"/"rejeita_h0" (ver
+            # v20_6_bootstrap.py) -- as chaves em português "p_valor"/
+            # "significativo" nunca existiram nesse dict, então o .get()
+            # sempre caía no default (1.0 / False), mascarando o p-valor
+            # real do teste de permutação em todo relatório de calibração
+            # já gerado (achado pelo usuário em 2026-08-10, relatório real
+            # com p-valor suspeito de exatamente 1.0).
+            "p_valor":        round(sig.get("p_value", 1.0), 4),
+            "significativo":  sig.get("rejeita_h0", False),
             "ic95_vitoria":   [round(ic.get("inferior", 0), 3), round(ic.get("superior", 1), 3)],
             "cohen_d":        round(cohen.get("cohen_d", 0.0), 3),
             "interpretacao":  cohen.get("magnitude", ""),

@@ -1374,3 +1374,45 @@ Não mexi no próximo maior consumidor de tempo
 função auxiliar isolada; otimizá-la com segurança exigiria entender e
 preservar o comportamento probabilístico exato, o que é trabalho de
 escopo maior do que "um ganho seguro".
+
+## 🐛 p-valor da calibração sempre 1.0 — bug real achado pelo usuário — 2026-08-10
+
+Usuário rodou "Calibração Robô vs Aleatório" (150 concursos) e
+estranhou o p-valor bater exatamente `1.0` com "⚠️ não significativo",
+mesmo o robô tendo vencido em score 91 de 150 pacotes (60,7%) e o IC
+95% da taxa de vitória (`[52,7%–68,1%]`) não incluir 50%.
+
+Causa confirmada: `calibrar_robo_vs_aleatorio()` (`backtest.py`) chama
+`teste_significancia()` (o teste de permutação real, em
+`v20_6_bootstrap.py`) e lê o resultado assim:
+
+```python
+sig = teste_significancia(dicts_robo, dicts_ale)
+"p_valor":        sig.get("p_valor", 1.0),
+"significativo":  sig.get("significativo", False),
+```
+
+Só que `teste_significancia()` retorna as chaves em inglês —
+`p_value`/`rejeita_h0` — não `p_valor`/`significativo` em português.
+As chaves nunca bateram, então o `.get(..., default)` sempre caía no
+valor-padrão (`1.0` / `False`) — o teste de permutação real (2000
+reamostras) nunca chegava a ser lido. **Todo relatório de calibração já
+gerado** mostrou p-valor=1.0/não-significativo independente do
+resultado real, desde que essa seção foi adicionada (V21.6). As outras
+métricas do mesmo relatório (IC 95% de vitória via `intervalo_confianca_taxa`,
+Cohen's d via `tamanho_efeito_cohen_d`) usam chaves que batem
+corretamente e não foram afetadas — só a linha de p-valor/significância
+estava quebrada, o que explica por que o IC e o p-valor pareciam
+inconsistentes entre si no relatório do usuário.
+
+Corrigido lendo as chaves certas (`sig.get("p_value", ...)`,
+`sig.get("rejeita_h0", ...)`). Mesma classe de bug dos outros achados
+nesta sessão (nome/chave em português divergindo do original em
+inglês em outro módulo) — não achamos mais nenhuma ocorrência numa
+checagem rápida dos outros consumidores de `teste_significancia()`
+(`relatorio_inferencial()`, que já lia `sig["p_value"]` corretamente).
+
+2 testes de regressão novos em `test_backtest.py`
+(`TestCalibracaoEstatistica`), mockando `teste_significancia()` com um
+`p_value`/`rejeita_h0` conhecido e verificando que a seção
+`estatistica` do resultado reflete esse valor — não o default do bug.

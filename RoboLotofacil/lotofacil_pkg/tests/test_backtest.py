@@ -11,6 +11,7 @@ import sys
 import random
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -441,6 +442,53 @@ class TestCalibracao(unittest.TestCase):
     def test_medias_positivas(self):
         self.assertGreaterEqual(self.resultado["resumo_robo"]["media_melhor"], 0)
         self.assertGreaterEqual(self.resultado["resumo_aleatorio"]["media_melhor"], 0)
+
+
+class TestCalibracaoEstatistica(unittest.TestCase):
+    """
+    Regressão (achado do usuário em relatório real, 2026-08-10): a seção
+    "estatistica" de calibrar_robo_vs_aleatorio() lia sig.get("p_valor")/
+    sig.get("significativo"), mas teste_significancia() (v20_6_bootstrap.py)
+    retorna "p_value"/"rejeita_h0" -- as chaves em português nunca
+    existiram nesse dict, então o .get(..., default) sempre caía no
+    default (p_valor=1.0, significativo=False), mascarando o resultado
+    real do teste de permutação em TODO relatório de calibração já
+    gerado. Mocka teste_significancia() para devolver um p_value/
+    rejeita_h0 conhecido e verifica que "estatistica" reflete esse valor,
+    não o default do bug.
+    """
+
+    def test_estatistica_le_p_value_e_rejeita_h0_do_teste_de_permutacao(self):
+        with patch(
+            "lotofacil_pkg.v20_6_bootstrap.teste_significancia",
+            return_value={
+                "p_value": 0.0123,
+                "delta_obs": 1.5,
+                "rejeita_h0": True,
+                "nivel_significancia": "p<0.05",
+            },
+        ):
+            resultado = calibrar_robo_vs_aleatorio(
+                _HIST, janela=80, qtd_jogos=5, passos=4, geracoes=5, pop_size=15
+            )
+        self.assertEqual(resultado["estatistica"]["p_valor"], 0.0123)
+        self.assertTrue(resultado["estatistica"]["significativo"])
+
+    def test_estatistica_nao_significativa_reflete_rejeita_h0_falso(self):
+        with patch(
+            "lotofacil_pkg.v20_6_bootstrap.teste_significancia",
+            return_value={
+                "p_value": 0.42,
+                "delta_obs": 0.1,
+                "rejeita_h0": False,
+                "nivel_significancia": "NS",
+            },
+        ):
+            resultado = calibrar_robo_vs_aleatorio(
+                _HIST, janela=80, qtd_jogos=5, passos=4, geracoes=5, pop_size=15
+            )
+        self.assertEqual(resultado["estatistica"]["p_valor"], 0.42)
+        self.assertFalse(resultado["estatistica"]["significativo"])
 
 
 # ── backtest_ultra_massivo ────────────────────────────────────────────────────
