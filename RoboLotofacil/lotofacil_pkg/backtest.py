@@ -40,7 +40,7 @@ import pandas as pd
 
 from . import config as _cfg
 from .config import (
-    NUMEROS, MIN_HIST, PASTA_EXPORT, PASTA_DADOS, TAMANHO_JOGO,
+    NUMEROS, MIN_HIST, PASTA_EXPORT, PASTA_DADOS,
     ARQUIVO_DESEMPENHO_HISTORICO, ARQUIVO_CONHECIMENTO_CIENTIFICO,
     ARQUIVO_PERFORMANCE_ESTRATEGIA, ARQUIVO_APRENDIZADO,
     VERSAO_ROBO, MODELOS_ENSEMBLE,
@@ -706,9 +706,26 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
         "erro_elo": erro_elo,
     }
 
-def gerar_jogos_aleatorios(qtd_jogos: int = 10) -> list[list[int]]:
+def gerar_jogos_aleatorios(qtd_jogos: int = 10, tamanho_jogo: int | None = None) -> list[list[int]]:
+    """
+    Baseline aleatório para comparação com o robô.
+
+    `tamanho_jogo` (padrão: `_cfg.TAMANHO_JOGO` no momento da chamada, não
+    um valor congelado no import) precisa acompanhar dinamicamente o campo
+    "Dezenas por jogo" da UI -- do contrário, se o usuário jogar com 16+
+    dezenas, o robô joga jogos maiores (mais chance de acerto só pelo
+    tamanho, não por estratégia) contra um aleatório sempre de 15,
+    invalidando a comparação. Achado pelo usuário em 2026-08-10: o import
+    `from .config import TAMANHO_JOGO` (linha do topo do arquivo) copia o
+    valor no momento do import e nunca mais muda, mesmo quando a UI
+    atualiza `config.TAMANHO_JOGO` em runtime -- mesma classe de bug do
+    Fechamento que ignorava esse campo (corrigido em 2026-08-03), mas
+    aqui a causa raiz era o tipo de import, não um parâmetro faltando.
+    """
     qtd_jogos = min(max(1, int(qtd_jogos)), 100)
-    return [sorted(random.sample(NUMEROS, TAMANHO_JOGO)) for _ in range(qtd_jogos)]
+    if tamanho_jogo is None:
+        tamanho_jogo = _cfg.TAMANHO_JOGO
+    return [sorted(random.sample(NUMEROS, tamanho_jogo)) for _ in range(qtd_jogos)]
 
 
 def resumir_acertos_pacote(acertos: list) -> dict:

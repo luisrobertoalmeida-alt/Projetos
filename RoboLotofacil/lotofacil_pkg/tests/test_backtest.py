@@ -85,6 +85,29 @@ class TestGerarJogosAleatorios(unittest.TestCase):
     def test_default_qtd(self):
         self.assertEqual(len(gerar_jogos_aleatorios()), 10)
 
+    def test_acompanha_tamanho_jogo_atual_da_config_dinamicamente(self):
+        """
+        Regressão (achado do usuário, 2026-08-10): gerar_jogos_aleatorios()
+        usava `from .config import TAMANHO_JOGO` (valor congelado no
+        import), então quando a UI atualiza config.TAMANHO_JOGO em
+        runtime (campo "Dezenas por jogo" > 15), o baseline "aleatório"
+        da calibração continuava sempre com 15 dezenas enquanto o robô
+        jogava com o tamanho novo -- comparação inválida (jogo maior
+        acerta mais só por ter mais números, não por estratégia).
+        """
+        import lotofacil_pkg.config as config_module
+        original = config_module.TAMANHO_JOGO
+        try:
+            config_module.TAMANHO_JOGO = 18
+            for j in gerar_jogos_aleatorios(5):
+                self.assertEqual(len(j), 18)
+        finally:
+            config_module.TAMANHO_JOGO = original
+
+    def test_parametro_explicito_tem_prioridade_sobre_a_config(self):
+        for j in gerar_jogos_aleatorios(3, tamanho_jogo=17):
+            self.assertEqual(len(j), 17)
+
 
 # ── resumir_acertos_pacote ────────────────────────────────────────────────────
 

@@ -25,6 +25,7 @@ Arquivos:
   test_v21_5_meta_competitivo.py     — ranking ELO dos modelos
   test_v21_6_impopularidade.py       — score de valor esperado por impopularidade
   test_v21_0_meta_aprendizado.py     — probabilidade de recuperação por modelo
+  test_v22_otimizador.py             — Otimizador V22 por simulação (sorteio simulado)
 
   Nota (2026-07-19): test_v19_modulos.py, test_v20_modulos.py e
   test_execucao_paralela.py foram removidos junto com os módulos órfãos

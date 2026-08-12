@@ -15,7 +15,7 @@ from functools import lru_cache
 from statistics import mean
 
 from . import config as _cfg
-from .config import NUMEROS, TAMANHO_JOGO
+from .config import NUMEROS
 from .utils import (
     contar_pares, soma_jogo, intersecao, distancia_jogos,
     formatar_jogo, limitar, rng,

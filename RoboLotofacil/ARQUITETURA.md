@@ -1416,3 +1416,59 @@ checagem rápida dos outros consumidores de `teste_significancia()`
 (`TestCalibracaoEstatistica`), mockando `teste_significancia()` com um
 `p_value`/`rejeita_h0` conhecido e verificando que a seção
 `estatistica` do resultado reflete esse valor — não o default do bug.
+
+## 🐛 Calibração e Otimizador V22 confundiam tamanho do jogo com tamanho do sorteio — 2026-08-10
+
+Usuário perguntou, de forma direta: "a calibração é feita com 15
+números e quando se joga com 16 números, essa calibração não
+precisaria mudar?" — pergunta certeira, achou dois bugs reais.
+
+**1. `gerar_jogos_aleatorios()` (`backtest.py`), usada pelo baseline
+"Aleatório" da Calibração Robô vs Aleatório** — usava
+`from .config import TAMANHO_JOGO` (import direto, copia o valor no
+momento do import) em vez de `_cfg.TAMANHO_JOGO` (leitura dinâmica do
+módulo). Quando a UI atualiza `config.TAMANHO_JOGO` em runtime (campo
+"Dezenas por jogo" > 15), o robô (via `gerar_apostas()` →
+`genetico.py`, que sempre lê `_cfg.TAMANHO_JOGO` dinamicamente) passa a
+jogar jogos maiores, mas o baseline aleatório continuava sempre com 15
+dezenas — comparação inválida, porque um jogo de 16 números acerta mais
+só por ter mais números (E[acertos]=15k/25), não por estratégia
+nenhuma. Mesma classe de bug do Fechamento que ignorava esse campo
+(corrigido em 2026-08-03), mas com causa raiz diferente: lá faltava o
+parâmetro inteiro; aqui o parâmetro existia só que "congelado" por um
+tipo de import errado. Corrigido: `gerar_jogos_aleatorios()` agora
+aceita `tamanho_jogo` explícito (default: `_cfg.TAMANHO_JOGO` lido no
+momento da chamada). Removido o import direto (agora não usado) de
+`TAMANHO_JOGO` no topo de `backtest.py`.
+
+**2. `_simular_pacote()` (`v22_otimizador.py`), usada pelo "Otimizador
+V22" (`ui.py`, botão que chama `otimizar_pacote`)** — bug mais sério,
+conceitual e não só de import: usava `TAMANHO_JOGO` (tamanho da
+APOSTA) pra gerar o SORTEIO simulado dentro do Monte Carlo de 1000
+simulações. O sorteio real da Lotofácil é **sempre** 15 dezenas
+(`TAMANHO_SORTEIO`, fixo — "isso nunca muda", ver `config.py`),
+independente de quantas dezenas cada jogo apostado tem. Com "Dezenas
+por jogo" configurado para 16-20, o otimizador estava simulando
+sorteios do tamanho errado, invalidando as métricas
+(`pct_11_mais`/`pct_12_mais`/`pct_13_mais`/`media_melhor`) que decidem
+qual pacote é "o melhor" entre as tentativas — mesma confusão entre
+"tamanho do jogo apostado" e "tamanho do sorteio real" já corrigida
+uma vez em `fechamento.py` (`garantia_minima()`, 2026-08-03), agora
+achada numa segunda ocorrência independente. Corrigido: `_simular_pacote()`
+agora usa `TAMANHO_SORTEIO` (import direto é seguro aqui — essa
+constante nunca é alterada em runtime, só `TAMANHO_JOGO` é).
+
+De passagem: `_simular_pacote([])` quebrava com `ValueError` (lista
+vazia pro `max()`) — nunca acontecia na prática (`otimizar_pacote()`
+já pula pacotes vazios antes de chamar `_simular_pacote`), mas blindado
+mesmo assim por ser trivial e sem risco. Também removidos dois imports
+diretos de `TAMANHO_JOGO` não utilizados (`genetico.py`, `historico.py`
+— confirmado que todo uso real neles já era via `_cfg.TAMANHO_JOGO`
+dinâmico) para não deixar a mesma armadilha disponível pra uso
+futuro por engano.
+
+`v22_otimizador.py` não tinha nenhum teste antes — 12 testes novos em
+`test_v22_otimizador.py`, incluindo verificação direta de que o
+sorteio simulado usa sempre 15 dezenas mesmo mudando
+`config.TAMANHO_JOGO` em runtime. Mais 2 testes de regressão em
+`test_backtest.py` (`TestGerarJogosAleatorios`) para o primeiro bug.

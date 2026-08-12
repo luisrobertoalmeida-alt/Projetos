@@ -29,7 +29,7 @@ import random
 import math
 from typing import Callable, Any
 
-from .config import NUMEROS, TAMANHO_JOGO
+from .config import NUMEROS, TAMANHO_SORTEIO
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -42,6 +42,11 @@ def _simular_pacote(jogos: list, n_simulacoes: int = 500) -> dict:
     Versão leve para uso em loop de otimização.
     """
     jogos_sets = [frozenset(int(d) for d in jogo) for jogo in jogos]
+    if not jogos_sets:
+        return {
+            "pct_11_mais": 0.0, "pct_12_mais": 0.0, "pct_13_mais": 0.0,
+            "media_melhor": 0.0, "max_melhor": 0, "n_simulacoes": n_simulacoes,
+        }
     numeros = list(NUMEROS)
 
     melhores = []
@@ -50,7 +55,17 @@ def _simular_pacote(jogos: list, n_simulacoes: int = 500) -> dict:
     eventos_13 = 0
 
     for _ in range(n_simulacoes):
-        sorteio = frozenset(random.sample(numeros, TAMANHO_JOGO))
+        # TAMANHO_SORTEIO (fixo, 15), não TAMANHO_JOGO -- o SORTEIO real da
+        # Lotofácil sempre tem 15 dezenas, mesmo quando os jogos apostados
+        # (`jogos_sets`, tamanho de cada elemento) têm 16-20 (aposta
+        # "estendida"). Achado pelo usuário em 2026-08-10: até essa
+        # correção, com "Dezenas por jogo" != 15 configurado, o Otimizador
+        # V22 simulava sorteios do tamanho errado, invalidando as métricas
+        # (pct_11_mais/pct_12_mais/pct_13_mais/media_melhor) usadas pra
+        # escolher o "melhor" pacote -- mesma confusão conceitual entre
+        # tamanho do jogo e tamanho do sorteio já corrigida uma vez em
+        # fechamento.py (ver garantia_minima(), 2026-08-03).
+        sorteio = frozenset(random.sample(numeros, TAMANHO_SORTEIO))
         acertos = [len(jogo & sorteio) for jogo in jogos_sets]
         melhor = max(acertos)
         melhores.append(melhor)
