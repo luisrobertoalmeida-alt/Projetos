@@ -6,15 +6,18 @@ on:
     branches:
       - "claude/**"
     paths:
-      - "main.py"
-      - "lotofacil_pkg/**"
-      - "plugins/**"
-      - "config_v22.yaml"
+      - "RoboLotofacil/main.py"
+      - "RoboLotofacil/lotofacil_pkg/**"
+      - "RoboLotofacil/plugins/**"
+      - "RoboLotofacil/config_v22.yaml"
       - ".github/workflows/build-windows-exe.yml"
 
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: RoboLotofacil
     steps:
       - uses: actions/checkout@v4
 
@@ -37,4 +40,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: RoboLotofacilPro-windows
-          path: dist/RoboLotofacilPro.exe
+          path: RoboLotofacil/dist/RoboLotofacilPro.exe
