@@ -1,0 +1,40 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - "main.py"
+      - "lotofacil_pkg/**"
+      - "plugins/**"
+      - "config_v22.yaml"
+      - ".github/workflows/build-windows-exe.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install pandas requests pyyaml reportlab pyinstaller
+
+      - name: Compilar executável
+        run: >
+          pyinstaller --onefile --windowed
+          --name RoboLotofacilPro
+          --add-data "plugins;plugins"
+          --add-data "config_v22.yaml;."
+          main.py
+
+      - name: Publicar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoboLotofacilPro-windows
+          path: dist/RoboLotofacilPro.exe
