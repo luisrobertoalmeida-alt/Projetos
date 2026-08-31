@@ -242,6 +242,19 @@ class RoboLotofacilUltraApp:
         self.thread_aprendizado_continuo = None
         self.aprendizado_automatico_chave = None
 
+        # Mutex global entre operações pesadas (Gerar Jogos, Fechamento,
+        # Otimizador V22, Pipeline V22, Calibração, Backtest Científico,
+        # Walk-Forward, Aprendizado Contínuo...). Cada uma dessas mexe em
+        # estado compartilhado (self.jogos_gerados/analise/pesos/
+        # info_backtest, config.TAMANHO_JOGO, a seed global do módulo
+        # `random`) sem qualquer proteção -- clicar em duas ao mesmo tempo
+        # corrompia esse estado silenciosamente (varredura de código,
+        # 2026-08-31). As flags individuais (_geracao_ativa etc.) continuam
+        # existindo para exibição/compatibilidade, mas quem efetivamente
+        # bloqueia execução concorrente agora é este mutex único.
+        self._lock_operacao_pesada = threading.Lock()
+        self._operacao_pesada_atual: str | None = None
+
         self.montar_ui()
         self.carregar_ultimos_jogos_gerados()
         self.root.protocol("WM_DELETE_WINDOW", self.encerrar_aplicativo)
@@ -1130,6 +1143,34 @@ class RoboLotofacilUltraApp:
             except Exception:
                 pass
 
+    def _reservar_operacao_pesada(self, nome: str) -> bool:
+        """Tenta reservar o mutex único de operação pesada. Retorna True se
+        conseguiu (nenhuma outra operação pesada rodando agora), False caso
+        contrário -- nesse caso já avisa o usuário e não inicia nada.
+
+        Chamar isso é o que efetivamente impede, por exemplo, "Fechamento"
+        e "Gerar Jogos" rodando ao mesmo tempo e corrompendo self.jogos_gerados
+        /self.analise/self.pesos, ou duas operações mudando config.TAMANHO_JOGO
+        (ou a seed global do módulo `random`) uma por cima da outra no meio
+        da execução da outra.
+        """
+        with self._lock_operacao_pesada:
+            if self._operacao_pesada_atual is not None:
+                self.log_async(
+                    f"⚠️ '{self._operacao_pesada_atual}' ainda em execução — "
+                    f"aguarde concluir antes de iniciar '{nome}'."
+                )
+                self.set_status_async(f"Aguardando: {self._operacao_pesada_atual}", "blue")
+                return False
+            self._operacao_pesada_atual = nome
+            return True
+
+    def _liberar_operacao_pesada(self) -> None:
+        """Libera o mutex de operação pesada. Seguro chamar mesmo se nada
+        estava reservado (idempotente)."""
+        with self._lock_operacao_pesada:
+            self._operacao_pesada_atual = None
+
     def calcular_limite_turbo(self) -> int | None:
         janela = max(MIN_HIST, int(self.janela_hist.get()))
         passos = max(10, int(self.passos_backtest.get()))
@@ -1159,8 +1200,17 @@ class RoboLotofacilUltraApp:
         if getattr(self, "_atualizando", False):
             self.log("⚠️ Atualização já em andamento.")
             return
+        if not self._reservar_operacao_pesada("Atualizar Resultados"):
+            return
         self._atualizando = True
-        threading.Thread(target=self._executar_atualizar_resultados, daemon=True).start()
+
+        def _rodar():
+            try:
+                self._executar_atualizar_resultados()
+            finally:
+                self._liberar_operacao_pesada()
+
+        threading.Thread(target=_rodar, daemon=True).start()
 
     def _executar_atualizar_resultados(self) -> None:
         """Executa download e atualização em thread separada."""
@@ -1261,8 +1311,22 @@ class RoboLotofacilUltraApp:
             self.log("⚠️ Geração já em andamento. Aguarde.")
             self.set_status("Geração em andamento...", "blue")
             return
+        if not self._reservar_operacao_pesada("Gerar Jogos"):
+            return
         self._geracao_ativa = True
-        th = threading.Thread(target=self._executar_gerar_jogos, daemon=True)
+
+        def _rodar():
+            # Libera o mutex aqui (não dentro de _executar_gerar_jogos): esse
+            # worker também é chamado direto pelo Pipeline V22, que já
+            # reservou e libera o mutex por conta própria ao fim de TODAS as
+            # etapas -- liberar dentro do worker soltaria o mutex cedo demais
+            # no meio de um pipeline em andamento.
+            try:
+                self._executar_gerar_jogos()
+            finally:
+                self._liberar_operacao_pesada()
+
+        th = threading.Thread(target=_rodar, daemon=True)
         th.start()
 
     def _atualizar_progresso(self, valor: float, texto: str = "") -> None:
@@ -1297,24 +1361,24 @@ class RoboLotofacilUltraApp:
 
             self.root.after(0, self._iniciar_progresso)
             self._atualizar_progresso(5, "Analisando histórico...")
-            self.log("=" * 72)
-            self.log("GERAÇÃO DE JOGOS")
+            self.log_async("=" * 72)
+            self.log_async("GERAÇÃO DE JOGOS")
             self._aplicar_seed_configurada()
             aprendizado_previo = calcular_bonus_aprendizado()
-            self.log("Memória IA: " + aprendizado_previo.get("resumo", "Sem registros anteriores."))
+            self.log_async("Memória IA: " + aprendizado_previo.get("resumo", "Sem registros anteriores."))
             base_total = getattr(self, "total_concursos_csv", len(self.concursos))
-            self.log(f"Base completa no disco: {base_total} concursos")
-            self.log(f"Concursos carregados em memória: {len(self.concursos)}")
-            self.log(f"Analisando apenas os últimos: {janela} concursos")
-            self.log(f"Jogos={qtd} | Gerações={ger} | População={pop}")
+            self.log_async(f"Base completa no disco: {base_total} concursos")
+            self.log_async(f"Concursos carregados em memória: {len(self.concursos)}")
+            self.log_async(f"Analisando apenas os últimos: {janela} concursos")
+            self.log_async(f"Jogos={qtd} | Gerações={ger} | População={pop}")
 
             # V21.6 — injeta peso_impopularidade na estratégia via override
             peso_imp_ui = round(self.peso_impopularidade.get() / 100.0, 2)
             _override_imp = {"peso_impopularidade": peso_imp_ui}
             if peso_imp_ui > 0:
-                self.log(f"📊 Impopularidade ativa: {self.peso_impopularidade.get()}% — favorecendo combinações sub-apostadas por humanos.")
+                self.log_async(f"📊 Impopularidade ativa: {self.peso_impopularidade.get()}% — favorecendo combinações sub-apostadas por humanos.")
             else:
-                self.log("📊 Impopularidade desligada (slider em 0%).")
+                self.log_async("📊 Impopularidade desligada (slider em 0%).")
 
             self._atualizar_progresso(30, "Rodando ensemble multi-IA...")
             self.jogos_gerados, self.analise, self.pesos = gerar_apostas(
@@ -1330,74 +1394,74 @@ class RoboLotofacilUltraApp:
             self.info_backtest = None
             estrategia = self.analise.get("estrategia", {}) if self.analise else {}
             if estrategia:
-                self.log("MOTOR ESTRATÉGICO INTELIGENTE")
-                self.log(f"Modo escolhido: {estrategia.get('modo', 'equilibrado').upper()}")
-                self.log(f"Índice de confiança: {estrategia.get('indice_confianca', 0):.3f}")
-                self.log(f"Estabilidade={estrategia.get('estabilidade', 0):.3f} | Concentração={estrategia.get('concentracao', 0):.3f} | Diversidade={estrategia.get('diversidade', 0):.3f}")
-                self.log(f"Taxa de mutação={estrategia.get('taxa_mutacao', 0):.3f} | Limite de interseção={estrategia.get('limite_intersecao', 12)}")
+                self.log_async("MOTOR ESTRATÉGICO INTELIGENTE")
+                self.log_async(f"Modo escolhido: {estrategia.get('modo', 'equilibrado').upper()}")
+                self.log_async(f"Índice de confiança: {estrategia.get('indice_confianca', 0):.3f}")
+                self.log_async(f"Estabilidade={estrategia.get('estabilidade', 0):.3f} | Concentração={estrategia.get('concentracao', 0):.3f} | Diversidade={estrategia.get('diversidade', 0):.3f}")
+                self.log_async(f"Taxa de mutação={estrategia.get('taxa_mutacao', 0):.3f} | Limite de interseção={estrategia.get('limite_intersecao', 12)}")
             ensemble = self.analise.get("ensemble", {}) if self.analise else {}
             if ensemble:
-                self.log("-" * 72)
-                self.log("ENSEMBLE MULTI-IA ADAPTATIVO")
+                self.log_async("-" * 72)
+                self.log_async("ENSEMBLE MULTI-IA ADAPTATIVO")
                 conf = ensemble.get("confianca_modelos", {})
-                self.log(", ".join(f"{nome}={peso:.2f}" for nome, peso in conf.items()))
+                self.log_async(", ".join(f"{nome}={peso:.2f}" for nome, peso in conf.items()))
                 top_ens = sorted(self.pesos.items(), key=lambda x: x[1], reverse=True)[:10]
-                self.log("Top 10 pesos finais: " + ", ".join(f"{n:02d} ({p:.4f})" for n, p in top_ens))
+                self.log_async("Top 10 pesos finais: " + ", ".join(f"{n:02d} ({p:.4f})" for n, p in top_ens))
             cobertura = self.analise.get("cobertura_global", {}) if self.analise else {}
             perf_reg = registrar_performance_geracao(self.jogos_gerados, self.analise, ger, pop, janela, qtd)
             if perf_reg:
-                self.log("💾 Performance técnica registrada no banco interno de estratégias.")
+                self.log_async("💾 Performance técnica registrada no banco interno de estratégias.")
             if cobertura:
-                self.log("-" * 72)
-                self.log("COBERTURA INTELIGENTE GLOBAL")
-                self.log(f"Sobreposição média entre jogos: {cobertura.get('media_sobreposicao', 0)}")
-                self.log(f"Sobreposição mínima/máxima: {cobertura.get('min_sobreposicao', 0)} / {cobertura.get('max_sobreposicao', 0)}")
-                self.log(f"Média de soma do pacote: {cobertura.get('media_soma', 0)} | Média de pares: {cobertura.get('media_pares', 0)}")
+                self.log_async("-" * 72)
+                self.log_async("COBERTURA INTELIGENTE GLOBAL")
+                self.log_async(f"Sobreposição média entre jogos: {cobertura.get('media_sobreposicao', 0)}")
+                self.log_async(f"Sobreposição mínima/máxima: {cobertura.get('min_sobreposicao', 0)} / {cobertura.get('max_sobreposicao', 0)}")
+                self.log_async(f"Média de soma do pacote: {cobertura.get('media_soma', 0)} | Média de pares: {cobertura.get('media_pares', 0)}")
                 mais = cobertura.get('dezenas_mais_cobertas', [])
                 menos = cobertura.get('dezenas_menos_cobertas', [])
                 if mais:
-                    self.log("Mais cobertas: " + ", ".join(f"{n:02d}({q})" for n, q in mais))
+                    self.log_async("Mais cobertas: " + ", ".join(f"{n:02d}({q})" for n, q in mais))
                 if menos:
-                    self.log("Menos cobertas: " + ", ".join(f"{n:02d}({q})" for n, q in menos))
+                    self.log_async("Menos cobertas: " + ", ".join(f"{n:02d}({q})" for n, q in menos))
                 ref = cobertura.get("refinamento_matematico") or {}
                 if ref:
-                    self.log("REFINAMENTO MATEMÁTICO ESTRUTURAL")
-                    self.log(f"Score estrutural médio: {ref.get('score_estrutural_medio')} | Entropia média: {ref.get('entropia_media')}")
-                    self.log(f"Estruturas fortes/boas: {ref.get('jogos_estrutura_forte_ou_boa')} | Fracas: {ref.get('jogos_estrutura_fraca')}")
+                    self.log_async("REFINAMENTO MATEMÁTICO ESTRUTURAL")
+                    self.log_async(f"Score estrutural médio: {ref.get('score_estrutural_medio')} | Entropia média: {ref.get('entropia_media')}")
+                    self.log_async(f"Estruturas fortes/boas: {ref.get('jogos_estrutura_forte_ou_boa')} | Fracas: {ref.get('jogos_estrutura_fraca')}")
                 ref_ag = cobertura.get("refinamento_agressivo") or {}
                 if ref_ag.get("ativo"):
-                    self.log("REFINAMENTO MATEMÁTICO AGRESSIVO")
-                    self.log(
+                    self.log_async("REFINAMENTO MATEMÁTICO AGRESSIVO")
+                    self.log_async(
                         f"Filtro pré-seleção: aprovados={ref_ag.get('aprovados')} | rejeitados={ref_ag.get('rejeitados')} | "
                         f"score mínimo={ref_ag.get('score_minimo')} | fallback={ref_ag.get('fallback_usado')}"
                     )
             aprendizado = self.analise.get("aprendizado", {}) if self.analise else {}
             if aprendizado:
-                self.log("-" * 72)
-                self.log("APRENDIZADO PERMANENTE")
-                self.log(aprendizado.get("resumo", "Sem memória de desempenho."))
+                self.log_async("-" * 72)
+                self.log_async("APRENDIZADO PERMANENTE")
+                self.log_async(aprendizado.get("resumo", "Sem memória de desempenho."))
                 if aprendizado.get("tem_memoria"):
-                    self.log(f"Ajustes: diversidade={aprendizado.get('ajuste_diversidade', 0):+.3f} | mutação={aprendizado.get('ajuste_mutacao', 0):+.3f} | elite={aprendizado.get('ajuste_elite', 0):+.3f}")
+                    self.log_async(f"Ajustes: diversidade={aprendizado.get('ajuste_diversidade', 0):+.3f} | mutação={aprendizado.get('ajuste_mutacao', 0):+.3f} | elite={aprendizado.get('ajuste_elite', 0):+.3f}")
             lab = self.analise.get("laboratorio_inteligente", {}) if self.analise else {}
             if lab.get("ativo"):
-                self.log("-" * 72)
-                self.log("RESULTADO DO MODO LABORATÓRIO INTELIGENTE")
+                self.log_async("-" * 72)
+                self.log_async("RESULTADO DO MODO LABORATÓRIO INTELIGENTE")
                 vencedor = lab.get("configuracao_vencedora", {})
-                self.log(
+                self.log_async(
                     f"Vencedor: {vencedor.get('nome', '')} | "
                     f"Gerações={vencedor.get('geracoes', '')} | "
                     f"População={vencedor.get('pop_size', '')} | "
                     f"Score laboratório={vencedor.get('score_laboratorio', '')}"
                 )
-                self.log("Configurações testadas:")
+                self.log_async("Configurações testadas:")
                 for r in lab.get("resultados_testados", []):
-                    self.log(
+                    self.log_async(
                         f"- {r.get('nome')}: G={r.get('geracoes')} | P={r.get('pop_size')} | "
                         f"Score={r.get('score_laboratorio')} | Sobrep. média={r.get('media_sobreposicao')} | Tempo={r.get('tempo_segundos')}s"
                     )
-            self.log("✅ Jogos gerados com sucesso.")
+            self.log_async("✅ Jogos gerados com sucesso.")
             for row in avaliar_jogos(self.jogos_gerados, self.analise, self.pesos):
-                self.log(
+                self.log_async(
                     f"Jogo {row['Jogo']:02d}: {row['Dezenas']} | "
                     f"Pares={row['Pares']} | Ímpares={row['Ímpares']} | "
                     f"Soma={row['Soma']} | Perfil={row.get('Perfil', '')} | Score={row['Score']}"
@@ -1428,6 +1492,8 @@ class RoboLotofacilUltraApp:
             self.log("⚠️ Carregue o histórico antes de gerar o fechamento.")
             messagebox.showwarning("Fechamento", "Carregue o histórico (📂 Carregar) antes de gerar o fechamento.")
             return
+        if not self._reservar_operacao_pesada("Fechamento"):
+            return
 
         # Tamanho de cada jogo do fechamento (15-18, campo "Dezenas por jogo"
         # da tela) -- até 2026-08-03 esse campo era lido só por "Gerar Jogos"
@@ -1452,6 +1518,7 @@ class RoboLotofacilUltraApp:
                 f"para jogos de {tamanho_jogo} dezenas"
                 f"{' (fechamento reduzido)' if reduzido else ''} (recebido: {tamanho_pool})."
             )
+            self._liberar_operacao_pesada()
             return
 
         if reduzido:
@@ -1460,9 +1527,11 @@ class RoboLotofacilUltraApp:
                 g_garantia = int(self.fechamento_g_garantia.get())
             except Exception:
                 messagebox.showerror("Fechamento Reduzido", "Valores de t/g inválidos.")
+                self._liberar_operacao_pesada()
                 return
             if not (1 <= t_garantia <= tamanho_pool):
                 messagebox.showerror("Fechamento Reduzido", f"t (garantia) precisa estar entre 1 e {tamanho_pool} (recebido: {t_garantia}).")
+                self._liberar_operacao_pesada()
                 return
             if not (1 <= g_garantia <= min(t_garantia, tamanho_jogo)):
                 messagebox.showerror(
@@ -1470,6 +1539,7 @@ class RoboLotofacilUltraApp:
                     f"g (garantia) precisa estar entre 1 e min(t, dezenas por jogo)="
                     f"{min(t_garantia, tamanho_jogo)} (recebido: {g_garantia})."
                 )
+                self._liberar_operacao_pesada()
                 return
 
             self._fechamento_ativo = True
@@ -1498,6 +1568,7 @@ class RoboLotofacilUltraApp:
             )
             if not confirmado:
                 self.log("Fechamento cancelado pelo usuário (pool grande demais para o orçamento pretendido).")
+                self._liberar_operacao_pesada()
                 return
 
         self._fechamento_ativo = True
@@ -1532,32 +1603,32 @@ class RoboLotofacilUltraApp:
             self.pesos = (self.analise.get("ensemble") or {}).get("pesos_finais", {})
             self.info_backtest = None
 
-            self.log(f"Pool escolhido ({tamanho_pool} dezenas): {' '.join(f'{n:02d}' for n in resultado['pool'])}")
-            self.log(f"Jogos no fechamento: {resultado['qtd_jogos']:,} (cada um com {tamanho_jogo} dezenas)")
+            self.log_async(f"Pool escolhido ({tamanho_pool} dezenas): {' '.join(f'{n:02d}' for n in resultado['pool'])}")
+            self.log_async(f"Jogos no fechamento: {resultado['qtd_jogos']:,} (cada um com {tamanho_jogo} dezenas)")
             if reduzido:
-                self.log(
+                self.log_async(
                     f"Garantia (verificada por força bruta): SE pelo menos {resultado['t_garantia']} das "
                     f"dezenas sorteadas estiverem no pool, pelo menos UM jogo do fechamento acerta pelo "
                     f"menos {resultado['g_garantia']} delas."
                 )
-                self.log(
+                self.log_async(
                     "⚠️ Garantia mais fraca que a do fechamento de garantia total: vale pra PELO MENOS UM "
                     "jogo (não todos), e é condicionada a t dezenas no pool (não as 15 todas). Escolher "
                     "quais dezenas entram no pool continua sendo uma aposta — ver docstring de fechamento.py."
                 )
             else:
-                self.log(f"Garantia mínima SE as 15 sorteadas estiverem no pool: {resultado['garantia_minima']} pontos")
-                self.log(
+                self.log_async(f"Garantia mínima SE as 15 sorteadas estiverem no pool: {resultado['garantia_minima']} pontos")
+                self.log_async(
                     "⚠️ A garantia é condicional: escolher quais dezenas entram no pool continua sendo uma "
                     "aposta. O fechamento redistribui o resultado entre vários jogos, não muda a chance de "
                     "acertar quais dezenas saem — ver VALIDACAO_ESCALA_REAL_2026-07-14.md."
                 )
-            self.log("-" * 72)
+            self.log_async("-" * 72)
             limite_exibicao = 30
             for idx, jogo in enumerate(resultado["jogos"][:limite_exibicao], start=1):
-                self.log(f"Jogo {idx:02d}: {formatar_jogo(jogo)}")
+                self.log_async(f"Jogo {idx:02d}: {formatar_jogo(jogo)}")
             if resultado["qtd_jogos"] > limite_exibicao:
-                self.log(f"... e mais {resultado['qtd_jogos'] - limite_exibicao} jogos (todos em self.jogos_gerados / tabela de jogos).")
+                self.log_async(f"... e mais {resultado['qtd_jogos'] - limite_exibicao} jogos (todos em self.jogos_gerados / tabela de jogos).")
 
             self._atualizar_progresso(100, "Concluído!")
             self.root.after(0, self._parar_progresso)
@@ -1572,6 +1643,7 @@ class RoboLotofacilUltraApp:
             self.log_async(traceback.format_exc())
         finally:
             self._fechamento_ativo = False
+            self._liberar_operacao_pesada()
             self.root.after(0, lambda: self._progresso.configure(value=0))
 
 
@@ -1624,6 +1696,8 @@ class RoboLotofacilUltraApp:
             self.log("⚠️ Geração já em andamento. Aguarde.")
             self.set_status("Geração em andamento...", "blue")
             return
+        if not self._reservar_operacao_pesada("Dual-Perfil"):
+            return
         self._geracao_ativa = True
         th = threading.Thread(target=self._executar_dual_perfil, daemon=True)
         th.start()
@@ -1649,17 +1723,17 @@ class RoboLotofacilUltraApp:
             _override_imp = {"peso_impopularidade": peso_imp_ui}
 
             self.root.after(0, self._iniciar_progresso)
-            self.log("=" * 72)
-            self.log("🎯 GERAÇÃO DUAL-PERFIL V21.5-FULL")
+            self.log_async("=" * 72)
+            self.log_async("🎯 GERAÇÃO DUAL-PERFIL V21.5-FULL")
             self._aplicar_seed_configurada()
-            self.log(f"Total de jogos: {qtd} | Janela: {janela}")
-            self.log(f"Perfil Consistência: {round(qtd * 0.70)} jogos — G={ger_ui} P={pop_ui} · otimizado para 11+/12+")
-            self.log(f"Perfil Exploração:   {round(qtd * 0.30)} jogos — G=40 P=40 · Pares/Trios+Cobertura → 13+")
+            self.log_async(f"Total de jogos: {qtd} | Janela: {janela}")
+            self.log_async(f"Perfil Consistência: {round(qtd * 0.70)} jogos — G={ger_ui} P={pop_ui} · otimizado para 11+/12+")
+            self.log_async(f"Perfil Exploração:   {round(qtd * 0.30)} jogos — G=40 P=40 · Pares/Trios+Cobertura → 13+")
             if peso_imp_ui > 0:
-                self.log(f"📊 Impopularidade: {self.peso_impopularidade.get()}% ativo em ambos os perfis.")
+                self.log_async(f"📊 Impopularidade: {self.peso_impopularidade.get()}% ativo em ambos os perfis.")
             else:
-                self.log("📊 Impopularidade desligada (slider em 0%).")
-            self.log("-" * 72)
+                self.log_async("📊 Impopularidade desligada (slider em 0%).")
+            self.log_async("-" * 72)
 
             self._atualizar_progresso(15, "Gerando perfil consistência...")
 
@@ -1680,20 +1754,20 @@ class RoboLotofacilUltraApp:
             # Exibe resumo dual-perfil
             rel_dp = relatorio_dual_perfil(self.analise)
             if rel_dp:
-                self.log(rel_dp)
+                self.log_async(rel_dp)
 
             # Exibe ensemble e cobertura normalmente
             ensemble = self.analise.get("ensemble", {}) if self.analise else {}
             if ensemble:
-                self.log("-" * 72)
-                self.log("ENSEMBLE MULTI-IA (Perfil Consistência)")
+                self.log_async("-" * 72)
+                self.log_async("ENSEMBLE MULTI-IA (Perfil Consistência)")
                 conf = ensemble.get("confianca_modelos", {})
-                self.log(", ".join(f"{nome}={peso:.2f}" for nome, peso in conf.items()))
+                self.log_async(", ".join(f"{nome}={peso:.2f}" for nome, peso in conf.items()))
 
             cobertura = self.analise.get("cobertura_global", {}) if self.analise else {}
             if cobertura:
-                self.log("-" * 72)
-                self.log(f"COBERTURA FINAL — Sobrep. média: {cobertura.get('media_sobreposicao', 0)}"
+                self.log_async("-" * 72)
+                self.log_async(f"COBERTURA FINAL — Sobrep. média: {cobertura.get('media_sobreposicao', 0)}"
                          f" | mín/máx: {cobertura.get('min_sobreposicao', 0)}"
                          f"/{cobertura.get('max_sobreposicao', 0)}")
 
@@ -1701,16 +1775,17 @@ class RoboLotofacilUltraApp:
             self.root.after(0, self._atualizar_tabela_jogos)
             self.root.after(0, self._atualizar_painel_info)
             self._atualizar_progresso(100, "✅ Dual-Perfil concluído.")
-            self.log("✅ Pacote Dual-Perfil gerado com sucesso.")
-            self.set_status("✅ Dual-Perfil concluído.", "green")
+            self.log_async("✅ Pacote Dual-Perfil gerado com sucesso.")
+            self.set_status_async("✅ Dual-Perfil concluído.", "green")
 
         except Exception as e:
-            self.log(f"❌ Erro no Dual-Perfil: {e}")
-            self.set_status("Erro no Dual-Perfil.", "red")
+            self.log_async(f"❌ Erro no Dual-Perfil: {e}")
+            self.set_status_async("Erro no Dual-Perfil.", "red")
             import traceback
-            self.log(traceback.format_exc())
+            self.log_async(traceback.format_exc())
         finally:
             self._geracao_ativa = False
+            self._liberar_operacao_pesada()
             self.root.after(0, self._parar_progresso)
 
     def iniciar_calibracao_vs_aleatorio(self) -> None:
@@ -1720,16 +1795,29 @@ class RoboLotofacilUltraApp:
                 self.log("⚠️ A calibração já está em execução.")
                 self.set_status("Calibração já em execução.", "blue")
                 return
+            if not self._reservar_operacao_pesada("Calibração"):
+                return
             self.calibracao_ativa = True
             self.set_status("Iniciando calibração...", "blue")
             self.log("=" * 72)
             self.log("CALIBRAÇÃO ROBO VS ALEATÓRIO INICIADA")
             self.log("O robô será comparado com pacotes aleatórios usando concursos passados.")
-            th = threading.Thread(target=self.executar_calibracao_vs_aleatorio, daemon=True)
+
+            def _rodar():
+                # Libera aqui, não dentro de executar_calibracao_vs_aleatorio:
+                # esse worker também é chamado direto pelo Pipeline V22 (que
+                # gerencia seu próprio mutex ao fim de todas as etapas).
+                try:
+                    self.executar_calibracao_vs_aleatorio()
+                finally:
+                    self._liberar_operacao_pesada()
+
+            th = threading.Thread(target=_rodar, daemon=True)
             self.thread_calibracao = th
             th.start()
         except Exception as e:
             self.calibracao_ativa = False
+            self._liberar_operacao_pesada()
             self.set_status("Erro ao iniciar calibração.", "red")
             self.log(f"❌ Erro ao iniciar calibração: {e}")
 
@@ -1803,16 +1891,26 @@ class RoboLotofacilUltraApp:
                 self.log("⚠️ O Backtest Científico já está em execução.")
                 self.set_status("Backtest Científico já em execução.", "blue")
                 return
+            if not self._reservar_operacao_pesada("Backtest Científico V11"):
+                return
             self.backtest_cientifico_ativo = True
             self.set_status("Iniciando Backtest Científico...", "blue")
             self.log("=" * 72)
             self.log("🧪 BACKTEST CIENTÍFICO INICIADO")
             self.log("Inclui: backtest massivo, competição de modelos, autocalibração e banco de conhecimento.")
-            th = threading.Thread(target=self.executar_backtest_cientifico_v11, daemon=True)
+
+            def _rodar():
+                try:
+                    self.executar_backtest_cientifico_v11()
+                finally:
+                    self._liberar_operacao_pesada()
+
+            th = threading.Thread(target=_rodar, daemon=True)
             self.thread_backtest_cientifico = th
             th.start()
         except Exception as e:
             self.backtest_cientifico_ativo = False
+            self._liberar_operacao_pesada()
             self.set_status("Erro ao iniciar Backtest Científico.", "red")
             self.log(f"❌ Erro ao iniciar Backtest Científico: {e}")
 
@@ -1855,13 +1953,13 @@ class RoboLotofacilUltraApp:
             self.log_async(f"Conhecimento salvo em: {resultado.get('arquivo_conhecimento', '')}")
             self.set_status_async("Backtest Científico concluído.", "green")
             try:
-                messagebox.showinfo(
+                self.root.after(0, lambda: messagebox.showinfo(
                     "Backtest Científico",
                     "Backtest Científico concluído!\n\n"
                     f"Configuração campeã: {rec.get('estrategia_base')}\n"
                     f"G={rec.get('geracoes')} | P={rec.get('pop_size')}\n\n"
                     f"Relatório:\n{resultado.get('arquivo_relatorio', '')}"
-                )
+                ))
             except Exception:
                 pass
         except Exception as e:
@@ -1883,16 +1981,26 @@ class RoboLotofacilUltraApp:
                 self.log("⚠️ O Auto Diagnóstico já está em execução.")
                 self.set_status("Auto Diagnóstico já em execução.", "blue")
                 return
+            if not self._reservar_operacao_pesada("Auto Diagnóstico"):
+                return
             self.auto_diagnostico_ativo = True
             self.set_status("Iniciando Auto Diagnóstico...", "blue")
             self.log("=" * 72)
             self.log("AUTO DIAGNÓSTICO INICIADO")
             self.log("Será executado: Calibrar IA e Comparador de Estratégias.")
-            th = threading.Thread(target=self.executar_auto_diagnostico, daemon=True)
+
+            def _rodar():
+                try:
+                    self.executar_auto_diagnostico()
+                finally:
+                    self._liberar_operacao_pesada()
+
+            th = threading.Thread(target=_rodar, daemon=True)
             self.thread_auto_diagnostico = th
             th.start()
         except Exception as e:
             self.auto_diagnostico_ativo = False
+            self._liberar_operacao_pesada()
             self.set_status("Erro ao iniciar Auto Diagnóstico.", "red")
             self.log(f"❌ Erro ao iniciar Auto Diagnóstico: {e}")
 
@@ -1961,16 +2069,26 @@ class RoboLotofacilUltraApp:
                 self.log("⚠️ O Backtest Automático já está em execução.")
                 self.set_status("Backtest Automático já em execução.", "blue")
                 return
+            if not self._reservar_operacao_pesada("Backtest Automático"):
+                return
             self.backtest_automatico_ativo = True
             self.set_status("Iniciando Backtest Automático...", "blue")
             self.log("=" * 72)
             self.log("🤖 BACKTEST AUTOMÁTICO INICIADO")
             self.log("O robô vai gerar jogos usando concursos anteriores e comparar com o resultado real seguinte.")
-            th = threading.Thread(target=self.executar_backtest_automatico, daemon=True)
+
+            def _rodar():
+                try:
+                    self.executar_backtest_automatico()
+                finally:
+                    self._liberar_operacao_pesada()
+
+            th = threading.Thread(target=_rodar, daemon=True)
             self.thread_backtest_automatico = th
             th.start()
         except Exception as e:
             self.backtest_automatico_ativo = False
+            self._liberar_operacao_pesada()
             self.set_status("Erro ao iniciar Backtest Automático.", "red")
             self.log(f"❌ Erro ao iniciar Backtest Automático: {e}")
 
@@ -2159,12 +2277,12 @@ class RoboLotofacilUltraApp:
                 self.log_async(f"Planilha CSV salva em: {caminho_csv}")
             self.set_status_async("Backtest Automático concluído com sucesso.", "green")
             try:
-                messagebox.showinfo(
+                self.root.after(0, lambda: messagebox.showinfo(
                     "Backtest Automático",
                     "Backtest Automático concluído!\n\n"
                     f"Melhor resultado: {self.info_backtest_automatico['melhor']} pontos\n"
                     f"Relatório salvo em:\n{caminho_txt}"
-                )
+                ))
             except Exception:
                 pass
 
@@ -2181,6 +2299,8 @@ class RoboLotofacilUltraApp:
         if getattr(self, "_backtest_simples_ativo", False):
             self.log("⚠️ Backtest já em andamento.")
             return
+        if not self._reservar_operacao_pesada("Backtest"):
+            return
         self._backtest_simples_ativo = True
         self.set_status("Iniciando backtest...", "blue")
         threading.Thread(target=self._executar_rodar_backtest, daemon=True).start()
@@ -2191,6 +2311,7 @@ class RoboLotofacilUltraApp:
             self.rodar_backtest()
         finally:
             self._backtest_simples_ativo = False
+            self._liberar_operacao_pesada()
 
     def rodar_backtest(self) -> None:
         try:
@@ -2222,24 +2343,24 @@ class RoboLotofacilUltraApp:
             passos_maximos = max(1, total - janela)
             passos = min(max(1, passos_digitados), passos_maximos)
 
-            self.set_status("Rodando backtest...", "blue")
-            self.log("=" * 72)
-            self.log("BACKTEST")
+            self.set_status_async("Rodando backtest...", "blue")
+            self.log_async("=" * 72)
+            self.log_async("BACKTEST")
             self._aplicar_seed_configurada()
             base_total = getattr(self, "total_concursos_csv", total)
-            self.log(f"Base completa no disco: {base_total} concursos")
-            self.log(f"Concursos carregados em memória: {total}")
+            self.log_async(f"Base completa no disco: {base_total} concursos")
+            self.log_async(f"Concursos carregados em memória: {total}")
             if janela != janela_digitada:
-                self.log(f"⚠️ Janela ajustada automaticamente de {janela_digitada} para {janela} para evitar erro de histórico insuficiente.")
+                self.log_async(f"⚠️ Janela ajustada automaticamente de {janela_digitada} para {janela} para evitar erro de histórico insuficiente.")
             if passos != passos_digitados:
-                self.log(f"⚠️ Passos ajustados automaticamente de {passos_digitados} para {passos} conforme histórico disponível.")
-            self.log(f"Passos={passos} | Janela={janela} | Jogos por rodada={qtd} | G={ger} | P={pop}")
+                self.log_async(f"⚠️ Passos ajustados automaticamente de {passos_digitados} para {passos} conforme histórico disponível.")
+            self.log_async(f"Passos={passos} | Janela={janela} | Jogos por rodada={qtd} | G={ger} | P={pop}")
 
             if passos >= 120:
-                self.log("Modo Ultra Massivo ativado automaticamente pelo número alto de passos.")
+                self.log_async("Modo Ultra Massivo ativado automaticamente pelo número alto de passos.")
 
                 def status_ultra(msg):
-                    self.log(msg)
+                    self.log_async(msg)
                     try:
                         self.root.update_idletasks()
                     except Exception:
@@ -2249,25 +2370,25 @@ class RoboLotofacilUltraApp:
                     self.concursos, janela=janela, qtd_jogos=qtd, passos=passos, status_cb=status_ultra,
                     geracoes=ger, pop_size=pop,
                 )
-                self.log("✅ Backtest Ultra Massivo concluído.")
-                self.log(f"Configuração testada: {self.info_backtest.get('configuracao_vencedora', {}).get('nome', '')}")
-                self.log(f"Média do melhor jogo: {self.info_backtest['media_melhor']}")
-                self.log(f"Melhor acerto observado: {self.info_backtest['max_melhor']}")
-                self.log(f"Distribuição dos melhores acertos: {self.info_backtest['distribuicao']}")
-                self.log("Campeonato entre modelos:")
+                self.log_async("✅ Backtest Ultra Massivo concluído.")
+                self.log_async(f"Configuração testada: {self.info_backtest.get('configuracao_vencedora', {}).get('nome', '')}")
+                self.log_async(f"Média do melhor jogo: {self.info_backtest['media_melhor']}")
+                self.log_async(f"Melhor acerto observado: {self.info_backtest['max_melhor']}")
+                self.log_async(f"Distribuição dos melhores acertos: {self.info_backtest['distribuicao']}")
+                self.log_async("Campeonato entre modelos:")
                 for pos, item in enumerate(self.info_backtest.get('ranking_modelos', []), start=1):
-                    self.log(f"{pos}. {item.get('modelo')} | peso médio={item.get('peso_medio')}")
-                self.log(f"Relatório salvo em: {self.info_backtest.get('arquivo_relatorio', '')}")
-                self.set_status("Backtest Ultra Massivo concluído com sucesso.", "green")
+                    self.log_async(f"{pos}. {item.get('modelo')} | peso médio={item.get('peso_medio')}")
+                self.log_async(f"Relatório salvo em: {self.info_backtest.get('arquivo_relatorio', '')}")
+                self.set_status_async("Backtest Ultra Massivo concluído com sucesso.", "green")
             else:
                 self.info_backtest = backtest_basico(
                     self.concursos, janela=janela, qtd_jogos=qtd, passos=passos,
                     geracoes=ger, pop_size=pop,
                 )
-                self.log(f"✅ Backtest concluído. Passos: {self.info_backtest['passos']}")
-                self.log(f"Média do melhor jogo: {self.info_backtest['media_melhor']}")
-                self.log(f"Melhor acerto observado: {self.info_backtest['max_melhor']}")
-                self.log(f"Distribuição dos melhores acertos: {self.info_backtest['distribuicao']}")
+                self.log_async(f"✅ Backtest concluído. Passos: {self.info_backtest['passos']}")
+                self.log_async(f"Média do melhor jogo: {self.info_backtest['media_melhor']}")
+                self.log_async(f"Melhor acerto observado: {self.info_backtest['max_melhor']}")
+                self.log_async(f"Distribuição dos melhores acertos: {self.info_backtest['distribuicao']}")
                 # ── V20.5: validação científica automática ──
                 try:
                     resultados_bt = [
@@ -2279,7 +2400,7 @@ class RoboLotofacilUltraApp:
                         resultados_bt = [{"acertos": self.info_backtest["media_melhor"]}]
                     bm = benchmark_vs_aleatorio(resultados_bt, tamanho_jogo=_config_module.TAMANHO_JOGO)
                     gs = ganho_estatistico(resultados_bt, tamanho_jogo=_config_module.TAMANHO_JOGO)
-                    self.log(
+                    self.log_async(
                         f"📊 V20.5 | vs aleatório: {bm['veredito']} "
                         f"(robô={bm['media_robo']:.3f} | aleat.={bm['media_aleatorio']:.3f} | Δ={bm['delta']:+.3f}) "
                         f"| z-score={gs['z_score']:.3f} [{gs['interpretacao']}]"
@@ -2291,16 +2412,16 @@ class RoboLotofacilUltraApp:
                     poda = self.info_backtest.get("poda_modelos") or []
                     if poda:
                         icones = {"ATIVO": "✅", "OBSERVACAO": "⚠️", "SUSPENSO": "🔴"}
-                        self.log("🔪 V20.2 Poda Inteligente — estado dos modelos após backtest:")
+                        self.log_async("🔪 V20.2 Poda Inteligente — estado dos modelos após backtest:")
                         for m in sorted(poda, key=lambda x: x.get("score_sobrevivencia", 0), reverse=True):
                             ic = icones.get(m.get("estado", ""), "❓")
                             obs = m.get("obs", "")
                             if obs == "dados_insuficientes":
-                                self.log(
+                                self.log_async(
                                     f"   {ic} {m['nome']:<14} | dados insuficientes — sem penalidade"
                                 )
                             else:
-                                self.log(
+                                self.log_async(
                                     f"   {ic} {m['nome']:<14} | "
                                     f"sv={m.get('score_sobrevivencia', 0):.4f} | "
                                     f"estado={m.get('estado')} | "
@@ -2311,20 +2432,20 @@ class RoboLotofacilUltraApp:
                         n_sus = sum(1 for m in poda if m.get("estado") == "SUSPENSO")
                         n_obs = sum(1 for m in poda if m.get("estado") == "OBSERVACAO")
                         if n_sus or n_obs:
-                            self.log(
+                            self.log_async(
                                 f"   → {n_sus} suspenso(s), {n_obs} em observação. "
                                 f"Pesos ajustados em pesos_modelos.json — próxima geração já aplica."
                             )
                         else:
-                            self.log("   → Todos os modelos ATIVOS. Nenhum peso penalizado.")
+                            self.log_async("   → Todos os modelos ATIVOS. Nenhum peso penalizado.")
                 except Exception:
                     pass
-                self.set_status("Backtest concluído com sucesso.", "green")
+                self.set_status_async("Backtest concluído com sucesso.", "green")
         except Exception as e:
-            self.set_status("Erro no backtest.", "red")
-            self.log("❌ Erro no backtest:")
-            self.log(str(e))
-            self.log(traceback.format_exc())
+            self.set_status_async("Erro no backtest.", "red")
+            self.log_async("❌ Erro no backtest:")
+            self.log_async(str(e))
+            self.log_async(traceback.format_exc())
 
     def obter_id_ultimo_concurso(self) -> int:
         try:
@@ -2553,10 +2674,19 @@ class RoboLotofacilUltraApp:
         if len(self.concursos) < MIN_HIST + 10:
             self.log(f"❌ Histórico insuficiente para aprendizado contínuo. Use pelo menos {MIN_HIST + 10} concursos.")
             return
+        if not self._reservar_operacao_pesada("Aprendizado Contínuo"):
+            return
         self.aprendizado_continuo_ativo = True
         if not automatico:
             self.aprendizado_automatico_chave = None
-        self.thread_aprendizado_continuo = threading.Thread(target=self.executar_aprendizado_continuo, daemon=True)
+
+        def _rodar():
+            try:
+                self.executar_aprendizado_continuo()
+            finally:
+                self._liberar_operacao_pesada()
+
+        self.thread_aprendizado_continuo = threading.Thread(target=_rodar, daemon=True)
         self.thread_aprendizado_continuo.start()
 
     def parar_aprendizado_continuo(self) -> None:
@@ -4019,12 +4149,21 @@ class RoboLotofacilUltraApp:
         if not self.concursos:
             self.log("⚠️ Carregue o histórico antes de executar o Walk-Forward.")
             return
+        if not self._reservar_operacao_pesada("Walk-Forward"):
+            return
         self._walkforward_ativo = True
         self.set_status("Iniciando Walk-Forward...", "blue")
         self.log("=" * 72)
         self.log("🔀 WALK-FORWARD VALIDATION V20.8 INICIADO")
         self.log("Avalia robustez em múltiplas janelas deslizantes e detecta overfitting.")
-        th = threading.Thread(target=self._executar_walkforward, daemon=True)
+
+        def _rodar():
+            try:
+                self._executar_walkforward()
+            finally:
+                self._liberar_operacao_pesada()
+
+        th = threading.Thread(target=_rodar, daemon=True)
         th.start()
 
     def _executar_walkforward(self) -> None:
@@ -4127,7 +4266,7 @@ class RoboLotofacilUltraApp:
                     f"Overfitting       : {ovf['severidade']}\n\n"
                     f"Veredito: {resumo['veredito']}"
                 )
-                messagebox.showinfo("Walk-Forward V20.8", mensagem)
+                self.root.after(0, lambda: messagebox.showinfo("Walk-Forward V20.8", mensagem))
             except Exception:
                 pass
 
@@ -4153,6 +4292,8 @@ class RoboLotofacilUltraApp:
             return
         if not self.concursos:
             self.log("⚠️ Carregue o histórico antes de executar o Mapa G×P.")
+            return
+        if not self._reservar_operacao_pesada("Mapa G×P"):
             return
         self._mapa_gp_ativo = True
         self.set_status("Iniciando Mapa G×P...", "blue")
@@ -4239,6 +4380,7 @@ class RoboLotofacilUltraApp:
             self.log_async(traceback.format_exc())
         finally:
             self._mapa_gp_ativo = False
+            self._liberar_operacao_pesada()
             try:
                 self.root.after(0, self._parar_progresso)
             except Exception:
@@ -4259,6 +4401,8 @@ class RoboLotofacilUltraApp:
         if not self.concursos:
             self.log("⚠️ Carregue o histórico antes de usar o Otimizador.")
             return
+        if not self._reservar_operacao_pesada("Otimizador V22"):
+            return
         self._otimizador_v22_ativo = True
         self.set_status("Otimizador iniciado...", "blue")
         th = threading.Thread(target=self._executar_otimizador_v22, daemon=True)
@@ -4274,10 +4418,10 @@ class RoboLotofacilUltraApp:
             qtd        = min(max(5, int(self.qtd_jogos.get())), 40)
             tentativas = 10
 
-            self.log("=" * 72)
-            self.log("⚡ OTIMIZADOR INICIADO")
+            self.log_async("=" * 72)
+            self.log_async("⚡ OTIMIZADOR INICIADO")
             self._aplicar_seed_configurada()
-            self.log(f"Parâmetros: janela={janela} | G={ger} | P={pop} | jogos={qtd} | tentativas={tentativas}")
+            self.log_async(f"Parâmetros: janela={janela} | G={ger} | P={pop} | jogos={qtd} | tentativas={tentativas}")
             self.root.after(0, self._iniciar_progresso)
 
             def fn_gerar(hist):
@@ -4331,6 +4475,7 @@ class RoboLotofacilUltraApp:
             self.log_async(traceback.format_exc())
         finally:
             self._otimizador_v22_ativo = False
+            self._liberar_operacao_pesada()
             try:
                 self.root.after(0, self._parar_progresso)
             except Exception:
@@ -4350,9 +4495,18 @@ class RoboLotofacilUltraApp:
         if not self.concursos:
             self.log("⚠️ Carregue o histórico antes de rodar o Pipeline V22.")
             return
+        if not self._reservar_operacao_pesada("Pipeline V22"):
+            return
         self._pipeline_v22_ativo = True
         self.set_status("Pipeline V22 iniciado...", "blue")
         try:
+            # _pipeline_v22_ativo e a operação pesada reservada acima são
+            # liberados dentro de PipelineV22._run() (roda em thread própria
+            # até o fim de todas as etapas) -- resetar aqui, logo após
+            # `.executar(em_thread=True)` retornar, é cedo demais: esse
+            # método só dispara a thread e volta na hora, deixando o guard
+            # de "já em execução" inútil por quase toda a duração real do
+            # pipeline (bug encontrado em varredura de código, 2026-08-31).
             pipeline = PipelineV22(
                 app=self,
                 log_cb=self.log_async,
@@ -4362,8 +4516,8 @@ class RoboLotofacilUltraApp:
         except Exception as e:
             self.log(f"❌ Erro ao iniciar Pipeline V22: {e}")
             self.set_status("Erro no Pipeline V22.", "red")
-        finally:
             self._pipeline_v22_ativo = False
+            self._liberar_operacao_pesada()
 
     # ─────────────────────────────────────────────────────────────────────────
     # V20.6 — Bootstrap IC (Inferência Estatística)
@@ -4382,6 +4536,8 @@ class RoboLotofacilUltraApp:
 
         if getattr(self, "_bootstrap_ativo", False):
             self.log("⚠️ Bootstrap IC já está em execução.")
+            return
+        if not self._reservar_operacao_pesada("Bootstrap IC"):
             return
 
         self._bootstrap_ativo = True
@@ -4484,6 +4640,7 @@ class RoboLotofacilUltraApp:
             self.log_async(traceback.format_exc())
         finally:
             self._bootstrap_ativo = False
+            self._liberar_operacao_pesada()
             try:
                 self.root.after(0, self._parar_progresso)
             except Exception:
@@ -4514,6 +4671,8 @@ class RoboLotofacilUltraApp:
             self.log("   → Os resultados serão armazenados automaticamente para esta análise.")
             return
 
+        if not self._reservar_operacao_pesada("Análise Científica V2"):
+            return
         self._analise_cient_v2_ativa = True
         self.set_status("Análise Científica V2...", "blue")
         import threading
@@ -4627,6 +4786,7 @@ class RoboLotofacilUltraApp:
             self.log_async(_tb.format_exc())
         finally:
             self._analise_cient_v2_ativa = False
+            self._liberar_operacao_pesada()
             try:
                 self.root.after(0, self._parar_progresso)
             except Exception:

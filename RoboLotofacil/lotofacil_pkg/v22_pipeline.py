@@ -36,7 +36,8 @@ ETAPAS_DISPONIVEIS = [
     "gerar_jogos",
 ]
 
-# Mapeamento: nome da etapa → método real na UI
+# Mapeamento: nome da etapa → método real na UI (usado só no fallback, para
+# etapas sem entrada em _MAPA_METODOS_SINCRONOS)
 _MAPA_METODOS_UI = {
     "atualizar_historico":  "iniciar_atualizar_resultados",
     "aprendizado_continuo": "iniciar_aprendizado_continuo",
@@ -44,6 +45,31 @@ _MAPA_METODOS_UI = {
     "walkforward":          "iniciar_walkforward",
     "backtest_v11":         "iniciar_backtest_cientifico_v11",
     "gerar_jogos":          "iniciar_gerar_jogos",
+}
+
+# Mapeamento: nome da etapa → método SÍNCRONO (worker real, sem passar pelo
+# `iniciar_*` que dispara thread própria e trava o botão via flag "_ativo").
+# O pipeline já roda inteiro em sua própria thread de fundo (ver executar())
+# e executa uma etapa de cada vez, então chamar o worker direto e bloqueante
+# é seguro e evita dois problemas do caminho antigo (via `iniciar_*` +
+# polling em _aguardar_conclusao):
+#   1. `iniciar_*` verifica sua própria flag de "já em execução" -- rodando
+#      a partir do pipeline isso nunca conflita (é sempre a primeira vez),
+#      mas o inverso trava: um clique direto do usuário em outro botão
+#      pesado (Gerar Jogos, Fechamento...) enquanto o pipeline roda não era
+#      bloqueado por nada, corrompendo dados compartilhados
+#      (self.jogos_gerados/self.analise/self.pesos) -- ver _reservar_operacao_pesada
+#      em ui.py, que agora cobre esse caso.
+#   2. O polling manual de flags (_aguardar_conclusao) não tinha como saber
+#      se a etapa realmente terminou com sucesso ou só travou -- chamar o
+#      worker direto bloqueia até o método retornar de verdade.
+_MAPA_METODOS_SINCRONOS = {
+    "atualizar_historico":  "_executar_atualizar_resultados",
+    "aprendizado_continuo": "executar_aprendizado_continuo",
+    "calibracao":           "executar_calibracao_vs_aleatorio",
+    "walkforward":          "_executar_walkforward",
+    "backtest_v11":         "executar_backtest_cientifico_v11",
+    "gerar_jogos":          "_executar_gerar_jogos",
 }
 
 # Flags de conclusão — atributos reais da UI monitorados para sincronização
@@ -147,6 +173,16 @@ class PipelineV22:
             self._log("=" * 70)
             self._log(f"✅ Pipeline concluído em {elapsed:.1f}s")
             self._gerar_relatorio_final()
+            # Libera o guard "_pipeline_v22_ativo" e o mutex de operação
+            # pesada só agora que o pipeline de fato terminou todas as
+            # etapas -- liberar antes (ex.: logo após disparar a thread)
+            # deixa o guard inútil pela duração real da execução.
+            if self.app is not None:
+                if hasattr(self.app, "_pipeline_v22_ativo"):
+                    self.app._pipeline_v22_ativo = False
+                liberar = getattr(self.app, "_liberar_operacao_pesada", None)
+                if liberar:
+                    liberar()
 
     def _executar_etapa(self, etapa: str) -> None:
         self._log(f"\n▶ {etapa.upper().replace('_', ' ')}")
@@ -159,34 +195,34 @@ class PipelineV22:
                 resultado = metodo()
                 self._resultados[etapa] = resultado
             elif self.app:
-                # 2. Busca pelo mapeamento explícito primeiro
-                nome_ui = _MAPA_METODOS_UI.get(etapa)
-                metodo_ui = getattr(self.app, nome_ui, None) if nome_ui else None
-                # 3. Fallback: tenta iniciar_{etapa}
-                if metodo_ui is None:
-                    metodo_ui = getattr(self.app, f"iniciar_{etapa}", None)
-                if metodo_ui:
-                    self._log(f"  → {nome_ui or f'iniciar_{etapa}'}")
-                    metodo_ui()
-                    # 4. Aguarda a etapa terminar antes de prosseguir
-                    self._aguardar_conclusao(etapa, t0)
-                    # 5. Recupera o resultado real gravado pela UI (quando
-                    # a etapa tem um atributo mapeado); senão, mantém o
-                    # placeholder só para indicar que a etapa rodou.
-                    attr = _ATRIBUTOS_RESULTADO.get(etapa)
-                    resultado_real = getattr(self.app, attr, None) if attr else None
-                    if etapa == "gerar_jogos":
-                        resultado_real = {
-                            "jogos": getattr(self.app, "jogos_gerados", None),
-                            "analise": getattr(self.app, "analise", None),
-                            "pesos": getattr(self.app, "pesos", None),
-                        }
-                    self._resultados[etapa] = (
-                        resultado_real if resultado_real else {"delegado": True}
-                    )
+                # 2. Caminho síncrono preferencial: chama o worker direto,
+                # bloqueando nesta thread do pipeline até terminar de verdade.
+                nome_sync = _MAPA_METODOS_SINCRONOS.get(etapa)
+                metodo_sync = getattr(self.app, nome_sync, None) if nome_sync else None
+                if metodo_sync:
+                    self._log(f"  → {nome_sync}")
+                    flag = _FLAGS_CONCLUSAO.get(etapa)
+                    if flag:
+                        setattr(self.app, flag, True)
+                    try:
+                        metodo_sync()
+                    finally:
+                        if flag:
+                            setattr(self.app, flag, False)
+                    self._resultados[etapa] = self._coletar_resultado(etapa)
                 else:
-                    self._log(f"  ⚠️ Etapa '{etapa}' não implementada — pulando")
-                    self._resultados[etapa] = {"pulado": True}
+                    # 3. Fallback (etapa fora do mapeamento síncrono): mantém
+                    # o caminho antigo via iniciar_*/polling de flag.
+                    nome_ui = _MAPA_METODOS_UI.get(etapa) or f"iniciar_{etapa}"
+                    metodo_ui = getattr(self.app, nome_ui, None)
+                    if metodo_ui:
+                        self._log(f"  → {nome_ui}")
+                        metodo_ui()
+                        self._aguardar_conclusao(etapa, t0)
+                        self._resultados[etapa] = self._coletar_resultado(etapa)
+                    else:
+                        self._log(f"  ⚠️ Etapa '{etapa}' não implementada — pulando")
+                        self._resultados[etapa] = {"pulado": True}
             else:
                 self._log(f"  ⚠️ Sem app vinculado para '{etapa}' — pulando")
 
@@ -196,6 +232,20 @@ class PipelineV22:
 
         elapsed = time.time() - t0
         self._log(f"  ✓ Concluído em {elapsed:.1f}s")
+
+    def _coletar_resultado(self, etapa: str) -> dict:
+        """Recupera o resultado real gravado pela UI no atributo mapeado;
+        sem isso, o resultado ficava só como {"delegado": True}, um
+        placeholder vazio, mesmo com a etapa concluída com sucesso."""
+        attr = _ATRIBUTOS_RESULTADO.get(etapa)
+        resultado_real = getattr(self.app, attr, None) if attr else None
+        if etapa == "gerar_jogos":
+            resultado_real = {
+                "jogos": getattr(self.app, "jogos_gerados", None),
+                "analise": getattr(self.app, "analise", None),
+                "pesos": getattr(self.app, "pesos", None),
+            }
+        return resultado_real if resultado_real else {"delegado": True}
 
     def _aguardar_conclusao(self, etapa: str, t0: float) -> None:
         """Aguarda a etapa da UI terminar monitorando o flag de atividade."""

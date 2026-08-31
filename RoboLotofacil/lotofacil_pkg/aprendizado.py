@@ -4,6 +4,7 @@ lotofacil_pkg/aprendizado.py
 Memória adaptativa permanente: registra resultados reais/simulados,
 calcula ajustes de diversidade/mutação/elite e bônus por modelo.
 """
+import threading
 from collections import Counter
 from datetime import datetime
 from statistics import mean
@@ -17,6 +18,19 @@ try:
     from .v21_0_sqlite import db_registrar_aprendizado as _db_reg_apr
 except Exception:
     def _db_reg_apr(_r): pass
+
+# Protege o ciclo load -> append -> save da memória de aprendizado
+# (ARQUIVO_APRENDIZADO). Sem isso, duas chamadas concorrentes (ex.: a
+# thread do Aprendizado Contínuo registrando um passo enquanto o usuário
+# clica "Registrar resultado real" na mesma janela) liam o arquivo antes
+# uma da outra salvar, e a última a salvar sobrescrevia a lista inteira
+# com sua versão desatualizada -- perdendo o registro da outra em
+# silêncio (lost update).
+# RLock (não Lock simples) porque registrar_resultado_simulado_aprendizado()
+# chama registrar_resultado_aprendizado() por dentro -- ambas precisam do
+# mesmo lock cobrindo a operação inteira como uma unidade atômica, e um
+# Lock comum causaria deadlock nessa chamada aninhada pela mesma thread.
+_LOCK_MEMORIA_APRENDIZADO = threading.RLock()
 
 
 def carregar_memoria_aprendizado(caminho: str = ARQUIVO_APRENDIZADO) -> dict:
@@ -130,14 +144,26 @@ def aplicar_memoria_de_ranking_aos_pesos(pesos: dict, memoria_ranking: dict | No
         ajustados[n] = max(0.001, p * mult)
     return normalizar_scores(ajustados, piso=0.002)
 
-def calcular_bonus_aprendizado(memoria: dict | None = None) -> dict:
+def calcular_bonus_aprendizado(memoria: dict | None = None, incluir_simulados: bool = False) -> dict:
     """
     Lê a memória do robô e devolve pequenos ajustes seguros.
     Esses ajustes não prometem previsão; apenas calibram diversidade, mutação e peso dos modelos
     conforme o desempenho registrado pelo próprio usuário.
+
+    Por padrão (incluir_simulados=False) ignora registros marcados como
+    `treino_historico` (gravados por registrar_resultado_simulado_aprendizado,
+    usados pelo botão Aprender Contínuo) -- uma sessão de treino simulado
+    percorre dezenas/centenas de concursos históricos numa tacada só e podia
+    facilmente expulsar os registros REAIS do usuário da janela de 200 usada
+    aqui, calibrando a geração real com base em simulação em vez de
+    desempenho de fato registrado pelo usuário (achado de varredura de
+    código, 2026-08-31).
     """
     memoria = memoria or carregar_memoria_aprendizado()
-    registros = memoria.get("registros", [])[-200:]
+    todos_registros = memoria.get("registros", [])
+    if not incluir_simulados:
+        todos_registros = [r for r in todos_registros if not r.get("treino_historico")]
+    registros = todos_registros[-200:]
     if not registros:
         return {
             "tem_memoria": False,
@@ -272,11 +298,12 @@ def registrar_resultado_aprendizado(jogos: list, analise: dict, pesos: dict, res
         "media_sobreposicao": cobertura.get("media_sobreposicao", 0),
     }
 
-    memoria = carregar_memoria_aprendizado(caminho)
-    memoria.setdefault("registros", []).append(registro)
-    memoria["registros"] = memoria["registros"][-500:]
-    memoria["ajustes"] = calcular_bonus_aprendizado(memoria)
-    salvar_memoria_aprendizado(memoria, caminho)
+    with _LOCK_MEMORIA_APRENDIZADO:
+        memoria = carregar_memoria_aprendizado(caminho)
+        memoria.setdefault("registros", []).append(registro)
+        memoria["registros"] = memoria["registros"][-500:]
+        memoria["ajustes"] = calcular_bonus_aprendizado(memoria)
+        salvar_memoria_aprendizado(memoria, caminho)
     # V21.1-A: espelha no SQLite
     _db_reg_apr(registro)
     return registro, memoria["ajustes"]
@@ -290,14 +317,21 @@ def registrar_resultado_simulado_aprendizado(jogos: list, analise: dict, pesos: 
     É usado pelo botão Aprender Contínuo. Mantém a mesma memória do robô,
     mas marca a origem como simulação para diferenciar de avaliação manual/real.
     """
-    registro, ajustes = registrar_resultado_aprendizado(jogos, analise, pesos, resultado_real, caminho=caminho)
-    memoria = carregar_memoria_aprendizado(caminho)
-    if memoria.get("registros"):
-        memoria["registros"][-1]["origem"] = origem
-        memoria["registros"][-1]["treino_historico"] = True
-        memoria["ajustes"] = calcular_bonus_aprendizado(memoria)
-        salvar_memoria_aprendizado(memoria, caminho)
-        ajustes = memoria["ajustes"]
+    with _LOCK_MEMORIA_APRENDIZADO:
+        registro, ajustes = registrar_resultado_aprendizado(jogos, analise, pesos, resultado_real, caminho=caminho)
+        memoria = carregar_memoria_aprendizado(caminho)
+        if memoria.get("registros"):
+            memoria["registros"][-1]["origem"] = origem
+            memoria["registros"][-1]["treino_historico"] = True
+            memoria["ajustes"] = calcular_bonus_aprendizado(memoria)
+            salvar_memoria_aprendizado(memoria, caminho)
+            ajustes = memoria["ajustes"]
+            # O `registro` devolvido ao chamador precisa refletir o que foi
+            # de fato persistido (origem/treino_historico) -- antes ele
+            # ficava com o dict original, sem esses dois campos, então
+            # qualquer código que confiasse no retorno em vez de reler o
+            # arquivo via `registro` recebia informação inconsistente.
+            registro = dict(memoria["registros"][-1])
     return registro, ajustes
 
 def gerar_resumo_aprendizado(memoria: dict | None = None) -> dict:

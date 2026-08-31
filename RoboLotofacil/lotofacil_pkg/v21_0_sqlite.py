@@ -228,7 +228,7 @@ def db_registrar_desempenho(registro: dict) -> None:
                                          "indice_confianca", "diversidade", "taxa_mutacao")}),
             ))
     except Exception:
-        pass  # Nunca quebra o fluxo principal
+        logging.error("db_registrar_desempenho falhou", exc_info=True)  # Nunca quebra o fluxo principal
 
 
 def db_registrar_evento_poda(nome: str, estado: str, score: float, peso_novo: float) -> None:
@@ -245,7 +245,7 @@ def db_registrar_evento_poda(nome: str, estado: str, score: float, peso_novo: fl
                 VALUES (?,?,?,?)
             """, (evento, nome, json.dumps({"estado": estado, "score": score, "peso_novo": peso_novo}), _now()))
     except Exception:
-        pass
+        logging.error("db_registrar_evento_poda falhou", exc_info=True)
 
 
 def db_registrar_ranking_cientifico(ranking: list) -> None:
@@ -269,7 +269,7 @@ def db_registrar_ranking_cientifico(ranking: list) -> None:
                     r.get("geracoes"), json.dumps(r.get("ultimos", [])), _now()
                 ))
     except Exception:
-        pass
+        logging.error("db_registrar_ranking_cientifico falhou", exc_info=True)
 
 
 def db_registrar_geracao(geracao: dict) -> None:
@@ -300,7 +300,7 @@ def db_registrar_geracao(geracao: dict) -> None:
                                          "score_estrutural_medio")}),
             ))
     except Exception:
-        pass
+        logging.error("db_registrar_geracao falhou", exc_info=True)
 
 
 def db_registrar_aprendizado(registro: dict) -> None:
@@ -325,7 +325,7 @@ def db_registrar_aprendizado(registro: dict) -> None:
                 json.dumps(registro),
             ))
     except Exception:
-        pass
+        logging.error("db_registrar_aprendizado falhou", exc_info=True)
 
 
 # ── Leitores — usados pelo dashboard e meta-aprendizado ──────────────────────

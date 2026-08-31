@@ -128,29 +128,56 @@ def gerar_timestamp_arquivo() -> str:
 # ── JSON helpers ──────────────────────────────────────────────────────────────
 
 def ler_json(caminho: str, default=None):
-    """Lê JSON com fallback seguro para arquivo ausente ou corrompido."""
+    """Lê JSON com fallback seguro para arquivo ausente ou corrompido.
+
+    Faz backup do arquivo (.corrompido) em QUALQUER falha de leitura, não
+    só JSONDecodeError -- um UnicodeDecodeError (ex.: write truncado no
+    meio de um caractere multibyte, o cenário que salvar_json() agora
+    evita) ou um PermissionError transitório (outra thread escrevendo o
+    mesmo arquivo) caindo direto no `default` sem backup apagava a memória
+    de aprendizado acumulada (até 500 registros) sem deixar rastro.
+    """
     default = default if default is not None else {}
     if not os.path.exists(caminho):
         return default
     try:
         with open(caminho, "r", encoding="utf-8") as f:
             return json.load(f)
-    except json.JSONDecodeError:
+    except Exception:
         try:
             import shutil
             shutil.copy2(caminho, caminho + ".corrompido")
         except Exception:
             pass
         return default
-    except Exception:
-        return default
 
 
 def salvar_json(caminho: str, obj) -> None:
-    """Persiste objeto como JSON garantindo que a pasta de destino exista."""
-    os.makedirs(os.path.dirname(os.path.abspath(caminho)), exist_ok=True)
-    with open(caminho, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
+    """Persiste objeto como JSON garantindo que a pasta de destino exista.
+
+    Escreve num arquivo temporário e só então troca pelo definitivo via
+    os.replace() (atômico no SO) -- gravar direto em modo "w" trunca o
+    arquivo antes de escrever; se o processo for interrompido no meio
+    (queda, exceção em outra thread) ou duas threads gravarem o mesmo
+    arquivo ao mesmo tempo (ex.: aprendizado contínuo + registro manual de
+    resultado, ambos usando ARQUIVO_APRENDIZADO), o JSON ficava truncado/
+    corrompido -- e ler_json() então descartava a memória acumulada sem
+    aviso. os.replace() garante que quem lê o arquivo sempre vê a versão
+    antiga completa ou a nova completa, nunca um meio-termo.
+    """
+    pasta = os.path.dirname(os.path.abspath(caminho))
+    os.makedirs(pasta, exist_ok=True)
+    caminho_tmp = f"{caminho}.{os.getpid()}.{threading.get_ident()}.tmp"
+    try:
+        with open(caminho_tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+        os.replace(caminho_tmp, caminho)
+    finally:
+        if os.path.exists(caminho_tmp):
+            try:
+                os.remove(caminho_tmp)
+            except Exception:
+                pass
 
 
 def tornar_json_seguro(obj):
