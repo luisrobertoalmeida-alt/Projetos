@@ -28,11 +28,14 @@ def _gerar_baseline_aleatorio(
     qtd_jogos: int,
     numeros: list[int] | None = None,
     seed: int | None = 42,
+    tamanho_jogo: int = 15,
 ) -> list[dict]:
     """
     Simula n_simulacoes resultados de um agente aleatório puro.
     Cada resultado é a média de acertos de qtd_jogos apostas aleatórias
-    contra um sorteio também aleatório.
+    (tamanho `tamanho_jogo` -- deve bater com o tamanho de aposta real do
+    robô sendo avaliado) contra um sorteio também aleatório (sempre 15,
+    regra fixa da Lotofácil).
 
     Returns:
         Lista de dicts {"acertos": float} compatível com v20_6_bootstrap.
@@ -47,7 +50,7 @@ def _gerar_baseline_aleatorio(
         sorteio = set(rng.sample(numeros, 15))
         acertos_rodada = []
         for _ in range(qtd_jogos):
-            jogo = set(rng.sample(numeros, 15))
+            jogo = set(rng.sample(numeros, tamanho_jogo))
             acertos_rodada.append(len(jogo & sorteio))
         resultados.append({"acertos": round(mean(acertos_rodada), 4)})
 
@@ -91,6 +94,7 @@ def executar_montecarlo_cientifico(
     qtd_jogos: int = 10,
     n_reamostras: int = 2000,
     seed: int | None = 42,
+    tamanho_jogo: int = 15,
 ) -> dict:
     """
     Pipeline Monte Carlo Científico completo.
@@ -130,6 +134,7 @@ def executar_montecarlo_cientifico(
         n_simulacoes=len(resultados_backtest),
         qtd_jogos=qtd_jogos,
         seed=seed,
+        tamanho_jogo=tamanho_jogo,
     )
 
     # Bootstrap inferencial completo

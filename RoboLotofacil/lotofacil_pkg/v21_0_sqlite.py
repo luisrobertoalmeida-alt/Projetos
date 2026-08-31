@@ -377,7 +377,11 @@ def db_prob_recuperacao(model_id: str) -> float:
     susps = sum(1 for r in rows if r["evento"] in ("suspensão", "observacao"))
     recs = sum(1 for r in rows if r["evento"] == "ativo")
     eventos=max(len(rows),1)
-    prob=(recs+1)/(susps+2) if susps>0 else 0.5
+    # Suavização de Laplace/Beta(1,1): recuperações sobre o TOTAL de eventos
+    # relevantes (recs+susps), não sobre só as suspensões -- a fórmula
+    # anterior, (recs+1)/(susps+2), podia passar de 1.0 (ex.: recs=5,
+    # susps=1 -> 2.0), corrompendo silenciosamente decidir_poda_adaptativa().
+    prob=(recs+1)/(recs+susps+2)
     confianca=min(1.0,eventos/20)
     return round(0.5*(1-confianca)+prob*confianca,4)
 

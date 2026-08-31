@@ -38,11 +38,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _gerar_baseline_janela(sorteios_teste: list, qtd_jogos: int, seed: int = 42) -> dict:
-    """Gera baseline aleatório para uma janela de teste."""
+def _gerar_baseline_janela(sorteios_teste: list, qtd_jogos: int, seed: int = 42, tamanho_jogo: int = 15) -> dict:
+    """Gera baseline aleatório para uma janela de teste. `tamanho_jogo` deve
+    bater com o tamanho de aposta real do robô sendo comparado."""
     rng = random.Random(seed)
     numeros = list(range(1, 26))
-    jogos_rand = [sorted(rng.sample(numeros, 15)) for _ in range(qtd_jogos)]
+    jogos_rand = [sorted(rng.sample(numeros, tamanho_jogo)) for _ in range(qtd_jogos)]
     acertos = []
     for sorteio in sorteios_teste:
         for jogo in jogos_rand:
@@ -244,7 +245,8 @@ def executar_walkforward_profissional(
             continue
 
         sc_robo = score_janela(jogos, teste)
-        sc_base = _gerar_baseline_janela(teste, qtd_jogos=max(1, len(jogos)))
+        tam_jogo_janela = len(jogos[0]) if jogos else 15
+        sc_base = _gerar_baseline_janela(teste, qtd_jogos=max(1, len(jogos)), tamanho_jogo=tam_jogo_janela)
 
         media_r = sc_robo.get("media_acertos", 0.0)
         media_b = sc_base.get("media_acertos", 0.0)
@@ -280,6 +282,7 @@ def registrar_walkforward_profissional(
     concursos: list,
     resultado_walkforward_v20_8: dict,
     qtd_jogos: int = 10,
+    tamanho_jogo: int = 15,
 ) -> dict:
     """
     Versão leve: reaproveita as janelas e os scores do robô já calculados
@@ -319,7 +322,7 @@ def registrar_walkforward_profissional(
     for jan in janelas_v20_8:
         teste = concursos[jan["teste_inicio"]: jan["teste_fim"]]
         media_r = jan.get("media_acertos", 0.0)
-        sc_base = _gerar_baseline_janela(teste, qtd_jogos=max(1, qtd_jogos))
+        sc_base = _gerar_baseline_janela(teste, qtd_jogos=max(1, qtd_jogos), tamanho_jogo=tamanho_jogo)
         media_b = sc_base.get("media_acertos", 0.0)
 
         scores_robo.append(media_r)

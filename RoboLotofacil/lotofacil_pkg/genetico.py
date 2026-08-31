@@ -394,19 +394,21 @@ def gerar_jogo_base(pesos: dict, analise: dict, tentativas: int = 250, estrategi
 
 def crossover(j1: list[int], j2: list[int]) -> list[int]:
     """Combina dois jogos-pai por shuffle da união e complemento aleatório."""
+    tamanho = _cfg.TAMANHO_JOGO
     uniao = list(set(j1) | set(j2))
     rng().shuffle(uniao)
-    filho = uniao[:15]
-    # Completa se necessário (não deve ocorrer com jogos de 15 dezenas)
+    filho = uniao[:tamanho]
+    # Completa se necessário (não deve ocorrer com jogos de tamanho já correto)
     extras = [n for n in NUMEROS if n not in filho]
     rng().shuffle(extras)
-    while len(filho) < 15:
+    while len(filho) < tamanho:
         filho.append(extras.pop())
     return sorted(filho)
 
 
 def mutacao(jogo: list[int], pesos: dict, taxa: float = 0.35) -> list[int]:
     """Aplica mutação ponderada por pesos: substitui um gene por outro com maior probabilidade."""
+    tamanho = _cfg.TAMANHO_JOGO
     novo = jogo[:]
     if rng().random() < taxa:
         sair = rng().choice(novo)
@@ -418,7 +420,7 @@ def mutacao(jogo: list[int], pesos: dict, taxa: float = 0.35) -> list[int]:
             novo.remove(sair)
             novo.append(entrar)
             novo = sorted(set(novo))
-    while len(novo) < 15:
+    while len(novo) < tamanho:
         n = rng().choice(NUMEROS)
         if n not in novo:
             novo.append(n)
@@ -564,7 +566,7 @@ def calcular_mapa_cobertura(jogos: list) -> dict:
 def perfil_tatico_jogo(jogo: list[int], analise: dict, pesos: dict, idx: int) -> dict:
     soma_ = soma_jogo(jogo)
     pares = contar_pares(jogo)
-    peso_medio = sum(pesos.get(n, 0) for n in jogo) / 15
+    peso_medio = sum(pesos.get(n, 0) for n in jogo) / max(1, len(jogo))
     soma_media = analise.get("soma_media", 195)
 
     if peso_medio >= mean(pesos.values()) * 1.04 and abs(soma_ - soma_media) <= 18:

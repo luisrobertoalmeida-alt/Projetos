@@ -281,6 +281,7 @@ def estimar_referencia_melhor_aleatorio(
     qtd_jogos: int = 20,
     n_simulacoes: int = 10_000,
     seed: int | None = 42,
+    tamanho_jogo: int = 15,
 ) -> float:
     """
     Estima empiricamente a média do melhor jogo de um pacote aleatório
@@ -292,6 +293,8 @@ def estimar_referencia_melhor_aleatorio(
         qtd_jogos:    tamanho do pacote.
         n_simulacoes: número de sorteios simulados.
         seed:         seed para reprodutibilidade.
+        tamanho_jogo: dezenas por aposta do pacote aleatório (deve bater
+                      com o tamanho de aposta real do robô sendo calibrado).
 
     Returns:
         Média estimada do melhor acerto em pacotes aleatórios.
@@ -302,7 +305,7 @@ def estimar_referencia_melhor_aleatorio(
     melhores = []
     for _ in range(n_simulacoes):
         sorteio = rng.sample(numeros, 15)
-        pacote = [rng.sample(numeros, 15) for _ in range(qtd_jogos)]
+        pacote = [rng.sample(numeros, tamanho_jogo) for _ in range(qtd_jogos)]
         melhor = max(len(set(j) & set(sorteio)) for j in pacote)
         melhores.append(melhor)
 
@@ -438,7 +441,11 @@ def mapear_vale_gp(
             except Exception:
                 continue
 
-            jogos_ale = [sorted(random.sample(numeros, 15)) for _ in range(qtd_jogos)]
+            # Aposta aleatória de comparação com o mesmo tamanho da aposta
+            # real do robô (jogos_robo) -- comparar contra 15 fixo infla a
+            # vantagem do robô quando ele aposta com mais de 15 dezenas.
+            tam_jogo_robo = len(jogos_robo[0]) if jogos_robo else 15
+            jogos_ale = [sorted(random.sample(numeros, tam_jogo_robo)) for _ in range(qtd_jogos)]
 
             acertos_robo = [_acertos(j, real) for j in jogos_robo]
             acertos_ale = [_acertos(j, real) for j in jogos_ale]
@@ -721,7 +728,8 @@ def mapear_vale_diversidade(
             except Exception:
                 continue
 
-            jogos_ale = [sorted(random.sample(numeros, 15)) for _ in range(qtd_jogos)]
+            tam_jogo_robo = len(jogos_robo[0]) if jogos_robo else 15
+            jogos_ale = [sorted(random.sample(numeros, tam_jogo_robo)) for _ in range(qtd_jogos)]
 
             acertos_robo = [_acertos(j, real) for j in jogos_robo]
             acertos_ale = [_acertos(j, real) for j in jogos_ale]
@@ -894,6 +902,7 @@ def relatorio_melhorias_cientificas(
     melhores_por_janela: list[float],
     medias_por_janela: list[float],
     qtd_jogos: int = 20,
+    tamanho_jogo: int = 15,
 ) -> dict[str, Any]:
     """
     Gera o relatório consolidado das três melhorias científicas a partir
@@ -914,7 +923,7 @@ def relatorio_melhorias_cientificas(
     sig = teste_significancia_calibracao(vitorias_robo, vitorias_aleatorio, empates)
 
     # 2. Walk-forward V2
-    ref_melhor = estimar_referencia_melhor_aleatorio(qtd_jogos=qtd_jogos, n_simulacoes=5_000)
+    ref_melhor = estimar_referencia_melhor_aleatorio(qtd_jogos=qtd_jogos, n_simulacoes=5_000, tamanho_jogo=tamanho_jogo)
     wf_v2 = score_robustez_walkforward_v2(
         melhores_por_janela,
         medias_por_janela,

@@ -717,7 +717,8 @@ def n_necessario_poder_pareado(dz_alvo: float, poder_alvo: float = 0.80, alpha: 
     n (pareado) necessário para atingir `poder_alvo` detectando um efeito
     de tamanho `dz_alvo`, teste unilateral a `alpha`.
     """
-    z_alpha = 1.645 if alpha == 0.05 else 1.96
+    z_alpha_map = {0.10: 1.2816, 0.05: 1.645, 0.01: 2.326}
+    z_alpha = z_alpha_map.get(round(alpha, 2), 1.645)
     z_beta_map = {0.80: 0.8416, 0.90: 1.2816, 0.95: 1.6449}
     z_beta = z_beta_map.get(round(poder_alvo, 2), 0.8416)
     if dz_alvo == 0:

@@ -6,7 +6,6 @@ Carregamento e normalização do histórico de concursos a partir de CSV.
 import os
 import pandas as pd
 
-from . import config as _cfg
 from .config import MIN_HIST, ARQUIVO_CSV_PADRAO, NUMEROS, TAMANHO_SORTEIO
 from .utils import parse_data_br, contar_pares, soma_jogo, intersecao, distancia_jogos, limitar
 from collections import Counter

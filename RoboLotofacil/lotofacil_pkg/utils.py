@@ -13,14 +13,22 @@ from datetime import datetime
 from statistics import mean
 
 from . import config as _config_module
-from .config import NUMEROS, SEED, _PASTAS_APP
+from .config import NUMEROS, _PASTAS_APP
 
 
 # ── Seed ──────────────────────────────────────────────────────────────────────
 
-def seed_global(seed=SEED) -> None:
+_SEED_NAO_INFORMADA = object()
+
+
+def seed_global(seed=_SEED_NAO_INFORMADA) -> None:
     """
     Inicializa semente do gerador aleatório. None = entropia do sistema.
+
+    Sem argumento, reaplica a seed atualmente configurada em
+    `config.SEED` (lida em tempo real, não no momento do import -- um
+    default `seed=SEED` aqui ficaria congelado em `None` para sempre,
+    a mesma classe de bug já corrigida com TAMANHO_JOGO/TAMANHO_SORTEIO).
 
     Também grava em `config.SEED`: é esse atributo do módulo (não o valor
     importado aqui) que `backtest.py:_seed_do_passo` lê para derivar a seed
@@ -29,6 +37,8 @@ def seed_global(seed=SEED) -> None:
     local) e as ferramentas de validação continuavam usando entropia real,
     mesmo com o checkbox marcado.
     """
+    if seed is _SEED_NAO_INFORMADA:
+        seed = _config_module.SEED
     _config_module.SEED = seed
     if seed is not None:
         random.seed(seed)

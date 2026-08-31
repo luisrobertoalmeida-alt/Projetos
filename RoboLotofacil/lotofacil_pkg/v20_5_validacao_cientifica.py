@@ -46,17 +46,23 @@ def _desvio_acertos(resultados: list[dict]) -> float:
     return stdev(vals)
 
 
-def _simular_aleatório(n_jogos: int, n_concursos: int, seed: int | None = 42) -> list[dict]:
+def _simular_aleatório(n_jogos: int, n_concursos: int, seed: int | None = 42, tamanho_jogo: int = 15) -> list[dict]:
     """
     Gera resultados simulados de apostas completamente aleatórias.
 
-    Cada jogo aleatório escolhe 15 números de 1–25; o 'concurso' também é
-    aleatório. Usado como baseline interno quando não há histórico externo.
+    O 'concurso' (sorteio) sempre tem 15 números -- regra fixa da Lotofácil.
+    Cada jogo aleatório de comparação tem `tamanho_jogo` números (deve bater
+    com o tamanho de aposta real do robô sendo avaliado: comparar apostas de
+    16-18 dezenas contra um aleatório sempre de 15 infla artificialmente o
+    "ganho" do robô, já que apostas maiores acertam mais só por combinatória).
+    Usado como baseline interno quando não há histórico externo.
 
     Args:
-        n_jogos:     jogos por concurso simulado.
-        n_concursos: quantidade de concursos a simular.
-        seed:        semente para reprodutibilidade (None = aleatório).
+        n_jogos:      jogos por concurso simulado.
+        n_concursos:  quantidade de concursos a simular.
+        seed:         semente para reprodutibilidade (None = aleatório).
+        tamanho_jogo: tamanho de cada jogo aleatório de comparação (deve ser
+                      o mesmo tamanho de aposta usado pelo robô avaliado).
 
     Returns:
         Lista de dicts com chave 'acertos' (média de acertos do lote de jogos).
@@ -67,7 +73,7 @@ def _simular_aleatório(n_jogos: int, n_concursos: int, seed: int | None = 42) -
     for _ in range(n_concursos):
         sorteio = set(rng.sample(numeros, 15))
         acertos_lote = [
-            len(set(rng.sample(numeros, 15)) & sorteio)
+            len(set(rng.sample(numeros, tamanho_jogo)) & sorteio)
             for _ in range(n_jogos)
         ]
         resultados.append({"acertos": mean(acertos_lote)})
@@ -80,6 +86,7 @@ def benchmark_vs_aleatorio(
     resultados_robo: list[dict],
     n_jogos_por_concurso: int = 10,
     seed: int | None = 42,
+    tamanho_jogo: int = 15,
 ) -> dict[str, Any]:
     """
     Compara o desempenho médio do robô contra apostas completamente aleatórias.
@@ -110,7 +117,7 @@ def benchmark_vs_aleatorio(
             "veredito": "SEM_DADOS",
         }
 
-    aleatorio = _simular_aleatório(n_jogos_por_concurso, n, seed=seed)
+    aleatorio = _simular_aleatório(n_jogos_por_concurso, n, seed=seed, tamanho_jogo=tamanho_jogo)
     media_robo = round(_media_acertos(resultados_robo), 4)
     media_ale = round(_media_acertos(aleatorio), 4)
     delta = round(media_robo - media_ale, 4)
@@ -206,6 +213,7 @@ def ganho_estatistico(
     resultados_robo: list[dict],
     n_jogos_por_concurso: int = 10,
     seed: int | None = 42,
+    tamanho_jogo: int = 15,
 ) -> dict[str, Any]:
     """
     Calcula o ganho estatístico do robô sobre o aleatório em desvios-padrão (z-score).
@@ -239,7 +247,7 @@ def ganho_estatistico(
             "desvio_aleatorio": 0.0,
         }
 
-    aleatorio = _simular_aleatório(n_jogos_por_concurso, n, seed=seed)
+    aleatorio = _simular_aleatório(n_jogos_por_concurso, n, seed=seed, tamanho_jogo=tamanho_jogo)
     media_robo = _media_acertos(resultados_robo)
     media_ale = _media_acertos(aleatorio)
     desvio_ale = _desvio_acertos(aleatorio)
@@ -311,6 +319,7 @@ def relatorio_validacao(
     n_jogos_por_concurso: int = 10,
     seed: int | None = 42,
     janelas: dict[str, int] | None = None,
+    tamanho_jogo: int = 15,
 ) -> dict[str, Any]:
     """
     Consolida todas as métricas de validação científica em um único relatório.
@@ -332,14 +341,14 @@ def relatorio_validacao(
           - ranking_versoes: resultado de ranking_versoes() ou []
           - resumo:          dict com campos de alto nível para exibição rápida
     """
-    vs_ale = benchmark_vs_aleatorio(resultados_robo, n_jogos_por_concurso, seed)
+    vs_ale = benchmark_vs_aleatorio(resultados_robo, n_jogos_por_concurso, seed, tamanho_jogo)
     vs_base = (
         benchmark_vs_base(resultados_robo, resultados_base)
         if resultados_base is not None
         else None
     )
     estab = estabilidade_por_janela(resultados_robo, janelas)
-    ganho = ganho_estatistico(resultados_robo, n_jogos_por_concurso, seed)
+    ganho = ganho_estatistico(resultados_robo, n_jogos_por_concurso, seed, tamanho_jogo)
     rank = ranking_versoes(list(versoes)) if versoes else []
 
     resumo = {
@@ -370,6 +379,7 @@ def gerar_relatorio_validacao(
     n_jogos_por_concurso: int = 10,
     seed: int | None = 42,
     janelas: dict[str, int] | None = None,
+    tamanho_jogo: int = 15,
 ) -> dict[str, Any]:
     """
     Gera e persiste o relatório de validação científica em JSON.
@@ -391,6 +401,7 @@ def gerar_relatorio_validacao(
         n_jogos_por_concurso=n_jogos_por_concurso,
         seed=seed,
         janelas=janelas,
+        tamanho_jogo=tamanho_jogo,
     )
     with open(arquivo, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=2, ensure_ascii=False)

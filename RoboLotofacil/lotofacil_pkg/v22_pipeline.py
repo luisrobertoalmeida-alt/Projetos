@@ -57,6 +57,17 @@ _FLAGS_CONCLUSAO = {
     "gerar_jogos":          "_geracao_ativa",
 }
 
+# Atributo real da UI onde cada etapa delegada grava seu resultado, para o
+# pipeline recuperar depois de _aguardar_conclusao() -- sem isso, o
+# resultado ficava só como {"delegado": True}, um placeholder vazio, e o
+# relatório final (RelatorioV22) nunca via os dados de verdade mesmo com a
+# etapa concluída com sucesso.
+_ATRIBUTOS_RESULTADO = {
+    "calibracao":   "info_calibracao",
+    "walkforward":  "_ultimo_resultado_walkforward",
+    "backtest_v11": "info_backtest_cientifico",
+}
+
 # Timeout máximo por etapa em segundos
 _TIMEOUTS = {
     "atualizar_historico":  60,
@@ -159,7 +170,20 @@ class PipelineV22:
                     metodo_ui()
                     # 4. Aguarda a etapa terminar antes de prosseguir
                     self._aguardar_conclusao(etapa, t0)
-                    self._resultados[etapa] = {"delegado": True}
+                    # 5. Recupera o resultado real gravado pela UI (quando
+                    # a etapa tem um atributo mapeado); senão, mantém o
+                    # placeholder só para indicar que a etapa rodou.
+                    attr = _ATRIBUTOS_RESULTADO.get(etapa)
+                    resultado_real = getattr(self.app, attr, None) if attr else None
+                    if etapa == "gerar_jogos":
+                        resultado_real = {
+                            "jogos": getattr(self.app, "jogos_gerados", None),
+                            "analise": getattr(self.app, "analise", None),
+                            "pesos": getattr(self.app, "pesos", None),
+                        }
+                    self._resultados[etapa] = (
+                        resultado_real if resultado_real else {"delegado": True}
+                    )
                 else:
                     self._log(f"  ⚠️ Etapa '{etapa}' não implementada — pulando")
                     self._resultados[etapa] = {"pulado": True}

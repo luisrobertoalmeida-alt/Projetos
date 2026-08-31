@@ -64,10 +64,10 @@ class RelatorioV22:
         wf = self.resultados.get("walkforward", {})
 
         if cal:
-            taxa = cal.get("taxa_vitoria", "?")
-            linhas.append(f"Calibração: {taxa}% de vitória")
+            taxa = (cal.get("resumo_robo") or {}).get("pct_pacotes_11_mais", "?")
+            linhas.append(f"Calibração: {taxa}% de pacotes com 11+")
         if wf:
-            veredito = wf.get("veredito", "?")
+            veredito = (wf.get("resumo") or {}).get("veredito", "?")
             linhas.append(f"Walk-Forward: {veredito}")
 
         return " | ".join(linhas) if linhas else "Sem dados suficientes"
@@ -90,44 +90,51 @@ class RelatorioV22:
             "",
         ]
 
-        # Calibração
+        # Calibração (schema real: backtest.calibrar_robo_vs_aleatorio())
         cal = self.resultados.get("calibracao", {})
         if cal:
+            robo = cal.get("resumo_robo") or {}
+            estat = cal.get("estatistica") or {}
             linhas += [
                 "── CALIBRAÇÃO VS ALEATÓRIO ─────────────────────────────────────",
-                f"Vitórias: {cal.get('vitorias_robo', '?')}/{cal.get('passos', '?')}",
-                f"Taxa: {cal.get('taxa_vitoria', '?')}%",
-                f"11+%: {cal.get('pct_11_mais', '?')}%",
-                f"12+%: {cal.get('pct_12_mais', '?')}%",
-                f"p-valor: {cal.get('p_valor', '?')}",
-                f"Cohen d: {cal.get('cohen_d', '?')} ({cal.get('interpretacao', '?')})",
-                f"IC 95% vitórias: {cal.get('ic95', '?')}",
-                f"Status: {'✅ APROVADO' if cal.get('aprovado') else '❌ REPROVADO'}",
+                f"Vitórias por score: robô={cal.get('robo_venceu_score', '?')} | "
+                f"aleatório={cal.get('aleatorio_venceu_score', '?')} | "
+                f"empates={cal.get('empates_score', '?')}",
+                f"11+%: {robo.get('pct_pacotes_11_mais', '?')}%",
+                f"12+%: {robo.get('pct_pacotes_12_mais', '?')}%",
+                f"p-valor: {estat.get('p_valor', '?')}",
+                f"Cohen d: {estat.get('cohen_d', '?')} ({estat.get('interpretacao', '?')})",
+                f"IC 95% vitórias: {estat.get('ic95_vitoria', '?')}",
+                f"Status: {'✅ APROVADO' if self._calibracao_aprovada(cal) else '❌ REPROVADO'}",
                 "",
             ]
 
-        # Walk-Forward
+        # Walk-Forward (schema real: backtest.relatorio_walkforward())
         wf = self.resultados.get("walkforward", {})
         if wf:
+            wf_dados = wf.get("walkforward") or {}
+            ovf = wf.get("overfitting") or {}
+            resumo_wf = wf.get("resumo") or {}
             linhas += [
                 "── WALK-FORWARD ────────────────────────────────────────────────",
-                f"Janelas avaliadas: {wf.get('n_janelas', '?')}",
-                f"Média de acertos: {wf.get('media_acertos', '?')}",
-                f"Desvio: {wf.get('desvio', '?')}",
-                f"Score robustez: {wf.get('score_robustez', '?')}",
-                f"Overfitting: {wf.get('severidade_overfitting', '?')} (razão={wf.get('razao', '?')})",
-                f"Veredito: {wf.get('veredito', '?')}",
+                f"Janelas avaliadas: {wf_dados.get('n_janelas', '?')}",
+                f"Média de acertos: {wf_dados.get('media_geral', '?')}",
+                f"Desvio: {wf_dados.get('desvio_geral', '?')}",
+                f"Score robustez: {wf.get('robustez', '?')}",
+                f"Overfitting: {ovf.get('severidade', '?')} (razão={ovf.get('razao', '?')})",
+                f"Veredito: {resumo_wf.get('veredito', '?')}",
                 "",
             ]
 
-        # Backtest V11
+        # Backtest V11 (schema real: backtest.executar_backtest_cientifico_massivo())
         v11 = self.resultados.get("backtest_v11", {})
         if v11:
+            rec = v11.get("recomendacao") or {}
             linhas += [
                 "── BACKTEST CIENTÍFICO V11 ──────────────────────────────────────",
-                f"Campeão: {v11.get('config_campea', '?')}",
-                f"Score: {v11.get('score_campea', '?')}",
-                f"Modelo: {v11.get('modelo_campea', '?')}",
+                f"Campeão: {rec.get('estrategia_base', '?')} (G={rec.get('geracoes', '?')} P={rec.get('pop_size', '?')})",
+                f"Score: {rec.get('score_configuracao', '?')}",
+                f"Modelo: {rec.get('modelo_campeao', '?')}",
                 "",
             ]
 
@@ -158,12 +165,29 @@ class RelatorioV22:
             "conclusao": self._conclusao(),
         }
 
+    @staticmethod
+    def _calibracao_aprovada(cal: dict) -> bool | None:
+        """calibrar_robo_vs_aleatorio() não devolve um booleano 'aprovado'
+        pronto -- deriva daqui: robô precisa ter vencido mais pacotes por
+        score que o aleatório E, quando o teste estatístico rodou, ele
+        precisa ter dado significativo (evita aprovar por ruído amostral)."""
+        if not cal:
+            return None
+        venceu = cal.get("robo_venceu_score", 0) > cal.get("aleatorio_venceu_score", 0)
+        estat = cal.get("estatistica") or {}
+        if "significativo" in estat:
+            return venceu and bool(estat.get("significativo"))
+        return venceu
+
     def _conclusao(self) -> str:
         cal = self.resultados.get("calibracao", {})
         wf = self.resultados.get("walkforward", {})
 
-        aprovado_cal = cal.get("aprovado", None)
-        aprovado_wf = wf.get("veredito", "") == "ACEITAVEL"
+        aprovado_cal = self._calibracao_aprovada(cal)
+        # Vereditos do Walk-Forward (v20_8_walkforward): "ROBUSTO" (melhor
+        # caso) e "ACEITAVEL" contam como aprovados; só "INSTAVEL" reprova.
+        veredito_wf = ((wf.get("resumo") or {}).get("veredito", ""))
+        aprovado_wf = veredito_wf in ("ROBUSTO", "ACEITAVEL")
 
         if aprovado_cal is True and aprovado_wf:
             return "✅ Configuração validada — aprovada na calibração e no Walk-Forward."

@@ -835,7 +835,7 @@ def salvar_relatorio_calibracao(resultado: dict) -> str:
         "",
         "── Validação Estatística ──────────────────────────────",
         f"p-valor (Wilcoxon/t-test): {resultado.get('estatistica', {}).get('p_valor', 'N/A')}  {'✅ significativo (p<0.05)' if resultado.get('estatistica', {}).get('significativo') else '⚠️ não significativo'}",
-        f"IC 95%% vitórias: [{resultado.get('estatistica', {}).get('ic95_vitoria', ['?','?'])[0]:.1%} – {resultado.get('estatistica', {}).get('ic95_vitoria', ['?','?'])[1]:.1%}]" if resultado.get('estatistica', {}).get('ic95_vitoria') else "IC 95% vitórias: N/A",
+        f"IC 95% vitórias: [{resultado.get('estatistica', {}).get('ic95_vitoria', ['?','?'])[0]:.1%} – {resultado.get('estatistica', {}).get('ic95_vitoria', ['?','?'])[1]:.1%}]" if resultado.get('estatistica', {}).get('ic95_vitoria') else "IC 95% vitórias: N/A",
         f"Tamanho do efeito (Cohen d): {resultado.get('estatistica', {}).get('cohen_d', 'N/A')} ({resultado.get('estatistica', {}).get('interpretacao', '')})",
         "",
         "Observacao: isto mede desempenho historico contra uma referencia aleatoria. Nao e previsao nem garantia de premio.",

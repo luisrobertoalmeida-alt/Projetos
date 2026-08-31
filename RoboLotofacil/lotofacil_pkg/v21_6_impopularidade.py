@@ -38,6 +38,8 @@ from collections import Counter
 from statistics import mean
 from typing import Sequence
 
+from .config import TAMANHO_SORTEIO
+
 
 # ── Constantes de viés ────────────────────────────────────────────────────────
 
@@ -205,7 +207,12 @@ def score_impopularidade(
         return 0.0
 
     jogo = sorted(set(jogo))
-    if len(jogo) != 15:
+    # Aceita qualquer tamanho de aposta válido (15-18/20, config.TAMANHO_JOGO)
+    # -- todos os detectores abaixo normalizam por len(jogo), não por 15 fixo.
+    # Um `!= 15` aqui desligava o módulo inteiro (retorno 0.0 silencioso)
+    # sempre que o usuário configurasse aposta estendida na UI; o mínimo
+    # real de uma aposta válida na Lotofácil é TAMANHO_SORTEIO (15).
+    if len(jogo) < TAMANHO_SORTEIO or not all(1 <= n <= 25 for n in jogo):
         return 0.0
 
     peso = _clip(peso, 0.0, 1.0)

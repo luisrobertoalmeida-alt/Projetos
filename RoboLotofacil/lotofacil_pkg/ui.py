@@ -2277,8 +2277,8 @@ class RoboLotofacilUltraApp:
                     ]
                     if not resultados_bt:
                         resultados_bt = [{"acertos": self.info_backtest["media_melhor"]}]
-                    bm = benchmark_vs_aleatorio(resultados_bt)
-                    gs = ganho_estatistico(resultados_bt)
+                    bm = benchmark_vs_aleatorio(resultados_bt, tamanho_jogo=_config_module.TAMANHO_JOGO)
+                    gs = ganho_estatistico(resultados_bt, tamanho_jogo=_config_module.TAMANHO_JOGO)
                     self.log(
                         f"📊 V20.5 | vs aleatório: {bm['veredito']} "
                         f"(robô={bm['media_robo']:.3f} | aleat.={bm['media_aleatorio']:.3f} | Δ={bm['delta']:+.3f}) "
@@ -2887,7 +2887,8 @@ class RoboLotofacilUltraApp:
             # Monte Carlo rápido com histórico existente (sem backtest novo)
             resultados_reais = self._obter_resultados_backtest_reais_para_montecarlo()
             mc = executar_montecarlo_cientifico(
-                resultados_backtest=resultados_reais, n_simulacoes=500, qtd_jogos=10
+                resultados_backtest=resultados_reais, n_simulacoes=500, qtd_jogos=10,
+                tamanho_jogo=_config_module.TAMANHO_JOGO,
             )
             fonte_mc = f"dados reais ({len(resultados_reais)} execuções)" if resultados_reais else "sintético — rode o Backtest Científico para dados reais"
 
@@ -3020,7 +3021,8 @@ class RoboLotofacilUltraApp:
             from .v21_5_montecarlo_cientifico import executar_montecarlo_cientifico, resumo_montecarlo
             resultados_reais_mc1000 = self._obter_resultados_backtest_reais_para_montecarlo()
             mc1000 = executar_montecarlo_cientifico(
-                resultados_backtest=resultados_reais_mc1000, n_simulacoes=1000, qtd_jogos=10
+                resultados_backtest=resultados_reais_mc1000, n_simulacoes=1000, qtd_jogos=10,
+                tamanho_jogo=_config_module.TAMANHO_JOGO,
             )
             fonte_mc1000 = (
                 f"dados reais ({len(resultados_reais_mc1000)} execuções do Backtest Científico)"
@@ -4092,7 +4094,7 @@ class RoboLotofacilUltraApp:
             # ver 2026-07-21 no ARQUITETURA.md).
             try:
                 from .v21_5_walkforward_profissional import registrar_walkforward_profissional
-                ind_prof = registrar_walkforward_profissional(concursos, rel, qtd_jogos=qtd)
+                ind_prof = registrar_walkforward_profissional(concursos, rel, qtd_jogos=qtd, tamanho_jogo=_config_module.TAMANHO_JOGO)
                 self.log_async(
                     f"   Walk-Forward Profissional: robustez={ind_prof.get('robustez_pct', 0)}% "
                     f"| estabilidade={ind_prof.get('estabilidade_pct', 0)}% "
@@ -4579,7 +4581,7 @@ class RoboLotofacilUltraApp:
 
                 if melhores:
                     self.log_async("   Estimando referência do aleatório...")
-                    ref = estimar_referencia_melhor_aleatorio(qtd_jogos=qtd, n_simulacoes=5_000)
+                    ref = estimar_referencia_melhor_aleatorio(qtd_jogos=qtd, n_simulacoes=5_000, tamanho_jogo=_config_module.TAMANHO_JOGO)
                     self.log_async(f"   Referência melhor aleatório ({qtd} jogos): {ref:.2f}")
 
                     wf_v2 = score_robustez_walkforward_v2(
