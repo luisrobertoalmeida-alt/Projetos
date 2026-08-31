@@ -4295,6 +4295,7 @@ class RoboLotofacilUltraApp:
                 limiar_media=11.20,
                 max_tentativas=tentativas,
                 n_simulacoes=1000,
+                parar_ao_atingir_limiar=False,
                 status_cb=self.log_async,
             )
 
