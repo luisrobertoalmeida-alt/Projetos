@@ -279,6 +279,40 @@ class TestBancoDesempenho(unittest.TestCase):
         self.assertIn("total_registros", r)
         self.assertGreaterEqual(r["total_registros"], 1)
 
+    def test_jogos_com_16_dezenas_nao_sao_descartados(self):
+        """
+        Regressão do achado do usuário (2026-08-08): jogos com "Dezenas por
+        jogo" != 15 (apostas estendidas, 16-18) eram descartados por
+        len(set(j))==15, e o registro seguia adiante com uma lista vazia --
+        melhor_acerto=0/media_acertos=0.0, resultado matematicamente
+        impossivel (o minimo real para 15 dezenas é 5), registrado como se
+        fosse verdadeiro. Jogos de 16 dezenas agora precisam continuar
+        valendo.
+        """
+        random.seed(41)
+        jogos_16 = [sorted(random.sample(NUMEROS, 16)) for _ in range(10)]
+        real = sorted(random.sample(NUMEROS, 15))
+        resultado = registrar_desempenho_historico_robo(
+            jogos_16, real, analise=_ANALISE, caminho=self.cam
+        )
+        registro = resultado[0] if isinstance(resultado, tuple) else resultado
+        self.assertEqual(registro["qtd_jogos"], 10)
+        # minimo matematico para 15 dezenas sorteadas contra jogo de 16: 15-9=6
+        self.assertGreaterEqual(registro["melhor_acerto"], 6)
+
+    def test_pacote_sem_jogos_validos_levanta_erro_em_vez_de_zerar(self):
+        """
+        Antes da correção, um pacote onde nenhum jogo sobrevivia ao filtro
+        (ex.: jogos malformados) gerava silenciosamente melhor_acerto=0 em
+        vez de avisar que não havia dados válidos.
+        """
+        jogos_invalidos = [[1, 2, 3], [4, 5]]  # nenhum tem 15-20 dezenas
+        real = sorted(random.sample(NUMEROS, 15))
+        with self.assertRaises(ValueError):
+            registrar_desempenho_historico_robo(
+                jogos_invalidos, real, analise=_ANALISE, caminho=self.cam
+            )
+
 
 # ── avaliar_jogos ─────────────────────────────────────────────────────────────
 
@@ -343,7 +377,7 @@ class TestBacktestBasico(unittest.TestCase):
     def setUpClass(cls):
         """Roda o backtest uma vez para todos os testes desta classe."""
         cls.resultado = backtest_basico(
-            _HIST, janela=80, qtd_jogos=5, passos=5
+            _HIST, janela=80, qtd_jogos=5, passos=5, geracoes=5, pop_size=15
         )
 
     def test_retorna_dict(self):
@@ -415,7 +449,7 @@ class TestBacktestUltra(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.resultado = backtest_ultra_massivo(
-            _HIST, janela=80, qtd_jogos=5, passos=3
+            _HIST, janela=80, qtd_jogos=5, passos=3, geracoes=5, pop_size=15
         )
 
     def test_retorna_dict(self):
@@ -468,10 +502,14 @@ class TestAutoDiagnostico(unittest.TestCase):
         self.assertIsInstance(self.resultado, dict)
 
     def test_tem_nota(self):
-        # executar_auto_diagnostico_lotofacil retorna calibracao, laboratorio_historico
-        # e comparador — não existe chave "nota" ou "nota_geral" no contrato público.
-        # Verifica as chaves que a função realmente entrega.
-        for chave in ("calibracao", "laboratorio_historico", "comparador"):
+        # executar_auto_diagnostico_lotofacil retorna calibracao e comparador —
+        # o passo "laboratorio_historico" foi removido (2026-07-18): duplicava
+        # a mesma simulação de "calibracao" (G/P fixo vs. aleatório), sem testar
+        # variantes de verdade desde que montar_configuracoes_laboratorio()
+        # passou a devolver sempre a mesma config fixa. Não existe chave "nota"
+        # ou "nota_geral" no contrato público. Verifica as chaves que a função
+        # realmente entrega.
+        for chave in ("calibracao", "comparador"):
             self.assertIn(chave, self.resultado)
 
     def test_nota_range(self):
@@ -484,7 +522,6 @@ class TestAutoDiagnostico(unittest.TestCase):
         # que é o equivalente funcional do "diagnóstico" esperado pelo teste original.
         tem = (
             "comparador" in self.resultado
-            or "laboratorio_historico" in self.resultado
             or "calibracao" in self.resultado
         )
         self.assertTrue(tem)

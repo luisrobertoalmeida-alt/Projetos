@@ -8,15 +8,27 @@ Arquivos:
   test_analise_genetico.py           — modelos IA, motor estratégico, algoritmo genético
   test_apostas_pipeline.py           — pipeline completo e memória adaptativa
   test_backtest.py                   — backtesting, laboratório e relatórios
-  test_v19_modulos.py                — módulos V19 (benchmark, estabilidade, telemetria)
-  test_v20_modulos.py                — módulos V20 (backtest massivo, poda, ablation)
+  test_v17_4_features.py             — split temporal, redundância, cobertura de pares/trios
+  test_v20_2_poda_inteligente.py     — poda inteligente de modelos (score/estado/quarentena)
+  test_v21_5_auto_poda_full.py       — poda 4-estados (transições relativas ao grupo)
+  test_v21_5_walkforward_profissional.py — indicadores permanentes (reaproveita V20.8)
   test_v20_novos_modulos.py          — V20.6 bootstrap e V20.8 walk-forward
   test_v20_5_validacao_cientifica.py — validação científica V20.5
   test_calibracao_estatistica.py     — V21.6: p-valor, IC95%, Cohen's d, critério aprovação
-  test_fechamento.py                 — fechamento combinatório de garantia total
-  test_estatistica_pareada.py        — Cohen's d pareado, sign-flip, TOST, mapear_vale_gp()
+  test_fechamento.py                 — fechamento combinatório de garantia total e reduzido
+  test_estatistica_pareada.py        — Cohen's d pareado, sign-flip, TOST, mapear_vale_gp/diversidade()
   test_auditoria_cientifica.py       — auditoria científica contínua
-  test_execucao_paralela.py          — execução paralela por processos (regressão paralelo=sequencial)
+  test_hall_fama.py                  — Hall da Fama (normalização de nome p/ ELO, score composto)
+  test_persistencia.py               — persistencia.py (funções puras, sem I/O real)
+  test_limpar_registros_impossiveis.py — detecção de registros impossíveis no Banco Histórico
+  test_v21_0_auto_poda.py            — poda adaptativa por limiar dinâmico SQLite
+  test_v21_5_meta_competitivo.py     — ranking ELO dos modelos
+  test_v21_6_impopularidade.py       — score de valor esperado por impopularidade
+  test_v21_0_meta_aprendizado.py     — probabilidade de recuperação por modelo
+
+  Nota (2026-07-19): test_v19_modulos.py, test_v20_modulos.py e
+  test_execucao_paralela.py foram removidos junto com os módulos órfãos
+  que testavam (ver ARQUITETURA.md).
 
 Rodar tudo:
   python -m unittest discover -s lotofacil_pkg/tests -p "test_*.py" -v

@@ -60,10 +60,9 @@ from .genetico import (
     resumo_estrutural_pacote, score_jogo,
 )
 from .apostas import (
-    gerar_apostas, gerar_apostas_laboratorio_inteligente,
+    gerar_apostas,
     gerar_apostas_dual_perfil, relatorio_dual_perfil,
     simular_jogos_em_concurso, calcular_pacote_minimo,
-    calcular_configuracao_assistida, explicar_configuracao_assistida,
     gerar_relatorio_evolucao_aprendizado,
     carregar_performance_estrategias, registrar_performance_geracao,
 )
@@ -73,21 +72,23 @@ from .backtest import (
     backtest_basico, backtest_ultra_massivo,
     executar_backtest_cientifico_massivo,
     executar_auto_diagnostico_lotofacil,
-    calibrar_robo_vs_aleatorio, calibrar_laboratorio_historico_vs_aleatorio,
+    calibrar_robo_vs_aleatorio,
     comparar_estrategias,
     gerar_dashboard_analitico, auditar_pacote_jogos,
     gerar_relatorio_simulador_pacote, avaliar_jogos, gerar_relatorio_texto,
     barra_ascii,
+    carregar_conhecimento_cientifico,
+    alimentar_poda_e_elo,
 )
 from .v20_8_walkforward import relatorio_walkforward, salvar_relatorio_walkforward
 from .v20_6_bootstrap import relatorio_inferencial, salvar_relatorio_inferencial
-# V22: Configuração central, Dashboard, Pipeline, Relatório, Plugins, Otimizador
+# V22: Configuração central, Pipeline, Relatório, Otimizador
+# (v22_plugins/PluginManager removido em 2026-07-19 — nunca era
+# instanciado em lugar nenhum; ver ARQUITETURA.md)
 try:
     from .v22_config import cfg as cfg_v22
-    from .v22_dashboard import DashboardV22
     from .v22_pipeline import PipelineV22
     from .v22_relatorio import RelatorioV22
-    from .v22_plugins import PluginManager
     from .v22_otimizador import otimizar_pacote as _otimizar_pacote
     _V22_OK = True
 except Exception as _v22_err:
@@ -104,10 +105,13 @@ from .v21_5_melhorias_cientificas import (
 from .v20_5_validacao_cientifica import benchmark_vs_aleatorio, ganho_estatistico
 from .fechamento import (
     gerar_apostas_fechamento,
+    gerar_apostas_fechamento_reduzido,
     qtd_jogos_fechamento,
     garantia_minima,
+    tamanho_pool_minimo,
     TAMANHO_POOL_MINIMO,
     TAMANHO_POOL_MAXIMO,
+    TAMANHO_POOL_MAXIMO_REDUZIDO,
 )
 # V21.1: SQLite + Meta-Aprendizado + Auto-Poda + Dashboard Científico
 try:
@@ -183,25 +187,32 @@ class RoboLotofacilUltraApp:
         self.caminho_csv = tk.StringVar(value=ARQUIVO_CSV_PADRAO)
         self.qtd_jogos = tk.IntVar(value=20)
         self.janela_hist = tk.IntVar(value=120)
-        # G=35/P=27: fixo desde 2026-07-16 -- Mapa G x P (n=300, TOST
-        # margem=0.3) confirmou equivalencia estatistica na faixa G=16-300;
-        # nao ha vale estrutural, entao nao faz sentido expor como ajuste
-        # manual na tela principal (ver ARQUITETURA.md). Ainda pode ser
-        # sobrescrito via estrategia_override/mapa_gp_custom.py para quem
-        # quiser reabrir essa investigacao.
-        self.geracoes = tk.IntVar(value=35)
-        self.pop_size = tk.IntVar(value=27)
+        # G=100/P=77: fixo desde 2026-07-31 (a pedido do usuario; antes
+        # G=16/P=40 desde 2026-07-18). Mapa G x P (n=300, TOST margem=0.3)
+        # confirmou repetidamente equivalencia estatistica na faixa
+        # G=16-300 -- nao ha vale estrutural, entao a troca nao muda o
+        # desempenho esperado (ver ARQUITETURA.md, 2026-07-31). Continua
+        # sem campo editavel na tela principal pelo mesmo motivo de
+        # 2026-07-18: expor como ajuste manual sugeriria falsamente que
+        # vale a pena mexer. Ainda pode ser reaberto rodando
+        # mapa_gp_custom.py diretamente.
+        self.geracoes = tk.IntVar(value=100)
+        self.pop_size = tk.IntVar(value=77)
         self.passos_backtest = tk.IntVar(value=50)
         self.tamanho_jogo = tk.IntVar(value=TAMANHO_JOGO)
         # Fechamento combinatório (V22.1 experimental) — tamanho do pool (16-20)
         self.tamanho_pool_fechamento = tk.IntVar(value=TAMANHO_POOL_MINIMO)
+        # Fechamento REDUZIDO (desde 2026-08-08, ver fechamento.py e ARQUITETURA.md):
+        # garantia mais fraca/condicional (pelo menos 1 jogo, não todos; condicionada
+        # a t_garantia dezenas no pool, não as 15) com muito menos jogos.
+        self.fechamento_reduzido_ativo = tk.BooleanVar(value=False)
+        self.fechamento_t_garantia = tk.IntVar(value=13)
+        self.fechamento_g_garantia = tk.IntVar(value=11)
         self.auto_update_on_open = tk.BooleanVar(value=True)
         self.modo_turbo = tk.BooleanVar(value=True)
-        self.modo_laboratorio = tk.BooleanVar(value=False)
         self.auto_aprender_on_open = tk.BooleanVar(value=True)
         self.usar_seed_fixo = tk.BooleanVar(value=False)
         self.seed_valor = tk.IntVar(value=42)
-        self.assistente_config_auto = tk.BooleanVar(value=True)
         # V21.6 — controle de impopularidade (0 = desligado, 100 = máximo)
         self.peso_impopularidade = tk.IntVar(value=30)
 
@@ -221,14 +232,11 @@ class RoboLotofacilUltraApp:
         self.pesos = None
         self.info_backtest = None
         self.info_calibracao = None
-        self.info_laboratorio_historico = None
         self.info_auto_diagnostico = None
         self.total_concursos_csv = 0
         self.calibracao_ativa = False
-        self.laboratorio_historico_ativo = False
         self.auto_diagnostico_ativo = False
         self.thread_calibracao = None
-        self.thread_laboratorio_historico = None
         self.thread_auto_diagnostico = None
         self.aprendizado_continuo_ativo = False
         self.thread_aprendizado_continuo = None
@@ -453,13 +461,28 @@ class RoboLotofacilUltraApp:
         tk.Entry(_dez_inner, textvariable=self.tamanho_jogo, width=4,
                  bg=bg2, fg=_acc, insertbackground=_acc,
                  relief="flat", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 4))
-        tk.Label(linha1, text="  Seed:", bg=bg, fg=fg2, font=("Segoe UI", 9)).pack(side="left", padx=(8, 2))
-        tk.Checkbutton(linha1, text="fixo", variable=self.usar_seed_fixo,
-                       bg=bg, fg=fg2, activebackground=bg, selectcolor=bg3,
-                       font=("Segoe UI", 9)).pack(side="left")
-        tk.Entry(linha1, textvariable=self.seed_valor, width=5,
-                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
-                 font=("Segoe UI", 9)).pack(side="left", padx=(2, 0))
+
+        # ── Impopularidade (mesma linha, logo após Dezenas) ───
+        tk.Label(linha1, text="  📊 Impopularidade:", bg=bg, fg=TEMA["ciano"],
+                 font=("Segoe UI", 9, "bold")).pack(side="left", padx=(12, 2))
+        _imp_val_lbl = tk.Label(linha1, text="30%", bg=bg, fg=TEMA["ciano"],
+                                font=("Segoe UI", 9, "bold"), width=4)
+        _imp_val_lbl.pack(side="left")
+
+        def _atualizar_lbl_imp(val):
+            _imp_val_lbl.config(text=f"{int(float(val))}%")
+
+        tk.Scale(
+            linha1,
+            from_=0, to=100,
+            orient="horizontal",
+            variable=self.peso_impopularidade,
+            command=_atualizar_lbl_imp,
+            bg=bg, fg=TEMA["ciano"], troughcolor=bg3,
+            highlightthickness=0, showvalue=False,
+            length=110, width=10,
+        ).pack(side="left", padx=(2, 6))
+
         # ── Linha 2: checkboxes ───────────────────────────────
         linha2 = tk.Frame(topo, bg=bg)
         linha2.pack(fill="x", pady=2)
@@ -471,30 +494,26 @@ class RoboLotofacilUltraApp:
 
         chk(linha2, "Autoatualizar ao abrir",       self.auto_update_on_open)
         chk(linha2, "Modo Turbo",                   self.modo_turbo)
-        chk(linha2, "Modo Laboratório Inteligente", self.modo_laboratorio)
         chk(linha2, "Auto Aprender ao carregar",    self.auto_aprender_on_open)
-        chk(linha2, "🧭 Assistente Auto Config",      self.assistente_config_auto)
-
-        # V21.6 — Slider de impopularidade
-        tk.Label(linha2, text="  📊 Impopularidade:", bg=bg, fg=TEMA["ciano"],
-                 font=("Segoe UI", 9, "bold")).pack(side="left", padx=(12, 2))
-        _imp_val_lbl = tk.Label(linha2, text="30%", bg=bg, fg=TEMA["ciano"],
-                                font=("Segoe UI", 9, "bold"), width=4)
-        _imp_val_lbl.pack(side="left")
-
-        def _atualizar_lbl_imp(val):
-            _imp_val_lbl.config(text=f"{int(float(val))}%")
-
-        tk.Scale(
-            linha2,
-            from_=0, to=100,
-            orient="horizontal",
-            variable=self.peso_impopularidade,
-            command=_atualizar_lbl_imp,
-            bg=bg, fg=TEMA["ciano"], troughcolor=bg3,
-            highlightthickness=0, showvalue=False,
-            length=110, width=10,
-        ).pack(side="left", padx=(2, 6))
+        tk.Checkbutton(linha2, text="Seed fixo", variable=self.usar_seed_fixo,
+                       bg=bg, fg=fg2, activebackground=bg, selectcolor=bg3,
+                       font=("Segoe UI", 9)).pack(side="left", padx=(6, 2))
+        tk.Entry(linha2, textvariable=self.seed_valor, width=5,
+                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
+                 font=("Segoe UI", 9)).pack(side="left")
+        # Fechamento reduzido (2026-08-08) — garantia mais fraca/condicional
+        # (pelo menos 1 jogo, não todos; condicionada a t_garantia dezenas no
+        # pool, não as 15), com muito menos jogos que a garantia total.
+        tk.Checkbutton(linha2, text="  Fechamento Reduzido (t/g):", variable=self.fechamento_reduzido_ativo,
+                       bg=bg, fg=fg2, activebackground=bg, selectcolor=bg3,
+                       font=("Segoe UI", 9)).pack(side="left", padx=(10, 2))
+        tk.Entry(linha2, textvariable=self.fechamento_t_garantia, width=3,
+                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
+                 font=("Segoe UI", 9)).pack(side="left")
+        tk.Label(linha2, text="/", bg=bg, fg=fg2, font=("Segoe UI", 9)).pack(side="left")
+        tk.Entry(linha2, textvariable=self.fechamento_g_garantia, width=3,
+                 bg=bg2, fg=fg, insertbackground=fg, relief="flat",
+                 font=("Segoe UI", 9)).pack(side="left")
 
         # ── Linha 3: operação principal ───────────────────────
         tk.Label(topo, text="▶ Operação principal", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
@@ -503,25 +522,31 @@ class RoboLotofacilUltraApp:
         _tips_linha3 = {
             "⬆ Atualizar":      "Baixa os últimos resultados da API da CAIXA e atualiza o CSV.",
             "📂 Carregar":       "Lê o CSV do disco e carrega o histórico em memória.",
-            "🎲 Gerar Jogos":    "Gera o pacote de apostas usando ensemble multi-IA + algoritmo genético. (F5)",
-            "🔬 Laboratório":    "Gera apostas com a configuração G/P validada (35/27, ver Mapa G×P).",
-            "📊 Backtest":       "Testa o robô em concursos passados e mede a taxa de acertos. (F6)",
-            "🤖 BT Automático": "Walk-forward detalhado: gera e confere jogos concurso a concurso, salva relatório.",
+            "🎲 Gerar Jogos":    "Gera o pacote de apostas usando ensemble multi-IA + algoritmo genético, já na configuração G/P validada (100/77). (F5)",
+            "🧪 Simulador":      "Audita a qualidade estrutural do pacote com simulações artificiais.",
+            "✅ Conferir Jogos": "Confere os jogos gerados contra o último sorteio real.",
             "🎯 Dual-Perfil":   "Gera pacote misto: 70% otimizado para 11+/12+ e 30% exploração para 13+ (Pares/Trios + Cobertura).",
-            "🔒 Fechamento":    "Fechamento combinatório: escolhe um pool de dezenas (campo 'Pool Fecht.', 16-20) pelo ranking do "
-                                "ensemble e joga TODAS as combinações de 15 dentro dele. Garantia matemática (não estatística) "
+            "🔒 Fechamento":    "Fechamento combinatório: escolhe um pool de dezenas (campo 'Pool Fecht.') pelo ranking do "
+                                "ensemble e joga TODAS as combinações do tamanho definido em '✦ Dezenas' (15-18) dentro dele. "
+                                "Pool mínimo = Dezenas + 1. Garantia matemática (não estatística) "
                                 "condicionada às 15 sorteadas estarem dentro do pool escolhido — ver VALIDACAO_ESCALA_REAL "
-                                "e docstring de fechamento.py.",
+                                "e docstring de fechamento.py. Marque 'Fechamento Reduzido (t/g)' pra usar um wheel "
+                                "reduzido (bem menos jogos, garantia mais fraca: pelo menos 1 jogo acerta g dezenas "
+                                "SE t das sorteadas estiverem no pool) — pool máximo 19 nesse modo.",
+            "⚡ Otimizador": "Gera pacotes candidatos com a mesma configuração até atingir 95% de 11+ na simulação "
+                                "(ou esgotar as tentativas); entre os candidatos, escolhe o melhor priorizando 12+/13+ "
+                                "e média do melhor jogo (mais raros e discriminantes que 11+) — investigação, não "
+                                "muda a config validada.",
         }
         for txt, cmd, cor in [
             ("⬆ Atualizar",      self.iniciar_atualizar_resultados, TEMA["btn_atualizar"]),
             ("📂 Carregar",       self.iniciar_carregar_historico,   TEMA["btn_carregar"]),
             ("🎲 Gerar Jogos",    self.iniciar_gerar_jogos,          TEMA["btn_gerar"]),
-            ("🔬 Laboratório",    self.gerar_jogos_laboratorio,      TEMA["btn_lab"]),
+            ("🧪 Simulador",     self.rodar_simulador_pacote,                TEMA["btn_simulador"]),
+            ("✅ Conferir Jogos",self.conferir_jogos_gerados,                TEMA["btn_conferir"]),
             ("🎯 Dual-Perfil",    self.gerar_jogos_dual_perfil,      TEMA["btn_gerar"]),
             ("🔒 Fechamento",     self.iniciar_fechamento,           TEMA["btn_pacote"]),
-            ("📊 Backtest",       self.iniciar_rodar_backtest,       TEMA["btn_backtest"]),
-            ("🤖 BT Automático", self.iniciar_backtest_automatico,   TEMA["btn_backauto"]),
+            ("⚡ Otimizador", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
         ]:
             btn = self.criar_botao_colorido(linha3, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
@@ -533,26 +558,27 @@ class RoboLotofacilUltraApp:
         linha4.pack(fill="x", pady=(4, 2))
         _tips_linha4 = {
             "⚡ Aprender":             "Executa um ciclo de aprendizado contínuo com os dados disponíveis.",
-            "🧠 Ver Aprendizado":      "Exibe o resumo da memória de aprendizado permanente da IA.",
             "🩺 Auto Diagnóstico":     "Analisa automaticamente a qualidade do histórico e do robô.",
             "🎯 Calibrar IA":          "Compara o robô contra pacotes aleatórios em concursos passados.",
-            "🏆 Lab Histórico":        "Calibra o robô vs. aleatório usando o modo Laboratório Inteligente.",
-            "🧭 Auto Ajuste":          "Calcula e aplica automaticamente a melhor configuração para o histórico atual.",
+            "📊 Backtest":       "Testa o robô em concursos passados e mede a taxa de acertos. (F6)",
+            "🤖 BT Automático": "Walk-forward detalhado: gera e confere jogos concurso a concurso, salva relatório.",
+            "🧪 Backtest Científico": "Backtest científico massivo (configuração validada vs. diversidade ampliada) e "
+                                "campeonato de modelos do ensemble — alimenta poda/ELO com o resultado.",
             "🔀 Walk-Forward":         "Validação walk-forward deslizante: avalia robustez em múltiplas janelas e detecta overfitting.",
             "📐 Bootstrap IC":         "IC 95%/99% e erro padrão (bootstrap) sobre a série de acertos do último backtest. "
                                 "Não compara contra aleatório (sem p-value/Cohen's d aqui) — para isso use 🎯 Calibrar IA ou 🗺️ Mapa G×P.",
-            "🔬 Análise Cient. V2":    "Teste binomial de significância + Walk-Forward com métrica corrigida (melhor do pacote). Rode Calibrar IA e Walk-Forward antes.",
+            "🔬 Análise Científica":    "Teste binomial de significância + Walk-Forward com métrica corrigida (melhor do pacote). Rode Calibrar IA e Walk-Forward antes.",
         }
         for txt, cmd, cor in [
             ("⚡ Aprender",            self.forcar_aprendizado_continuo_seguro, TEMA["btn_aprender"]),
-            ("🧠 Ver Aprendizado",     self.ver_aprendizado,                    TEMA["btn_dash"]),
             ("🩺 Auto Diagnóstico",    self.iniciar_auto_diagnostico,           TEMA["btn_comparar"]),
             ("🎯 Calibrar IA",         self.iniciar_calibracao_vs_aleatorio,    TEMA["btn_backtest"]),
-            ("🏆 Lab Histórico",       self.iniciar_laboratorio_historico,      TEMA["btn_lab"]),
-            ("🧭 Auto Ajuste",         self.iniciar_autoajuste,                 TEMA["btn_atalho"]),
+            ("📊 Backtest",       self.iniciar_rodar_backtest,       TEMA["btn_backtest"]),
+            ("🤖 BT Automático", self.iniciar_backtest_automatico,   TEMA["btn_backauto"]),
+            ("🧪 Backtest Científico", self.iniciar_backtest_cientifico_v11, TEMA["btn_relatorio"]),
             ("🔀 Walk-Forward",        self.iniciar_walkforward,                TEMA["btn_backauto"]),
             ("📐 Bootstrap IC",        self.iniciar_bootstrap_ic,               TEMA["btn_relatorio"]),
-            ("🔬 Análise Cient. V2",   self.iniciar_analise_cientifica_v2,      TEMA["btn_relatorio"]),
+            ("🔬 Análise Científica",   self.iniciar_analise_cientifica_v2,      TEMA["btn_relatorio"]),
         ]:
             btn = self.criar_botao_colorido(linha4, txt, cmd, cor=cor)
             btn.pack(side="left", padx=3)
@@ -564,23 +590,19 @@ class RoboLotofacilUltraApp:
         linha5.pack(fill="x", pady=(4, 6))
         _tips_linha5 = {
             "📈 Dashboard":      "Abre o painel analítico completo com análise do pacote e relatório.",
-            "📊 Dashboard V22":  "Exibe ranking histórico, evolução por versão, tendência de acertos e comparação entre modelos.",
-            "📊 Desempenho":     "Exibe o banco histórico de acertos reais registrados.",
-            "✅ Conferir Jogos": "Confere os jogos gerados contra o último sorteio real.",
-            "🧪 Simulador":      "Audita a qualidade estrutural do pacote com simulações artificiais.",
-            "💾 Salvar TXT":     "Salva o relatório atual em arquivo de texto.",
+            "📊 Desempenho":     "Exibe o banco histórico de acertos reais registrados e o ranking de modelos do ensemble.",
+            "💾 Salvar TXT":     "Salva só os números dos jogos gerados em TXT (sem relatório, score ou logs). Também marca este pacote como o \"atual\" para restauração ao reabrir o app e avaliação automática contra o próximo sorteio.",
+            "🖨️ Exportar PDF":   "Exporta os jogos gerados em PDF com o volante da Lotofácil marcado visualmente.",
             "📋 Excel":          "Exporta o histórico de resultados para planilha Excel.",
             "🎰 Probabilidades": "Calculadora de probabilidades reais baseada em combinatória.",
             "🗑 Limpar":         "Limpa o painel de log. (Ctrl+L)",
         }
         for txt, cmd, cor in [
             ("📈 Dashboard",     self.abrir_dashboard,                       TEMA["btn_dash"]),
-            ("📊 Dashboard V22",  self.iniciar_dashboard_v22,                 TEMA["btn_dash"]),
             ("📊 Desempenho",    self.abrir_dashboard_desempenho,            TEMA["btn_relatorio"]),
-            ("⚗️ Científico V21", self.abrir_dashboard_cientifico_v21,       TEMA["btn_backauto"]),
-            ("✅ Conferir Jogos",self.conferir_jogos_gerados,                TEMA["btn_conferir"]),
-            ("🧪 Simulador",     self.rodar_simulador_pacote,                TEMA["btn_simulador"]),
+            ("⚗️ Painel Científico", self.abrir_dashboard_cientifico_v21,       TEMA["btn_backauto"]),
             ("💾 Salvar TXT",    self.salvar_txt,                            TEMA["btn_salvar"]),
+            ("🖨️ Exportar PDF",  self.exportar_pdf,                          TEMA["btn_pdf"]),
             ("📋 Excel",         self.exportar_excel,                        TEMA["btn_excel"]),
             ("🎰 Probabilidades",self.abrir_calculadora_probabilidades,      TEMA["btn_comparar"]),
             ("🗑 Limpar",        self.limpar,                                TEMA["btn_limpar"]),
@@ -594,34 +616,6 @@ class RoboLotofacilUltraApp:
             linha5, "✖ Encerrar",
             self.encerrar_aplicativo, cor=TEMA["btn_encerrar"],
         ).pack(side="right", padx=3)
-
-        # ── Linha 6: investigação avançada (uso pontual, não dia a dia) ──
-        # Movidos para cá em 2026-07-17: testam/exploram parâmetros que já
-        # têm resposta validada (G×P equivalente de 16 a 300 — Mapa G×P,
-        # zona morta derrubada, ver ARQUITETURA.md) ou geram variantes por
-        # repetição de semente — úteis para investigar, não para uso
-        # recorrente. Ficavam misturados com os botões de operação diária.
-        tk.Label(topo, text="🔬 Investigação avançada (uso pontual)", bg=bg, fg=acc, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
-        linha6 = tk.Frame(topo, bg=bg)
-        linha6.pack(fill="x", pady=(4, 6))
-        _tips_linha6 = {
-            "🗺️ Mapa G×P":     "Mapeia o espaço G×P e testa os extremos contra os intermediários com estatística PAREADA "
-                                "(Cohen's d pareado, sign-flip, TOST) — mesma metodologia de reanalise_pareada.py. "
-                                "Já confirmado equivalente de G=16 a G=300 (ver ARQUITETURA.md) — use só para reabrir "
-                                "a investigação, não é necessário no uso normal.",
-            "⚡ Otimizador V22": "Gera múltiplos pacotes candidatos com a mesma configuração e seleciona automaticamente "
-                                "o com maior % de 11+ na simulação — investigação, não muda a config validada.",
-            "🧪 Científico V11": "Backtest científico massivo (configuração validada vs. diversidade ampliada) e "
-                                "campeonato de modelos do ensemble.",
-        }
-        for txt, cmd, cor in [
-            ("🗺️ Mapa G×P",      self.iniciar_mapa_gp,                TEMA["btn_backauto"]),
-            ("⚡ Otimizador V22", self.iniciar_otimizador_v22,          TEMA["btn_aprender"]),
-            ("🧪 Científico V11", self.iniciar_backtest_cientifico_v11, TEMA["btn_relatorio"]),
-        ]:
-            btn = self.criar_botao_colorido(linha6, txt, cmd, cor=cor)
-            btn.pack(side="left", padx=3)
-            tooltip(btn, _tips_linha6.get(txt, ""))
 
         # ── Barra de progresso ────────────────────────────────
         barra_frame = tk.Frame(topo, bg=bg)
@@ -639,7 +633,7 @@ class RoboLotofacilUltraApp:
         tk.Frame(self.root, bg=bg3, height=1).pack(fill="x")
 
     def _montar_notebook(self) -> None:
-        """Notebook inferior com abas: Log, Jogos Gerados, Histórico de Acertos, Comparador."""
+        """Notebook inferior com abas: Log, Jogos Gerados, Histórico de Acertos, Comparador, Mapa G×P."""
         bg, bg2, fg = TEMA["bg"], TEMA["bg2"], TEMA["fg"]
 
         self._notebook_corpo = ttk.Notebook(self.root)
@@ -683,6 +677,12 @@ class RoboLotofacilUltraApp:
         aba_comp = ttk.Frame(self._notebook_corpo)
         self._notebook_corpo.add(aba_comp, text="  ⚖️ Comparador  ")
         self._montar_aba_comparador(aba_comp)
+
+        # Aba Mapa G×P — uso pontual, tirada da barra de botões principal
+        # para não competir em destaque com a operação do dia a dia.
+        aba_mapa_gp = ttk.Frame(self._notebook_corpo)
+        self._notebook_corpo.add(aba_mapa_gp, text="  🗺️ Mapa G×P  ")
+        self._montar_aba_mapa_gp(aba_mapa_gp)
 
     def _registrar_atalhos(self) -> None:
         """Registra todos os atalhos de teclado globais."""
@@ -728,6 +728,12 @@ class RoboLotofacilUltraApp:
         bg = TEMA["bg"]
         self._canvas_acertos = tk.Canvas(parent, bg=bg, highlightthickness=0)
         self._canvas_acertos.pack(fill="both", expand=True)
+        # Redesenha quando o canvas ganha seu tamanho real: logo após a criação
+        # (ou ao trocar de aba, quando o notebook mapeia o frame pela primeira
+        # vez) winfo_width()/height() retornam 1, não 0 — o fallback "or 900"
+        # não entra em ação e o gráfico é desenhado numa área de 1x1 (invisível).
+        # <Configure> dispara assim que o canvas recebe as dimensões reais.
+        self._canvas_acertos.bind("<Configure>", lambda e: self._atualizar_grafico_acertos())
         self._lbl_acertos_vazio = tk.Label(parent,
             text="Registre resultados usando 'Conferir Jogos' para ver o histórico aqui.",
             bg=bg, fg=TEMA["fg2"], font=("Segoe UI", 10))
@@ -817,6 +823,15 @@ class RoboLotofacilUltraApp:
         tk.Frame(parent, bg=bg3, height=1).pack(fill="x")
         self._canvas_comp = tk.Canvas(parent, bg=bg, highlightthickness=0, height=220)
         self._canvas_comp.pack(fill="x", padx=0, pady=0)
+        # Mesmo bug (agora corrigido) do gráfico de Acertos: sem <Configure>,
+        # o primeiro desenho pode acontecer com o canvas ainda em 1x1 (antes
+        # do notebook mapear a aba), ficando invisível até algum redesenho
+        # acidental. Redesenha com o último resultado assim que o canvas
+        # recebe suas dimensões reais.
+        self._canvas_comp.bind(
+            "<Configure>",
+            lambda e: self._desenhar_grafico_comp(self._resultados_comp) if getattr(self, "_resultados_comp", None) else None,
+        )
 
         # ── Status do comparador ───────────────────────────
         self._lbl_comp_status = tk.Label(parent, text="Configure e clique em 'Rodar Comparação'.",
@@ -827,8 +842,57 @@ class RoboLotofacilUltraApp:
         self._comp_sort_col   = None
         self._comp_sort_asc   = False
 
-    def _atualizar_tabela_jogos(self) -> None:
-        """Preenche a tabela de jogos com os dados da última geração."""
+    def _montar_aba_mapa_gp(self, parent: ttk.Frame) -> None:
+        """
+        Aba do Mapa G×P — investigação pontual (não é operação do dia a dia),
+        por isso fica numa aba própria em vez de um botão na barra principal.
+        """
+        bg, bg2, bg3 = TEMA["bg"], TEMA["bg2"], TEMA["bg3"]
+        fg, fg2, acc = TEMA["fg"], TEMA["fg2"], TEMA["accent"]
+
+        painel = tk.Frame(parent, bg=bg2, padx=16, pady=14)
+        painel.pack(fill="x")
+
+        tk.Label(painel, text="🗺️  Mapa G×P",
+                 bg=bg2, fg=acc, font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 8))
+
+        tk.Label(
+            painel,
+            text="Mapeia o espaço de Gerações×População e testa os extremos contra os intermediários com "
+                 "estatística PAREADA (Cohen's d pareado, sign-flip, TOST) — mesma metodologia de "
+                 "reanalise_pareada.py. Já confirmado equivalente de G=16 a G=300 (ver ARQUITETURA.md); use só "
+                 "para reabrir a investigação, não é necessário no uso normal.",
+            bg=bg2, fg=fg2, font=("Segoe UI", 9), justify="left", wraplength=760,
+        ).pack(anchor="w", pady=(0, 12))
+
+        self._lbl_mapa_gp_status = tk.Label(
+            painel, text="Usa Janela histórica, Passos BT e Qtd. jogos configurados no topo da tela.",
+            bg=bg2, fg=fg2, font=("Segoe UI", 9),
+        )
+        self._lbl_mapa_gp_status.pack(anchor="w", pady=(0, 10))
+
+        def _rodar():
+            self._lbl_mapa_gp_status.config(
+                text="⏳ Rodando... acompanhe o progresso na aba 📋 Log.", fg=TEMA["amarelo"]
+            )
+            self.iniciar_mapa_gp()
+
+        self.criar_botao_colorido(
+            painel, "🗺️ Rodar Mapa G×P", _rodar, cor=TEMA["btn_neon_verde"],
+        ).pack(anchor="w")
+
+    def _atualizar_tabela_jogos(self, mudar_aba: bool = True) -> None:
+        """
+        Preenche a tabela de jogos com os dados da última geração.
+
+        `mudar_aba=False` popula a tabela sem forçar a troca pra aba
+        "Jogos Gerados" — usado na restauração do pacote ao abrir o app
+        (`carregar_ultimos_jogos_gerados`), pra não roubar o foco da tela
+        logo na inicialização (antes, essa restauração simplesmente não
+        chamava este método, então a tabela ficava vazia até a próxima
+        geração real, mesmo com um pacote válido já em memória — ver
+        2026-07-23 no ARQUITETURA.md).
+        """
         for row in self._tree_jogos.get_children():
             self._tree_jogos.delete(row)
         if not self.jogos_gerados or self.analise is None or self.pesos is None:
@@ -865,8 +929,9 @@ class RoboLotofacilUltraApp:
                  f"[F5=Gerar  F6=Backtest  F9=Atualizar  F10=Carregar  Ctrl+L=Limpar]"
         )
         self._atualizar_painel_info()
-        # Vai para a aba de jogos automaticamente
-        self._notebook_corpo.select(1)
+        if mudar_aba:
+            # Vai para a aba de jogos automaticamente
+            self._notebook_corpo.select(1)
 
     def _atualizar_grafico_acertos(self) -> None:
         """Desenha gráfico de barras dos últimos acertos registrados."""
@@ -929,6 +994,57 @@ class RoboLotofacilUltraApp:
         c.create_text(mg_l + 4, mg_t + 10,
                       text=f"Melhor: {max(melhores)}   Média: {media_geral:.1f}   Total registros: {len(registros)}",
                       fill=acc, font=("Segoe UI", 9, "bold"), anchor="w")
+
+    def _aplicar_seed_configurada(self, log_async: bool = False) -> None:
+        """
+        Aplica a seed (fixa ou aleatória) conforme o checkbox "Seed fixo".
+
+        Chamado no início de toda operação que gera jogos/simula concursos
+        (Gerar Jogos, Backtest, BT Automático, Walk-Forward, Calibrar IA, Lab
+        Histórico, Auto Diagnóstico, Científico V11, Dual-Perfil, Otimizador,
+        Mapa G×P) para que o mesmo seed valha para todas elas — antes, só
+        "Gerar Jogos" aplicava `seed_global`, e mesmo essa chamada não
+        alcançava `config.SEED` (ver `seed_global` em utils.py), então as
+        demais sempre rodavam com entropia real, mesmo com o checkbox
+        marcado.
+        """
+        registrar = self.log_async if log_async else self.log
+        if self.usar_seed_fixo.get():
+            seed_global(int(self.seed_valor.get()))
+            registrar(f"Seed fixo ativado: {self.seed_valor.get()} (resultados reproduzíveis)")
+        else:
+            seed_global(None)
+            registrar("Seed aleatório (resultados diferentes a cada execução)")
+
+    def _obter_resultados_backtest_reais_para_montecarlo(self) -> list[dict] | None:
+        """
+        Extrai os resultados reais da última vitória do Backtest Científico
+        (conhecimento_cientifico.json) para alimentar o Monte Carlo
+        Científico com dados reais do robô.
+
+        Antes, `executar_montecarlo_cientifico()` era sempre chamado sem
+        `resultados_backtest`, então sempre caía no fallback sintético
+        (`rng.gauss(0.3, 0.25)`) — mesmo quando já existia um Backtest
+        Científico real rodado — e o painel mostrava P(Robô > Aleatório),
+        IC 95%, Cohen's d e p-value calculados sobre números fabricados,
+        contradizendo o próprio docstring do módulo (ver 2026-07-19 no
+        ARQUITETURA.md). Retorna None se ainda não há nenhuma execução
+        científica registrada — nesse caso o Monte Carlo cai no fallback
+        sintético mesmo, mas agora isso é sinalizado na tela.
+        """
+        try:
+            conhecimento = carregar_conhecimento_cientifico()
+            ranking = conhecimento.get("ranking_configuracoes") or []
+            if not ranking:
+                return None
+            ultimos = ranking[0].get("ultimos") or []
+            resultados = [
+                {"acertos": r.get("media_acertos", 0.0)}
+                for r in ultimos if "media_acertos" in r
+            ]
+            return resultados or None
+        except Exception:
+            return None
 
     def _iniciar_progresso(self) -> None:
         if not self._progresso_visivel:
@@ -1021,11 +1137,19 @@ class RoboLotofacilUltraApp:
         return max(janela + passos + margem, MIN_HIST)
 
     def selecionar_csv(self) -> None:
+        # Usa a caixa de "salvar" (não "abrir") de propósito: este campo é
+        # compartilhado por Carregar E por Atualizar (que pode criar um CSV
+        # novo num caminho que ainda não existe) — askopenfilename exigiria
+        # um arquivo já existente. `confirmoverwrite=False` evita o aviso
+        # de "sobrescrever?" ao reselecionar o CSV atual, que não faz
+        # sentido aqui já que nada está sendo salvo neste momento (achado
+        # de auditoria, ver 2026-07-23 no ARQUITETURA.md).
         caminho = filedialog.asksaveasfilename(
             title="Escolha o CSV de resultados",
             defaultextension=".csv",
             filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
-            initialfile=os.path.basename(self.caminho_csv.get() or ARQUIVO_CSV_PADRAO)
+            initialfile=os.path.basename(self.caminho_csv.get() or ARQUIVO_CSV_PADRAO),
+            confirmoverwrite=False,
         )
         if caminho:
             self.caminho_csv.set(caminho)
@@ -1046,40 +1170,43 @@ class RoboLotofacilUltraApp:
             self._atualizando = False
 
     def atualizar_resultados_reais(self) -> None:
+        # Roda em thread de fundo (iniciar_atualizar_resultados) — usa apenas
+        # chamadas thread-safe (_async / root.after), como os demais handlers
+        # threaded do arquivo (ver 2026-07-19 no ARQUITETURA.md).
         try:
-            self.set_status("Atualizando resultados reais...", "blue")
-            self.log("=" * 72)
-            self.log("ATUALIZAÇÃO AUTOMÁTICA")
-            self.log(f"Arquivo de saída: {self.caminho_csv.get().strip()}")
+            self.set_status_async("Atualizando resultados reais...", "blue")
+            self.log_async("=" * 72)
+            self.log_async("ATUALIZAÇÃO AUTOMÁTICA")
+            self.log_async(f"Arquivo de saída: {self.caminho_csv.get().strip()}")
 
             caminho, total, origem, novos, info_salvamento = baixar_e_exportar_historico_ultra(
                 caminho_saida=self.caminho_csv.get().strip(),
                 caminho_cache=ARQUIVO_CACHE,
-                status_cb=self.log,
+                status_cb=self.log_async,
             )
-            self.log(f"✅ Atualização concluída. Origem: {origem}")
-            self.log(f"Total de concursos no CSV: {total}")
-            self.log(f"Concursos novos adicionados nesta execução: {novos}")
-            self.log(f"Arquivo salvo em: {caminho}")
+            self.log_async(f"✅ Atualização concluída. Origem: {origem}")
+            self.log_async(f"Total de concursos no CSV: {total}")
+            self.log_async(f"Concursos novos adicionados nesta execução: {novos}")
+            self.log_async(f"Arquivo salvo em: {caminho}")
             if info_salvamento.get('backup'):
-                self.log(f"Backup criado em: {info_salvamento['backup']}")
+                self.log_async(f"Backup criado em: {info_salvamento['backup']}")
             if info_salvamento.get('alternativo'):
-                self.log("⚠️ O arquivo principal estava bloqueado. Os dados foram salvos em arquivo alternativo.")
-                self.log(f"Motivo: {info_salvamento.get('erro_principal', 'arquivo em uso')}")
-                self.caminho_csv.set(caminho)
-                self.set_status("Atualizado em arquivo alternativo por bloqueio do principal.", "orange")
+                self.log_async("⚠️ O arquivo principal estava bloqueado. Os dados foram salvos em arquivo alternativo.")
+                self.log_async(f"Motivo: {info_salvamento.get('erro_principal', 'arquivo em uso')}")
+                self.root.after(0, lambda: self.caminho_csv.set(caminho))
+                self.set_status_async("Atualizado em arquivo alternativo por bloqueio do principal.", "orange")
             else:
-                self.set_status("Resultados reais atualizados com sucesso.", "green")
+                self.set_status_async("Resultados reais atualizados com sucesso.", "green")
         except PermissionError as e:
-            self.set_status("Erro de permissão ao salvar CSV.", "red")
-            self.log("❌ Arquivo CSV está bloqueado ou sem permissão de escrita.")
-            self.log(str(e))
-            self.log("Feche o Excel/LibreOffice se o CSV estiver aberto e tente novamente.")
+            self.set_status_async("Erro de permissão ao salvar CSV.", "red")
+            self.log_async("❌ Arquivo CSV está bloqueado ou sem permissão de escrita.")
+            self.log_async(str(e))
+            self.log_async("Feche o Excel/LibreOffice se o CSV estiver aberto e tente novamente.")
         except Exception as e:
-            self.set_status("Erro ao atualizar resultados reais.", "red")
-            self.log("❌ Erro ao atualizar resultados reais:")
-            self.log(str(e))
-            self.log(traceback.format_exc())
+            self.set_status_async("Erro ao atualizar resultados reais.", "red")
+            self.log_async("❌ Erro ao atualizar resultados reais:")
+            self.log_async(str(e))
+            self.log_async(traceback.format_exc())
 
     def iniciar_carregar_historico(self) -> None:
         """Lança carregar_historico em thread para não travar a UI."""
@@ -1097,91 +1224,36 @@ class RoboLotofacilUltraApp:
             self._carregando = False
 
     def carregar_historico(self) -> None:
+        # Roda em thread de fundo (iniciar_carregar_historico) — mesma
+        # observação de thread-safety de atualizar_resultados_reais.
         try:
-            self._iniciar_progresso()
-            self.set_status("Carregando histórico...", "blue")
-            self.log("=" * 72)
-            self.log("CARREGAMENTO DE HISTÓRICO")
+            self.root.after(0, self._iniciar_progresso)
+            self.set_status_async("Carregando histórico...", "blue")
+            self.log_async("=" * 72)
+            self.log_async("CARREGAMENTO DE HISTÓRICO")
             limite = self.calcular_limite_turbo() if self.modo_turbo.get() else None
             self.concursos, self.df_csv, self.total_concursos_csv = carregar_concursos_do_csv(self.caminho_csv.get().strip(), limite=limite)
-            self.log(f"CSV carregado: {self.caminho_csv.get().strip()}")
-            self.log(f"Base completa no disco: {self.total_concursos_csv} concursos")
+            self.log_async(f"CSV carregado: {self.caminho_csv.get().strip()}")
+            self.log_async(f"Base completa no disco: {self.total_concursos_csv} concursos")
             if self.modo_turbo.get():
-                self.log(f"Modo turbo ativo: memória carregada com os últimos {len(self.concursos)} concursos")
-                self.log(f"Janela atual de análise: últimos {min(int(self.janela_hist.get()), len(self.concursos))} concursos")
+                self.log_async(f"Modo turbo ativo: memória carregada com os últimos {len(self.concursos)} concursos")
+                self.log_async(f"Janela atual de análise: últimos {min(int(self.janela_hist.get()), len(self.concursos))} concursos")
             else:
-                self.log(f"Concursos válidos em memória: {len(self.concursos)}")
-            self.log(f"Primeiro concurso: {formatar_jogo(self.concursos[0])}")
-            self.log(f"Último concurso:   {formatar_jogo(self.concursos[-1])}")
+                self.log_async(f"Concursos válidos em memória: {len(self.concursos)}")
+            self.log_async(f"Primeiro concurso: {formatar_jogo(self.concursos[0])}")
+            self.log_async(f"Último concurso:   {formatar_jogo(self.concursos[-1])}")
             self.avaliar_ultimo_sorteio_automatico()
             self.iniciar_aprendizado_automatico_pos_carga()
-            self._parar_progresso()
-            self._atualizar_painel_info()
-            self.set_status("Histórico carregado com sucesso.", "green")
+            self.root.after(0, self._parar_progresso)
+            self.root.after(0, self._atualizar_painel_info)
+            self.set_status_async("Histórico carregado com sucesso.", "green")
         except Exception as e:
-            self._parar_progresso()
-            self.set_status("Erro ao carregar histórico.", "red")
-            self.log("❌ Erro ao carregar histórico:")
-            self.log(str(e))
-            self.log(traceback.format_exc())
+            self.root.after(0, self._parar_progresso)
+            self.set_status_async("Erro ao carregar histórico.", "red")
+            self.log_async("❌ Erro ao carregar histórico:")
+            self.log_async(str(e))
+            self.log_async(traceback.format_exc())
 
-
-    def iniciar_autoajuste(self) -> None:
-        """Lança autoajuste em thread para não travar a UI."""
-        if getattr(self, "_autoajuste_ativo", False):
-            self.log("⚠️ Auto Ajuste já em andamento.")
-            return
-        self._autoajuste_ativo = True
-        self.set_status("Calculando configuração ideal...", "blue")
-        threading.Thread(target=self._executar_autoajuste, daemon=True).start()
-
-    def _executar_autoajuste(self) -> None:
-        """Executa cálculo de configuração assistida em thread separada."""
-        try:
-            self.aplicar_autoajuste_configuracao()
-        finally:
-            self._autoajuste_ativo = False
-
-    def aplicar_autoajuste_configuracao(self) -> None:
-        """Aplica uma configuração recomendada para reduzir tentativa manual."""
-        try:
-            if not self.concursos:
-                try:
-                    limite = self.calcular_limite_turbo() if self.modo_turbo.get() else None
-                    self.concursos, self.df_csv, self.total_concursos_csv = carregar_concursos_do_csv(
-                        self.caminho_csv.get().strip(), limite=limite
-                    )
-                except Exception:
-                    # Ainda permite sugerir usando os valores atuais.
-                    pass
-            cfg = calcular_configuracao_assistida(
-                self.concursos,
-                qtd_jogos=int(self.qtd_jogos.get()),
-                janela_atual=int(self.janela_hist.get()),
-                geracoes_atual=int(self.geracoes.get()),
-                pop_atual=int(self.pop_size.get()),
-            )
-            self.qtd_jogos.set(cfg["qtd_jogos"])
-            self.janela_hist.set(cfg["janela"])
-            # Gerações/população NÃO são mais tocadas aqui (2026-07-17): ficam
-            # fixas em 35/27, Mapa G x P provou que ajustar esses dois não
-            # muda o resultado.
-            self.passos_backtest.set(cfg["passos_backtest"])
-            if "modo_turbo" in cfg:  # FIX: chave opcional — assistente respeita escolha do usuário
-                self.modo_turbo.set(bool(cfg["modo_turbo"]))
-            # TRAVA V11: o Auto Ajuste pode recomendar parâmetros, mas NÃO liga
-            # o Laboratório Inteligente automaticamente. O laboratório agora só roda
-            # quando o botão "🔬 Laboratório" for clicado manualmente.
-            self.modo_laboratorio.set(False)
-            cfg["usar_laboratorio"] = False
-            self.log("=" * 72)
-            self.log(explicar_configuracao_assistida(cfg))
-            self.set_status("Auto Ajuste aplicado.", "green")
-            return cfg
-        except Exception as e:
-            self.set_status("Erro no Auto Ajuste.", "red")
-            self.log(f"❌ Erro ao aplicar Auto Ajuste: {e}")
-            return None
 
     def iniciar_gerar_jogos(self) -> None:
         """Lança gerar_jogos em thread separada para não travar a UI."""
@@ -1215,24 +1287,6 @@ class RoboLotofacilUltraApp:
                 limite = self.calcular_limite_turbo() if self.modo_turbo.get() else None
                 self.concursos, self.df_csv, self.total_concursos_csv = carregar_concursos_do_csv(self.caminho_csv.get().strip(), limite=limite)
 
-            if self.assistente_config_auto.get():
-                cfg_auto = calcular_configuracao_assistida(
-                    self.concursos,
-                    qtd_jogos=int(self.qtd_jogos.get()),
-                    janela_atual=int(self.janela_hist.get()),
-                    geracoes_atual=int(self.geracoes.get()),
-                    pop_atual=int(self.pop_size.get()),
-                )
-                self.qtd_jogos.set(cfg_auto["qtd_jogos"])
-                self.janela_hist.set(cfg_auto["janela"])
-                self.passos_backtest.set(cfg_auto["passos_backtest"])
-                # Gerações/população NÃO são mais tocadas aqui (2026-07-17):
-                # ficam fixas em 35/27 (ver self.geracoes/self.pop_size),
-                # Mapa G x P provou que ajustar esses dois não muda o resultado.
-                # modo_turbo NAO e tocado aqui — respeita a escolha manual do usuario.
-                # O assistente nao tem autoridade para reativar o Turbo.
-                self.modo_laboratorio.set(False)
-
             # Atualiza TAMANHO_JOGO globalmente conforme campo da UI (15–18)
             _config_module.TAMANHO_JOGO = min(max(15, int(self.tamanho_jogo.get())), 18)
 
@@ -1245,13 +1299,7 @@ class RoboLotofacilUltraApp:
             self._atualizar_progresso(5, "Analisando histórico...")
             self.log("=" * 72)
             self.log("GERAÇÃO DE JOGOS")
-            # Aplica seed conforme configuracao do usuario
-            if self.usar_seed_fixo.get():
-                seed_global(int(self.seed_valor.get()))
-                self.log(f"Seed fixo ativado: {self.seed_valor.get()} (resultados reproduziveis)")
-            else:
-                seed_global(None)
-                self.log("Seed aleatorio (resultados diferentes a cada execucao)")
+            self._aplicar_seed_configurada()
             aprendizado_previo = calcular_bonus_aprendizado()
             self.log("Memória IA: " + aprendizado_previo.get("resumo", "Sem registros anteriores."))
             base_total = getattr(self, "total_concursos_csv", len(self.concursos))
@@ -1259,8 +1307,6 @@ class RoboLotofacilUltraApp:
             self.log(f"Concursos carregados em memória: {len(self.concursos)}")
             self.log(f"Analisando apenas os últimos: {janela} concursos")
             self.log(f"Jogos={qtd} | Gerações={ger} | População={pop}")
-            if self.assistente_config_auto.get():
-                self.log("🧭 Assistente Auto Config ativo: parâmetros ajustados automaticamente, sem ativar Laboratório Inteligente.")
 
             # V21.6 — injeta peso_impopularidade na estratégia via override
             peso_imp_ui = round(self.peso_impopularidade.get() / 100.0, 2)
@@ -1271,26 +1317,14 @@ class RoboLotofacilUltraApp:
                 self.log("📊 Impopularidade desligada (slider em 0%).")
 
             self._atualizar_progresso(30, "Rodando ensemble multi-IA...")
-            executar_lab_manual = bool(getattr(self, "executar_laboratorio_manual", False))
-            if executar_lab_manual:
-                self.log("Modo Laboratório Inteligente ATIVADO MANUALMENTE pelo botão 🔬 Laboratório.")
-                self.jogos_gerados, self.analise, self.pesos = gerar_apostas_laboratorio_inteligente(
-                    self.concursos,
-                    qtd_jogos=qtd,
-                    janela_analise=janela,
-                    geracoes_max=ger,
-                    pop_size_max=pop,
-                    status_cb=self.log,
-                )
-            else:
-                self.jogos_gerados, self.analise, self.pesos = gerar_apostas(
-                    self.concursos,
-                    qtd_jogos=qtd,
-                    janela_analise=janela,
-                    geracoes=ger,
-                    pop_size=pop,
-                    estrategia_override=_override_imp,
-                )
+            self.jogos_gerados, self.analise, self.pesos = gerar_apostas(
+                self.concursos,
+                qtd_jogos=qtd,
+                janela_analise=janela,
+                geracoes=ger,
+                pop_size=pop,
+                estrategia_override=_override_imp,
+            )
 
             self._atualizar_progresso(70, "Selecionando pacote final...")
             self.info_backtest = None
@@ -1368,7 +1402,6 @@ class RoboLotofacilUltraApp:
                     f"Pares={row['Pares']} | Ímpares={row['Ímpares']} | "
                     f"Soma={row['Soma']} | Perfil={row.get('Perfil', '')} | Score={row['Score']}"
                 )
-            self.salvar_ultimos_jogos_gerados()
             self._atualizar_progresso(100, "Concluído!")
             self.root.after(0, self._parar_progresso)
             self.root.after(0, self._atualizar_tabela_jogos)
@@ -1396,27 +1429,71 @@ class RoboLotofacilUltraApp:
             messagebox.showwarning("Fechamento", "Carregue o histórico (📂 Carregar) antes de gerar o fechamento.")
             return
 
+        # Tamanho de cada jogo do fechamento (15-18, campo "Dezenas por jogo"
+        # da tela) -- até 2026-08-03 esse campo era lido só por "Gerar Jogos"
+        # e nunca chegava até o Fechamento, que sempre usava 15 dezenas por
+        # jogo mesmo com o campo em 16/17/18 (achado de usuário, ver
+        # ARQUITETURA.md).
+        tamanho_jogo = min(max(15, int(self.tamanho_jogo.get())), 18)
+        _config_module.TAMANHO_JOGO = tamanho_jogo
+
+        reduzido = bool(self.fechamento_reduzido_ativo.get())
+        maximo_pool = TAMANHO_POOL_MAXIMO_REDUZIDO if reduzido else TAMANHO_POOL_MAXIMO
+        minimo_pool = tamanho_pool_minimo(tamanho_jogo)
+
         try:
             tamanho_pool = int(self.tamanho_pool_fechamento.get())
         except Exception:
-            tamanho_pool = TAMANHO_POOL_MINIMO
-        if not (TAMANHO_POOL_MINIMO <= tamanho_pool <= TAMANHO_POOL_MAXIMO):
+            tamanho_pool = minimo_pool
+        if not (minimo_pool <= tamanho_pool <= maximo_pool):
             messagebox.showerror(
                 "Fechamento",
-                f"Pool Fecht. precisa estar entre {TAMANHO_POOL_MINIMO} e {TAMANHO_POOL_MAXIMO} "
-                f"(recebido: {tamanho_pool})."
+                f"Pool Fecht. precisa estar entre {minimo_pool} e {maximo_pool} "
+                f"para jogos de {tamanho_jogo} dezenas"
+                f"{' (fechamento reduzido)' if reduzido else ''} (recebido: {tamanho_pool})."
             )
             return
 
-        qtd = qtd_jogos_fechamento(tamanho_pool)
-        if tamanho_pool > TAMANHO_POOL_MINIMO:
-            # Pools acima de 16 geram muitos jogos (136 a 15.504) — confirma
-            # antes de gerar/exibir, já que cada jogo tem custo real se apostado.
+        if reduzido:
+            try:
+                t_garantia = int(self.fechamento_t_garantia.get())
+                g_garantia = int(self.fechamento_g_garantia.get())
+            except Exception:
+                messagebox.showerror("Fechamento Reduzido", "Valores de t/g inválidos.")
+                return
+            if not (1 <= t_garantia <= tamanho_pool):
+                messagebox.showerror("Fechamento Reduzido", f"t (garantia) precisa estar entre 1 e {tamanho_pool} (recebido: {t_garantia}).")
+                return
+            if not (1 <= g_garantia <= min(t_garantia, tamanho_jogo)):
+                messagebox.showerror(
+                    "Fechamento Reduzido",
+                    f"g (garantia) precisa estar entre 1 e min(t, dezenas por jogo)="
+                    f"{min(t_garantia, tamanho_jogo)} (recebido: {g_garantia})."
+                )
+                return
+
+            self._fechamento_ativo = True
+            self.set_status("Gerando fechamento reduzido...", "blue")
+            self.log("=" * 72)
+            self.log(f"🔒 FECHAMENTO REDUZIDO — pool={tamanho_pool}/jogo={tamanho_jogo}/t={t_garantia}/g={g_garantia}")
+            self.log("(a construção + verificação exaustiva da garantia pode levar alguns segundos)")
+            th = threading.Thread(
+                target=self._executar_fechamento,
+                args=(tamanho_pool, tamanho_jogo, True, t_garantia, g_garantia),
+                daemon=True,
+            )
+            th.start()
+            return
+
+        qtd = qtd_jogos_fechamento(tamanho_pool, tamanho_jogo)
+        if tamanho_pool > minimo_pool:
+            # Pools acima do mínimo geram muitos jogos — confirma antes de
+            # gerar/exibir, já que cada jogo tem custo real se apostado.
             confirmado = messagebox.askyesno(
                 "Fechamento — confirmar quantidade de jogos",
-                f"Pool de {tamanho_pool} dezenas gera {qtd:,} jogos "
-                f"(garantia mínima de {garantia_minima(tamanho_pool)} pontos SE as 15 dezenas "
-                f"sorteadas estiverem todas dentro do pool escolhido).\n\n"
+                f"Pool de {tamanho_pool} dezenas, jogos de {tamanho_jogo} dezenas cada, "
+                f"gera {qtd:,} jogos (garantia mínima de {garantia_minima(tamanho_pool, tamanho_jogo)} "
+                f"pontos SE as 15 dezenas sorteadas estiverem todas dentro do pool escolhido).\n\n"
                 f"Isso é MUITO mais que os 20 jogos do seu uso normal. Deseja continuar?"
             )
             if not confirmado:
@@ -1427,16 +1504,27 @@ class RoboLotofacilUltraApp:
         self.set_status("Gerando fechamento combinatório...", "blue")
         self.log("=" * 72)
         self.log("🔒 FECHAMENTO COMBINATÓRIO — GARANTIA TOTAL")
-        th = threading.Thread(target=self._executar_fechamento, args=(tamanho_pool,), daemon=True)
+        th = threading.Thread(target=self._executar_fechamento, args=(tamanho_pool, tamanho_jogo), daemon=True)
         th.start()
 
-    def _executar_fechamento(self, tamanho_pool: int) -> None:
+    def _executar_fechamento(
+        self, tamanho_pool: int, tamanho_jogo: int = 15,
+        reduzido: bool = False, t_garantia: int | None = None, g_garantia: int | None = None,
+    ) -> None:
         try:
             janela = min(max(MIN_HIST, int(self.janela_hist.get())), len(self.concursos))
             self.root.after(0, self._iniciar_progresso)
             self._atualizar_progresso(20, "Escolhendo pool pelo ranking do ensemble...")
 
-            resultado = gerar_apostas_fechamento(self.concursos, tamanho_pool=tamanho_pool, janela_analise=janela)
+            if reduzido:
+                resultado = gerar_apostas_fechamento_reduzido(
+                    self.concursos, tamanho_pool=tamanho_pool, janela_analise=janela,
+                    tamanho_jogo=tamanho_jogo, t_garantia=t_garantia, g_garantia=g_garantia,
+                )
+            else:
+                resultado = gerar_apostas_fechamento(
+                    self.concursos, tamanho_pool=tamanho_pool, janela_analise=janela, tamanho_jogo=tamanho_jogo
+                )
 
             self._atualizar_progresso(80, "Montando jogos do fechamento...")
             self.jogos_gerados = resultado["jogos"]
@@ -1445,13 +1533,25 @@ class RoboLotofacilUltraApp:
             self.info_backtest = None
 
             self.log(f"Pool escolhido ({tamanho_pool} dezenas): {' '.join(f'{n:02d}' for n in resultado['pool'])}")
-            self.log(f"Jogos no fechamento: {resultado['qtd_jogos']:,}")
-            self.log(f"Garantia mínima SE as 15 sorteadas estiverem no pool: {resultado['garantia_minima']} pontos")
-            self.log(
-                "⚠️ A garantia é condicional: escolher quais dezenas entram no pool continua sendo uma "
-                "aposta. O fechamento redistribui o resultado entre vários jogos, não muda a chance de "
-                "acertar quais dezenas saem — ver VALIDACAO_ESCALA_REAL_2026-07-14.md."
-            )
+            self.log(f"Jogos no fechamento: {resultado['qtd_jogos']:,} (cada um com {tamanho_jogo} dezenas)")
+            if reduzido:
+                self.log(
+                    f"Garantia (verificada por força bruta): SE pelo menos {resultado['t_garantia']} das "
+                    f"dezenas sorteadas estiverem no pool, pelo menos UM jogo do fechamento acerta pelo "
+                    f"menos {resultado['g_garantia']} delas."
+                )
+                self.log(
+                    "⚠️ Garantia mais fraca que a do fechamento de garantia total: vale pra PELO MENOS UM "
+                    "jogo (não todos), e é condicionada a t dezenas no pool (não as 15 todas). Escolher "
+                    "quais dezenas entram no pool continua sendo uma aposta — ver docstring de fechamento.py."
+                )
+            else:
+                self.log(f"Garantia mínima SE as 15 sorteadas estiverem no pool: {resultado['garantia_minima']} pontos")
+                self.log(
+                    "⚠️ A garantia é condicional: escolher quais dezenas entram no pool continua sendo uma "
+                    "aposta. O fechamento redistribui o resultado entre vários jogos, não muda a chance de "
+                    "acertar quais dezenas saem — ver VALIDACAO_ESCALA_REAL_2026-07-14.md."
+                )
             self.log("-" * 72)
             limite_exibicao = 30
             for idx, jogo in enumerate(resultado["jogos"][:limite_exibicao], start=1):
@@ -1459,7 +1559,6 @@ class RoboLotofacilUltraApp:
             if resultado["qtd_jogos"] > limite_exibicao:
                 self.log(f"... e mais {resultado['qtd_jogos'] - limite_exibicao} jogos (todos em self.jogos_gerados / tabela de jogos).")
 
-            self.salvar_ultimos_jogos_gerados()
             self._atualizar_progresso(100, "Concluído!")
             self.root.after(0, self._parar_progresso)
             self.root.after(0, self._atualizar_tabela_jogos)
@@ -1515,18 +1614,6 @@ class RoboLotofacilUltraApp:
             self.log(traceback.format_exc())
             messagebox.showerror("Erro no simulador", str(e))
 
-    def gerar_jogos_laboratorio(self) -> None:
-        """Atalho manual: roda o Laboratório Inteligente somente quando este botão for clicado."""
-        try:
-            self.executar_laboratorio_manual = True
-            self.modo_laboratorio.set(True)
-            self.gerar_jogos()
-        finally:
-            # TRAVA V11: depois da execução manual, volta ao modo normal para que
-            # o botão "🎲 Gerar Jogos" não rode laboratório na próxima geração.
-            self.executar_laboratorio_manual = False
-            self.modo_laboratorio.set(False)
-
     def gerar_jogos_dual_perfil(self) -> None:
         """
         V21.5-FULL — Geração Dual-Perfil.
@@ -1552,22 +1639,26 @@ class RoboLotofacilUltraApp:
 
             qtd    = min(max(1, int(self.qtd_jogos.get())), 100)
             janela = min(max(MIN_HIST, int(self.janela_hist.get())), len(self.concursos))
-            # Item 4: lê G e P configurados pelo usuário (vencedor do Lab Histórico)
-            # em vez de usar valores fixos, para que o Dual-Perfil honre a calibração.
+            # Item 4: lê G e P (self.geracoes/self.pop_size, fixos em 100/77) em
+            # vez de valores hardcoded, para que o Dual-Perfil honre a configuração validada.
             ger_ui = max(5,  int(self.geracoes.get()))
             pop_ui = max(20, int(self.pop_size.get()))
 
             # V21.6 — impopularidade também no Dual-Perfil
             peso_imp_ui = round(self.peso_impopularidade.get() / 100.0, 2)
+            _override_imp = {"peso_impopularidade": peso_imp_ui}
 
             self.root.after(0, self._iniciar_progresso)
             self.log("=" * 72)
             self.log("🎯 GERAÇÃO DUAL-PERFIL V21.5-FULL")
+            self._aplicar_seed_configurada()
             self.log(f"Total de jogos: {qtd} | Janela: {janela}")
             self.log(f"Perfil Consistência: {round(qtd * 0.70)} jogos — G={ger_ui} P={pop_ui} · otimizado para 11+/12+")
             self.log(f"Perfil Exploração:   {round(qtd * 0.30)} jogos — G=40 P=40 · Pares/Trios+Cobertura → 13+")
             if peso_imp_ui > 0:
                 self.log(f"📊 Impopularidade: {self.peso_impopularidade.get()}% ativo em ambos os perfis.")
+            else:
+                self.log("📊 Impopularidade desligada (slider em 0%).")
             self.log("-" * 72)
 
             self._atualizar_progresso(15, "Gerando perfil consistência...")
@@ -1580,7 +1671,7 @@ class RoboLotofacilUltraApp:
                 pop_consistencia=pop_ui,
                 fracao_exploracao=0.30,
                 status_cb=self.log,
-                estrategia_override={"peso_impopularidade": peso_imp_ui} if peso_imp_ui > 0 else None,
+                estrategia_override=_override_imp,
             )
 
             self._atualizar_progresso(80, "Finalizando pacote dual...")
@@ -1608,6 +1699,7 @@ class RoboLotofacilUltraApp:
 
             self._atualizar_progresso(95, "Exibindo jogos...")
             self.root.after(0, self._atualizar_tabela_jogos)
+            self.root.after(0, self._atualizar_painel_info)
             self._atualizar_progresso(100, "✅ Dual-Perfil concluído.")
             self.log("✅ Pacote Dual-Perfil gerado com sucesso.")
             self.set_status("✅ Dual-Perfil concluído.", "green")
@@ -1657,6 +1749,7 @@ class RoboLotofacilUltraApp:
             pop = max(20, int(self.pop_size.get()))
 
             self.root.after(0, self._iniciar_progresso)
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Configuração calibração: passos={passos} | janela={janela} | jogos={qtd} | G={ger} | P={pop}")
             resultado = calibrar_robo_vs_aleatorio(
                 self.concursos,
@@ -1703,104 +1796,17 @@ class RoboLotofacilUltraApp:
             except Exception:
                 pass
 
-    def iniciar_laboratorio_historico(self) -> None:
-        """Testa as configuracoes do laboratorio no historico e compara com aleatorio."""
-        try:
-            if getattr(self, "laboratorio_historico_ativo", False):
-                self.log("⚠️ O Laboratório Histórico já está em execução.")
-                self.set_status("Laboratório Histórico já em execução.", "blue")
-                return
-            self.laboratorio_historico_ativo = True
-            self.set_status("Iniciando Laboratório Histórico...", "blue")
-            self.log("=" * 72)
-            self.log("LABORATÓRIO HISTÓRICO VS ALEATÓRIO INICIADO")
-            self.log("As configurações do laboratório serão testadas contra concursos passados e baseline aleatório.")
-            th = threading.Thread(target=self.executar_laboratorio_historico, daemon=True)
-            self.thread_laboratorio_historico = th
-            th.start()
-        except Exception as e:
-            self.laboratorio_historico_ativo = False
-            self.set_status("Erro ao iniciar Laboratório Histórico.", "red")
-            self.log(f"❌ Erro ao iniciar Laboratório Histórico: {e}")
-
-    def executar_laboratorio_historico(self) -> None:
-        try:
-            # FIX V11: Laboratório Histórico depende dos passos; recarrega a base
-            # para não herdar um histórico curto de uma execução anterior.
-            limite = self.calcular_limite_turbo() if self.modo_turbo.get() else None
-            self.concursos, self.df_csv, self.total_concursos_csv = carregar_concursos_do_csv(
-                self.caminho_csv.get().strip(), limite=limite
-            )
-
-            janela = int(self.janela_hist.get())
-            passos = int(self.passos_backtest.get())
-            qtd = min(max(5, int(self.qtd_jogos.get())), 100)
-            ger = max(5, int(self.geracoes.get()))
-            pop = max(20, int(self.pop_size.get()))
-
-            self.root.after(0, self._iniciar_progresso)
-            self.log_async(f"Configuração Lab Histórico: passos={passos} | janela={janela} | jogos={qtd} | Gmax={ger} | Pmax={pop}")
-            resultado = calibrar_laboratorio_historico_vs_aleatorio(
-                self.concursos,
-                janela=janela,
-                qtd_jogos=qtd,
-                passos=passos,
-                geracoes_max=ger,
-                pop_size_max=pop,
-                status_cb=self.log_async,
-            )
-            self.info_laboratorio_historico = resultado
-            ranking = resultado.get("ranking", [])
-            vencedor = ranking[0] if ranking else {}
-
-            self.log_async("✅ Laboratório Histórico concluído.")
-            if vencedor:
-                self.log_async(
-                    f"Vencedor: {vencedor.get('nome', '')} | G={vencedor.get('geracoes', 0)} | "
-                    f"P={vencedor.get('pop_size', 0)} | score={vencedor.get('score_ranking', 0)}"
-                )
-                self.log_async(
-                    f"11+={vencedor.get('pct_pacotes_11_mais', 0)}% | "
-                    f"12+={vencedor.get('pct_pacotes_12_mais', 0)}% | "
-                    f"13+={vencedor.get('pct_pacotes_13_mais', 0)}% | "
-                    f"vantagem score={vencedor.get('vantagem_media_score', 0)}"
-                )
-            self.log_async("Ranking resumido:")
-            for pos, item in enumerate(ranking[:5], start=1):
-                self.log_async(
-                    f"#{pos} {item.get('nome', '')}: score={item.get('score_ranking', 0)} | "
-                    f"11+={item.get('pct_pacotes_11_mais', 0)}% | "
-                    f"12+={item.get('pct_pacotes_12_mais', 0)}% | "
-                    f"G={item.get('geracoes', 0)} | P={item.get('pop_size', 0)}"
-                )
-            self.log_async(f"Relatório TXT salvo em: {resultado.get('arquivo_txt', '')}")
-            if resultado.get("arquivo_csv"):
-                self.log_async(f"Planilha CSV salva em: {resultado.get('arquivo_csv')}")
-            self.set_status_async("Laboratório Histórico concluído com sucesso.", "green")
-        except Exception as e:
-            self.set_status_async("Erro no Laboratório Histórico.", "red")
-            self.log_async("❌ Erro no Laboratório Histórico:")
-            self.log_async(str(e))
-            self.log_async(traceback.format_exc())
-        finally:
-            self.laboratorio_historico_ativo = False
-            try:
-                self.root.after(0, self._parar_progresso)
-            except Exception:
-                pass
-
-
     def iniciar_backtest_cientifico_v11(self) -> None:
         """Executa a camada científica V11 em thread para não travar a interface."""
         try:
             if getattr(self, "backtest_cientifico_ativo", False):
-                self.log("⚠️ O Backtest Científico V11 já está em execução.")
+                self.log("⚠️ O Backtest Científico já está em execução.")
                 self.set_status("Backtest Científico já em execução.", "blue")
                 return
             self.backtest_cientifico_ativo = True
-            self.set_status("Iniciando Backtest Científico V11...", "blue")
+            self.set_status("Iniciando Backtest Científico...", "blue")
             self.log("=" * 72)
-            self.log("🧪 BACKTEST CIENTÍFICO V11 INICIADO")
+            self.log("🧪 BACKTEST CIENTÍFICO INICIADO")
             self.log("Inclui: backtest massivo, competição de modelos, autocalibração e banco de conhecimento.")
             th = threading.Thread(target=self.executar_backtest_cientifico_v11, daemon=True)
             self.thread_backtest_cientifico = th
@@ -1829,6 +1835,7 @@ class RoboLotofacilUltraApp:
             ger = max(10, int(self.geracoes.get()))
             pop = max(30, int(self.pop_size.get()))
             self.root.after(0, self._iniciar_progresso)
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Configuração Científica: passos={passos} | janela={janela} | jogos={qtd} | G={ger} | P={pop}")
             resultado = executar_backtest_cientifico_massivo(
                 self.concursos,
@@ -1841,16 +1848,16 @@ class RoboLotofacilUltraApp:
             )
             self.info_backtest_cientifico = resultado
             rec = resultado.get("recomendacao") or {}
-            self.log_async("✅ Backtest Científico V11 concluído.")
+            self.log_async("✅ Backtest Científico concluído.")
             self.log_async(f"Configuração campeã: {rec.get('estrategia_base')} | G={rec.get('geracoes')} | P={rec.get('pop_size')}")
             self.log_async(f"Modelo campeão: {rec.get('modelo_campeao')}")
             self.log_async(f"Relatório TXT salvo em: {resultado.get('arquivo_relatorio', '')}")
             self.log_async(f"Conhecimento salvo em: {resultado.get('arquivo_conhecimento', '')}")
-            self.set_status_async("Backtest Científico V11 concluído.", "green")
+            self.set_status_async("Backtest Científico concluído.", "green")
             try:
                 messagebox.showinfo(
-                    "Backtest Científico V11",
-                    "Backtest Científico V11 concluído!\n\n"
+                    "Backtest Científico",
+                    "Backtest Científico concluído!\n\n"
                     f"Configuração campeã: {rec.get('estrategia_base')}\n"
                     f"G={rec.get('geracoes')} | P={rec.get('pop_size')}\n\n"
                     f"Relatório:\n{resultado.get('arquivo_relatorio', '')}"
@@ -1858,8 +1865,8 @@ class RoboLotofacilUltraApp:
             except Exception:
                 pass
         except Exception as e:
-            self.set_status_async("Erro no Backtest Científico V11.", "red")
-            self.log_async("❌ Erro no Backtest Científico V11:")
+            self.set_status_async("Erro no Backtest Científico.", "red")
+            self.log_async("❌ Erro no Backtest Científico:")
             self.log_async(str(e))
             self.log_async(traceback.format_exc())
         finally:
@@ -1870,7 +1877,7 @@ class RoboLotofacilUltraApp:
                 pass
 
     def iniciar_auto_diagnostico(self) -> None:
-        """Roda calibracao, laboratorio historico e comparador em sequencia."""
+        """Roda calibracao e comparador em sequencia."""
         try:
             if getattr(self, "auto_diagnostico_ativo", False):
                 self.log("⚠️ O Auto Diagnóstico já está em execução.")
@@ -1880,7 +1887,7 @@ class RoboLotofacilUltraApp:
             self.set_status("Iniciando Auto Diagnóstico...", "blue")
             self.log("=" * 72)
             self.log("AUTO DIAGNÓSTICO INICIADO")
-            self.log("Será executado: Calibrar IA, Lab Histórico e Comparador de Estratégias.")
+            self.log("Será executado: Calibrar IA e Comparador de Estratégias.")
             th = threading.Thread(target=self.executar_auto_diagnostico, daemon=True)
             self.thread_auto_diagnostico = th
             th.start()
@@ -1904,6 +1911,7 @@ class RoboLotofacilUltraApp:
             pop = max(20, int(self.pop_size.get()))
 
             self.root.after(0, self._iniciar_progresso)
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Configuração Auto Diagnóstico: passos={passos} | janela={janela} | jogos={qtd} | G={ger} | P={pop}")
             resultado = executar_auto_diagnostico_lotofacil(
                 self.concursos,
@@ -1917,10 +1925,8 @@ class RoboLotofacilUltraApp:
             self.info_auto_diagnostico = resultado
 
             calibracao = resultado.get("calibracao") or {}
-            lab = resultado.get("laboratorio_historico") or {}
             comparador = resultado.get("comparador") or []
             robo = calibracao.get("resumo_robo", {})
-            vencedor_lab = (lab.get("ranking") or [{}])[0]
             vencedor_comp = comparador[0] if comparador else {}
 
             self.log_async("✅ Auto Diagnóstico concluído.")
@@ -1928,12 +1934,6 @@ class RoboLotofacilUltraApp:
                 f"Calibração: robô pacotes 11+={robo.get('pct_pacotes_11_mais', 0)}% | "
                 f"12+={robo.get('pct_pacotes_12_mais', 0)}% | vantagem score={calibracao.get('vantagem_media_score', 0)}"
             )
-            if vencedor_lab:
-                self.log_async(
-                    f"Lab Histórico recomendado: {vencedor_lab.get('nome', '')} | "
-                    f"G={vencedor_lab.get('geracoes', 0)} | P={vencedor_lab.get('pop_size', 0)} | "
-                    f"score={vencedor_lab.get('score_ranking', 0)}"
-                )
             if vencedor_comp:
                 self.log_async(
                     f"Comparador vencedor: {vencedor_comp.get('nome', '')} | "
@@ -2001,6 +2001,7 @@ class RoboLotofacilUltraApp:
             qtd = min(max(5, int(self.qtd_jogos.get())), 100)
             ger = max(5, int(self.geracoes.get()))
             pop = max(20, int(self.pop_size.get()))
+            self._aplicar_seed_configurada(log_async=True)
 
             janela_maxima_segura = max(MIN_HIST, total - 5)
             janela = min(max(MIN_HIST, janela_digitada), janela_maxima_segura)
@@ -2014,6 +2015,13 @@ class RoboLotofacilUltraApp:
             medias = []
             linhas_txt = []
             linhas_csv = []
+            # V21.5-FULL/V20.2 (2026-07-23): BT Automático nunca alimentava a
+            # poda inteligente/ELO, diferente de "📊 Backtest" que faz o
+            # mesmo tipo de trabalho (gera jogos a partir de histórico
+            # passado e confere contra o resultado real seguinte) — ver
+            # ARQUITETURA.md. `registros_poda` acumula os acertos por modelo
+            # de cada passo pra alimentar alimentar_poda_e_elo() no final.
+            registros_poda = []
 
             base_total = getattr(self, "total_concursos_csv", total)
             linhas_txt.append("===== BACKTEST AUTOMÁTICO LOTOFÁCIL =====")
@@ -2025,6 +2033,7 @@ class RoboLotofacilUltraApp:
             linhas_txt.append(f"Jogos por concurso: {qtd}")
             linhas_txt.append(f"Gerações: {ger}")
             linhas_txt.append(f"População: {pop}")
+            linhas_txt.append(f"Seed: {'fixa (' + str(_config_module.SEED) + ')' if _config_module.SEED is not None else 'aleatória'}")
             linhas_txt.append("")
 
             self.log_async(f"Configuração: testes={total_testes} | janela={janela} | jogos={qtd} | G={ger} | P={pop}")
@@ -2056,6 +2065,23 @@ class RoboLotofacilUltraApp:
                     if a >= 11:
                         resumo[a] += 1
 
+                # Mesmo cálculo de acertos por modelo que backtest_basico usa
+                # (ver alimentar_poda_e_elo em backtest.py).
+                acertos_modelo: dict[str, float] = {}
+                try:
+                    modelos_scores = ((analise or {}).get("ensemble") or {}).get("modelos") or {}
+                    for nome, scores_dez in modelos_scores.items():
+                        if not scores_dez:
+                            continue
+                        top15 = sorted(scores_dez, key=lambda n: scores_dez[n], reverse=True)[:15]
+                        acertos_modelo[nome] = float(intersecao(top15, resultado_real))
+                except Exception:
+                    pass
+                registros_poda.append({
+                    "concurso_idx": concurso_id,
+                    "acertos_modelo": acertos_modelo,
+                })
+
                 linhas_txt.append("-" * 72)
                 linhas_txt.append(f"Concurso real: {concurso_id} | Teste {pos}/{total_testes}")
                 linhas_txt.append(f"Resultado real: {formatar_jogo(resultado_real)}")
@@ -2078,6 +2104,12 @@ class RoboLotofacilUltraApp:
                         f"Backtest Automático {pos}/{total_testes} | melhor passo={melhor} | "
                         f"melhor geral={max(melhores)} | média geral={sum(medias)/max(1, len(medias)):.2f}"
                     )
+
+            _poda_resultado_auto, _erro_elo_auto = alimentar_poda_e_elo(registros_poda)
+            if _erro_elo_auto:
+                self.log_async(f"⚠️ ELO/4-fases não pôde ser atualizado: {_erro_elo_auto}")
+            else:
+                self.log_async("🔪 Poda inteligente e ELO/4-fases atualizados com este Backtest Automático.")
 
             garantir_estrutura_pastas()
             timestamp = gerar_timestamp_arquivo()
@@ -2180,6 +2212,8 @@ class RoboLotofacilUltraApp:
             janela_digitada = int(self.janela_hist.get())
             passos_digitados = int(self.passos_backtest.get())
             qtd = min(max(5, int(self.qtd_jogos.get())), 30)
+            ger = max(5, int(self.geracoes.get()))
+            pop = max(20, int(self.pop_size.get()))
 
             # Correção principal: a janela não pode consumir todo o histórico.
             janela_maxima_segura = max(MIN_HIST, total - 5)
@@ -2191,6 +2225,7 @@ class RoboLotofacilUltraApp:
             self.set_status("Rodando backtest...", "blue")
             self.log("=" * 72)
             self.log("BACKTEST")
+            self._aplicar_seed_configurada()
             base_total = getattr(self, "total_concursos_csv", total)
             self.log(f"Base completa no disco: {base_total} concursos")
             self.log(f"Concursos carregados em memória: {total}")
@@ -2198,7 +2233,7 @@ class RoboLotofacilUltraApp:
                 self.log(f"⚠️ Janela ajustada automaticamente de {janela_digitada} para {janela} para evitar erro de histórico insuficiente.")
             if passos != passos_digitados:
                 self.log(f"⚠️ Passos ajustados automaticamente de {passos_digitados} para {passos} conforme histórico disponível.")
-            self.log(f"Passos={passos} | Janela={janela} | Jogos por rodada={qtd}")
+            self.log(f"Passos={passos} | Janela={janela} | Jogos por rodada={qtd} | G={ger} | P={pop}")
 
             if passos >= 120:
                 self.log("Modo Ultra Massivo ativado automaticamente pelo número alto de passos.")
@@ -2211,27 +2246,24 @@ class RoboLotofacilUltraApp:
                         pass
 
                 self.info_backtest = backtest_ultra_massivo(
-                    self.concursos, janela=janela, qtd_jogos=qtd, passos=passos, status_cb=status_ultra
+                    self.concursos, janela=janela, qtd_jogos=qtd, passos=passos, status_cb=status_ultra,
+                    geracoes=ger, pop_size=pop,
                 )
                 self.log("✅ Backtest Ultra Massivo concluído.")
-                self.log(f"Configuração vencedora: {self.info_backtest.get('configuracao_vencedora', {}).get('nome', '')}")
+                self.log(f"Configuração testada: {self.info_backtest.get('configuracao_vencedora', {}).get('nome', '')}")
                 self.log(f"Média do melhor jogo: {self.info_backtest['media_melhor']}")
                 self.log(f"Melhor acerto observado: {self.info_backtest['max_melhor']}")
                 self.log(f"Distribuição dos melhores acertos: {self.info_backtest['distribuicao']}")
-                self.log("Ranking das configurações:")
-                for pos, item in enumerate(self.info_backtest.get('ranking_configuracoes', []), start=1):
-                    self.log(
-                        f"{pos}. {item.get('nome')} | score={item.get('score')} | "
-                        f"média={item.get('media_melhor')} | máx={item.get('max_melhor')} | "
-                        f"11+={item.get('taxa_11')}% | 12+={item.get('taxa_12')}% | 13+={item.get('taxa_13')}%"
-                    )
                 self.log("Campeonato entre modelos:")
                 for pos, item in enumerate(self.info_backtest.get('ranking_modelos', []), start=1):
                     self.log(f"{pos}. {item.get('modelo')} | peso médio={item.get('peso_medio')}")
                 self.log(f"Relatório salvo em: {self.info_backtest.get('arquivo_relatorio', '')}")
                 self.set_status("Backtest Ultra Massivo concluído com sucesso.", "green")
             else:
-                self.info_backtest = backtest_basico(self.concursos, janela=janela, qtd_jogos=qtd, passos=passos)
+                self.info_backtest = backtest_basico(
+                    self.concursos, janela=janela, qtd_jogos=qtd, passos=passos,
+                    geracoes=ger, pop_size=pop,
+                )
                 self.log(f"✅ Backtest concluído. Passos: {self.info_backtest['passos']}")
                 self.log(f"Média do melhor jogo: {self.info_backtest['media_melhor']}")
                 self.log(f"Melhor acerto observado: {self.info_backtest['max_melhor']}")
@@ -2321,24 +2353,50 @@ class RoboLotofacilUltraApp:
             "populacao": get_int(self.pop_size, 150),
             "passos_backtest": get_int(self.passos_backtest, 20),
             "modo_turbo": get_bool(self.modo_turbo),
-            "modo_laboratorio": get_bool(self.modo_laboratorio),
-            "assistente_auto_config": get_bool(self.assistente_config_auto),
             "seed_fixo": get_bool(self.usar_seed_fixo),
             "seed_valor": get_int(self.seed_valor, 42),
         }
 
     def salvar_ultimos_jogos_gerados(self) -> None:
-        """Salva o último pacote para avaliação automática quando sair concurso novo."""
+        """
+        Salva o pacote atual para avaliação automática quando sair concurso
+        novo e para restaurar a aba "Jogos Gerados" ao reabrir o app.
+
+        Chamada só por `salvar_txt()` desde 2026-08-01 — antes disparava
+        sozinha a cada geração (Gerar Jogos, Fechamento, Dual-Perfil,
+        Otimizador) e também ao fechar o app, então qualquer geração
+        descartável (ex.: só pra olhar o resultado no Simulador) virava "o
+        pacote atual" sem o usuário ter pedido isso (ver ARQUITETURA.md).
+        """
         try:
             if not self.jogos_gerados or self.analise is None or self.pesos is None or not self.concursos:
                 return
             garantir_estrutura_pastas()
+            _ensemble_atual = self.analise.get("ensemble", {}) or {}
             analise_min = tornar_json_seguro({
                 "estrategia": self.analise.get("estrategia", {}),
                 "ensemble": {
-                    "confianca_modelos": (self.analise.get("ensemble", {}) or {}).get("confianca_modelos", {})
+                    "confianca_modelos": _ensemble_atual.get("confianca_modelos", {}),
+                    # ranking/consenso são exigidos por registrar_desempenho_historico_robo()
+                    # (backtest.py) pra calcular top5/10/15_acertos e top_consenso — antes
+                    # ficavam de fora deste "analise_min" e qualquer "Conferir Jogos" feito
+                    # num pacote restaurado do disco (ex.: reabrir o app no dia seguinte)
+                    # registrava esses campos como vazios silenciosamente (ver 2026-07-23
+                    # no ARQUITETURA.md).
+                    "ranking": _ensemble_atual.get("ranking", []),
+                    "consenso": _ensemble_atual.get("consenso", {}),
                 },
                 "cobertura_global": self.analise.get("cobertura_global", {}),
+                # soma_media/hist_usado são exigidos por score_jogo() (genetico.py),
+                # chamado por avaliar_jogos() sempre que a aba "Jogos Gerados" é
+                # atualizada — sem eles, restaurar um pacote ao abrir o app e ter
+                # a tabela populada automaticamente (correção anterior) quebrava
+                # com KeyError: 'soma_media' assim que a tela tentava desenhar a
+                # tabela (ver 2026-07-26 no ARQUITETURA.md). hist_usado é cortado
+                # pros últimos 30 concursos — score_repeticao_recente só olha os
+                # últimos 10, e isso evita persistir a janela histórica inteira.
+                "soma_media": self.analise.get("soma_media", 195.0),
+                "hist_usado": (self.analise.get("hist_usado") or [])[-30:],
             })
             dados = tornar_json_seguro({
                 "salvo_em": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
@@ -2362,6 +2420,11 @@ class RoboLotofacilUltraApp:
                 self.jogos_gerados = dados.get("jogos", [])
                 self.analise = dados.get("analise", {})
                 self.pesos = {int(k): float(v) for k, v in (dados.get("pesos") or {}).items()}
+                # Popula a aba "Jogos Gerados" com o pacote restaurado sem
+                # trocar de aba na inicialização (5ª instância do mesmo bug
+                # já corrigido em outros 4 handlers — ver 2026-07-23 no
+                # ARQUITETURA.md).
+                self.root.after(0, lambda: self._atualizar_tabela_jogos(mudar_aba=False))
         except Exception:
             pass
 
@@ -2403,9 +2466,9 @@ class RoboLotofacilUltraApp:
                     concurso=concurso_atual,
                     configuracao=dados.get("configuracao", {}),
                 )
-                self.log(f"📊 Desempenho histórico atualizado: melhor={reg_hist.get('melhor_acerto')} | média={reg_hist.get('media_acertos')}")
+                self.log_async(f"📊 Desempenho histórico atualizado: melhor={reg_hist.get('melhor_acerto')} | média={reg_hist.get('media_acertos')}")
             except Exception as e:
-                self.log(f"⚠️ Avaliação feita, mas não foi possível atualizar banco histórico: {e}")
+                self.log_async(f"⚠️ Avaliação feita, mas não foi possível atualizar banco histórico: {e}")
             avaliados.add(chave)
             avaliacoes["avaliados"] = list(avaliados)[-200:]
             avaliacoes["ultima_avaliacao"] = {
@@ -2416,17 +2479,17 @@ class RoboLotofacilUltraApp:
             }
             salvar_json(ARQUIVO_AUTO_AVALIACOES, avaliacoes)
 
-            self.log("=" * 72)
-            self.log("🤖 AVALIAÇÃO AUTOMÁTICA DO ÚLTIMO SORTEIO")
-            self.log(f"Pacote gerado na referência: concurso {concurso_ref}")
-            self.log(f"Último concurso carregado: {concurso_atual}")
-            self.log(f"Resultado avaliado: {formatar_jogo(resultado_atual)}")
-            self.log(f"Melhor acerto: {registro['melhor_acerto']} | Média: {registro['media_acertos']}")
-            self.log(f"Distribuição: {registro['distribuicao_acertos']}")
-            self.log(ajustes.get("resumo", "Memória atualizada automaticamente."))
+            self.log_async("=" * 72)
+            self.log_async("🤖 AVALIAÇÃO AUTOMÁTICA DO ÚLTIMO SORTEIO")
+            self.log_async(f"Pacote gerado na referência: concurso {concurso_ref}")
+            self.log_async(f"Último concurso carregado: {concurso_atual}")
+            self.log_async(f"Resultado avaliado: {formatar_jogo(resultado_atual)}")
+            self.log_async(f"Melhor acerto: {registro['melhor_acerto']} | Média: {registro['media_acertos']}")
+            self.log_async(f"Distribuição: {registro['distribuicao_acertos']}")
+            self.log_async(ajustes.get("resumo", "Memória atualizada automaticamente."))
         except Exception as e:
-            self.log("⚠️ Falha na avaliação automática do último sorteio:")
-            self.log(str(e))
+            self.log_async("⚠️ Falha na avaliação automática do último sorteio:")
+            self.log_async(str(e))
 
     def forcar_aprendizado_continuo_seguro(self) -> None:
         """
@@ -2466,14 +2529,14 @@ class RoboLotofacilUltraApp:
             ultimo_treinado = int(estado.get("ultimo_concurso_treinado", 0) or 0)
 
             if ultimo_treinado == concurso_atual:
-                self.log(f"🧠 Aprendizado automático já executado para o concurso {concurso_atual}.")
+                self.log_async(f"🧠 Aprendizado automático já executado para o concurso {concurso_atual}.")
                 return
 
             self.aprendizado_automatico_chave = str(concurso_atual)
-            self.log("🤖 Auto Aprender ativado: iniciando aprendizado contínuo em segundo plano.")
+            self.log_async("🤖 Auto Aprender ativado: iniciando aprendizado contínuo em segundo plano.")
             self.root.after(800, lambda: self.iniciar_aprendizado_continuo(automatico=True))
         except Exception as e:
-            self.log(f"⚠️ Não foi possível iniciar o aprendizado automático: {e}")
+            self.log_async(f"⚠️ Não foi possível iniciar o aprendizado automático: {e}")
 
     def iniciar_aprendizado_continuo(self, automatico: bool = False) -> None:
         if self.aprendizado_continuo_ativo:
@@ -2742,6 +2805,8 @@ class RoboLotofacilUltraApp:
                 if resumo_hist:
                     self.log("📊 Banco histórico de desempenho atualizado.")
                     self.log(f"Resumo histórico: média melhor={resumo_hist.get('media_melhor_ultimos', 0)} | 11+={resumo_hist.get('pct_11_mais', 0)}% | 12+={resumo_hist.get('pct_12_mais', 0)}%")
+                self._atualizar_grafico_acertos()
+                self._atualizar_painel_info()
                 self.set_status("Resultado registrado no aprendizado permanente.", "green")
                 janela.destroy()
 
@@ -2820,7 +2885,11 @@ class RoboLotofacilUltraApp:
             overfit_wf = hist_wf[-1].get("overfitting_nivel", "—") if hist_wf else "—"
 
             # Monte Carlo rápido com histórico existente (sem backtest novo)
-            mc = executar_montecarlo_cientifico(n_simulacoes=500, qtd_jogos=10)
+            resultados_reais = self._obter_resultados_backtest_reais_para_montecarlo()
+            mc = executar_montecarlo_cientifico(
+                resultados_backtest=resultados_reais, n_simulacoes=500, qtd_jogos=10
+            )
+            fonte_mc = f"dados reais ({len(resultados_reais)} execuções)" if resultados_reais else "sintético — rode o Backtest Científico para dados reais"
 
             sep = "═" * 50
             linhas_c = [
@@ -2840,7 +2909,7 @@ class RoboLotofacilUltraApp:
                 f"  Estabilidade         {(est_wf or 0)*100:>6.1f}%",
                 f"  Overfitting          {overfit_wf}",
                 "",
-                "  MONTE CARLO (500 simulações)",
+                f"  MONTE CARLO (500 simulações — {fonte_mc})",
                 "",
                 f"  P(Robô > Aleatório)  {mc.get('prob_pct', 0):>6.1f}%",
                 f"  IC 95%  {mc.get('ic_95',{}).get('inferior',0):.4f} → {mc.get('ic_95',{}).get('superior',0):.4f}",
@@ -2882,7 +2951,7 @@ class RoboLotofacilUltraApp:
                 "",
             ]
         except Exception as ex:
-            linhas_hf = [f"  (sem dados — rode o Backtest Científico V11)\n  {ex}"]
+            linhas_hf = [f"  (sem dados — rode o Backtest Científico)\n  {ex}"]
 
         txt_hf.insert("end", "\n".join(linhas_hf))
         txt_hf.config(state="disabled")
@@ -2899,10 +2968,11 @@ class RoboLotofacilUltraApp:
                 "AUTO-PODA 4-ESTADOS — V21.5-FULL",
                 "=" * 65,
                 "",
-                f"  Limiares:  observação ≥ {rel_poda['limiares']['observacao']}  |  "
-                f"quarentena ≥ {rel_poda['limiares']['quarentena']}  |  "
-                f"suspenso < {rel_poda['limiares']['suspenso']}",
-                f"  Recuperação se média ≥ {rel_poda['limiares']['recuperacao']} por {2} rodadas consecutivas",
+                "  Avaliação relativa à média do grupo (7 modelos) em cada passo do backtest",
+                f"  (correção 2026-07-21 — ver ARQUITETURA.md): abaixo de {rel_poda['limiares']['observacao']:+.2f} "
+                f"do grupo → degrada | abaixo de {rel_poda['limiares']['suspenso']:+.2f} → pode suspender | "
+                f"acima de {rel_poda['limiares']['recuperacao']:+.2f} → recupera",
+                f"  Precisa de 2 rodadas consecutivas na mesma direção pra avançar de estado",
                 "",
                 f"  {'Modelo':<14} {'Estado':<12} {'Fator':>6} {'Média':>7} {'Tend.':<10} {'Hist.':>5}",
                 "  " + "-" * 65,
@@ -2948,10 +3018,20 @@ class RoboLotofacilUltraApp:
 
         try:
             from .v21_5_montecarlo_cientifico import executar_montecarlo_cientifico, resumo_montecarlo
-            mc1000 = executar_montecarlo_cientifico(n_simulacoes=1000, qtd_jogos=10)
+            resultados_reais_mc1000 = self._obter_resultados_backtest_reais_para_montecarlo()
+            mc1000 = executar_montecarlo_cientifico(
+                resultados_backtest=resultados_reais_mc1000, n_simulacoes=1000, qtd_jogos=10
+            )
+            fonte_mc1000 = (
+                f"dados reais ({len(resultados_reais_mc1000)} execuções do Backtest Científico)"
+                if resultados_reais_mc1000 else
+                "sintético — rode o Backtest Científico para dados reais"
+            )
             linhas_mc = [
                 "MONTE CARLO CIENTÍFICO — V21.5-FULL",
                 "=" * 60,
+                "",
+                f"  Fonte dos dados: {fonte_mc1000}",
                 "",
                 resumo_montecarlo(mc1000),
                 "",
@@ -3406,6 +3486,14 @@ class RoboLotofacilUltraApp:
         """
         Salva apenas os números dos jogos gerados em TXT.
         Não inclui cabeçalho, relatório, score, métricas ou logs.
+
+        Também é o único gatilho de `salvar_ultimos_jogos_gerados()` (JSON
+        usado para restaurar a aba "Jogos Gerados" ao abrir o app e para a
+        avaliação automática contra o próximo sorteio real). Até 2026-08-01
+        esse JSON era gravado a cada geração — inclusive gerações
+        descartáveis feitas só para checar o Simulador —, então qualquer
+        teste virava "o pacote atual" e podia ser avaliado/restaurado sem o
+        usuário ter escolhido isso (a pedido do usuário, ver ARQUITETURA.md).
         """
         try:
             if not self.jogos_gerados:
@@ -3427,12 +3515,49 @@ class RoboLotofacilUltraApp:
                     linha = " ".join(f"{int(n):02d}" for n in sorted(jogo))
                     f.write(f"Jogo {idx}: {linha}" + chr(10))
 
+            self.salvar_ultimos_jogos_gerados()
             self.log(f"✅ Jogos salvos em TXT limpo: {caminho}")
             self.set_status("TXT limpo salvo com sucesso.", "green")
 
         except Exception as e:
             self.set_status("Erro ao salvar TXT.", "red")
             self.log("❌ Erro ao salvar TXT:")
+            self.log(str(e))
+            self.log(traceback.format_exc())
+
+    def exportar_pdf(self) -> None:
+        """
+        Exporta os jogos gerados em PDF com volante visual da Lotofácil
+        (`exportar_apostas_pdf`, backtest.py). Função já existia
+        implementada mas não tinha nenhum botão na tela (achado de
+        auditoria, ver 2026-07-23 no ARQUITETURA.md).
+        """
+        try:
+            if not self.jogos_gerados:
+                messagebox.showwarning("Aviso", "Gere os jogos antes de exportar.")
+                return
+
+            caminho = filedialog.asksaveasfilename(
+                title="Exportar jogos em PDF",
+                defaultextension=".pdf",
+                filetypes=[("PDF", "*.pdf")],
+                initialfile=f"apostas_{gerar_timestamp_arquivo()}.pdf",
+            )
+            if not caminho:
+                return
+
+            resultado = exportar_apostas_pdf(self.jogos_gerados, caminho_saida=caminho)
+            if resultado.get("formato") == "txt_fallback":
+                self.log(f"⚠️ {resultado.get('aviso', '')}")
+                self.log(f"✅ Jogos exportados em TXT (fallback): {resultado.get('arquivo')}")
+                self.set_status("PDF indisponível — exportado como TXT.", "orange")
+            else:
+                self.log(f"✅ Jogos exportados em PDF: {resultado.get('arquivo')}")
+                self.set_status("PDF exportado com sucesso.", "green")
+
+        except Exception as e:
+            self.set_status("Erro ao exportar PDF.", "red")
+            self.log("❌ Erro ao exportar PDF:")
             self.log(str(e))
             self.log(traceback.format_exc())
 
@@ -3476,6 +3601,7 @@ class RoboLotofacilUltraApp:
         self._btn_rodar_comp.config(state="disabled")
         self._iniciar_progresso()
         self._notebook_corpo.select(3)
+        self._aplicar_seed_configurada()
 
         def tarefa():
             try:
@@ -3849,8 +3975,6 @@ class RoboLotofacilUltraApp:
             threads_ativas.append("Backtest")
         if getattr(self, "calibracao_ativa", False):
             threads_ativas.append("Calibração IA")
-        if getattr(self, "laboratorio_historico_ativo", False):
-            threads_ativas.append("Lab Histórico")
         if getattr(self, "auto_diagnostico_ativo", False):
             threads_ativas.append("Auto Diagnóstico")
         if getattr(self, "aprendizado_continuo_ativo", False):
@@ -3867,15 +3991,9 @@ class RoboLotofacilUltraApp:
                 # Para todas as threads
                 self.aprendizado_continuo_ativo = False
                 self.calibracao_ativa = False
-                self.laboratorio_historico_ativo = False
                 self.auto_diagnostico_ativo = False
                 self._geracao_ativa = False
                 self._backtest_simples_ativo = False
-                # Salva estado atual
-                try:
-                    self.salvar_ultimos_jogos_gerados()
-                except Exception:
-                    pass
                 # Persiste preferencia do Turbo para a proxima sessao
                 try:
                     _cache = ler_json(ARQUIVO_CACHE, default={})
@@ -3917,6 +4035,7 @@ class RoboLotofacilUltraApp:
             qtd = min(max(5, int(self.qtd_jogos.get())), 20)
             ger = max(10, int(self.geracoes.get()))
             pop = max(30, int(self.pop_size.get()))
+            self._aplicar_seed_configurada(log_async=True)
 
             self.log_async(
                 f"Parâmetros: treino={janela_treino} | teste={janela_teste} "
@@ -3961,6 +4080,26 @@ class RoboLotofacilUltraApp:
             # é compartilhado por todas as abas e pode ter mudado até lá.
             rel["qtd_jogos_usado"] = qtd
             self._ultimo_resultado_walkforward = rel
+
+            # V21.5-FULL: alimenta os indicadores permanentes do Walk-Forward
+            # Profissional (SQLite) — a aba "Walk-Forward Profissional" do
+            # Painel Científico lia esse histórico, mas nada nunca escrevia
+            # nele. Usa registrar_walkforward_profissional() (reaproveita
+            # as janelas/scores do robô já calculados por `rel` acima) em
+            # vez de executar_walkforward_profissional() (que rodaria
+            # fn_gerar — o algoritmo genético — de novo em cada janela e
+            # dobraria o tempo do botão sem aviso — achado de uso real,
+            # ver 2026-07-21 no ARQUITETURA.md).
+            try:
+                from .v21_5_walkforward_profissional import registrar_walkforward_profissional
+                ind_prof = registrar_walkforward_profissional(concursos, rel, qtd_jogos=qtd)
+                self.log_async(
+                    f"   Walk-Forward Profissional: robustez={ind_prof.get('robustez_pct', 0)}% "
+                    f"| estabilidade={ind_prof.get('estabilidade_pct', 0)}% "
+                    f"| tendência={ind_prof.get('trend_robustez', '')}"
+                )
+            except Exception as e_prof:
+                self.log_async(f"   (aviso: Walk-Forward Profissional não pôde ser atualizado — {e_prof})")
 
             # Salva JSON
             try:
@@ -4029,6 +4168,7 @@ class RoboLotofacilUltraApp:
             passos  = max(10, int(self.passos_backtest.get()))
             qtd     = min(max(5, int(self.qtd_jogos.get())), 20)
 
+            self._aplicar_seed_configurada(log_async=True)
             self.log_async(f"Parâmetros: janela={janela} | passos={passos} | jogos={qtd}")
             self.root.after(0, self._iniciar_progresso)
 
@@ -4076,7 +4216,8 @@ class RoboLotofacilUltraApp:
                         continue
                     self.log_async(
                         f"   G={c['g']}: {c['veredito']} | d_z={c['cohen_d_pareado']:.3f} ({c.get('magnitude','')}) | "
-                        f"p={c['p_value']:.4f} | IC90%={c['ic_90']} | n={c['n']}"
+                        f"p={c['p_value']:.4f} | p_ajustado={c.get('p_ajustado', c['p_value']):.4f} | "
+                        f"IC90%={c['ic_90']} | n={c['n']}"
                     )
 
             self.log_async("")
@@ -4111,13 +4252,13 @@ class RoboLotofacilUltraApp:
             self.log("❌ Módulos V22 não disponíveis.")
             return
         if getattr(self, "_otimizador_v22_ativo", False):
-            self.log("⚠️ Otimizador V22 já está em execução.")
+            self.log("⚠️ Otimizador já está em execução.")
             return
         if not self.concursos:
-            self.log("⚠️ Carregue o histórico antes de usar o Otimizador V22.")
+            self.log("⚠️ Carregue o histórico antes de usar o Otimizador.")
             return
         self._otimizador_v22_ativo = True
-        self.set_status("Otimizador V22 iniciado...", "blue")
+        self.set_status("Otimizador iniciado...", "blue")
         th = threading.Thread(target=self._executar_otimizador_v22, daemon=True)
         th.start()
 
@@ -4132,7 +4273,8 @@ class RoboLotofacilUltraApp:
             tentativas = 10
 
             self.log("=" * 72)
-            self.log("⚡ OTIMIZADOR V22 INICIADO")
+            self.log("⚡ OTIMIZADOR INICIADO")
+            self._aplicar_seed_configurada()
             self.log(f"Parâmetros: janela={janela} | G={ger} | P={pop} | jogos={qtd} | tentativas={tentativas}")
             self.root.after(0, self._iniciar_progresso)
 
@@ -4146,22 +4288,24 @@ class RoboLotofacilUltraApp:
                 )
                 return jogos, analise, pesos
 
-            jogos_otimizados, relatorio = _otimizar_pacote(
+            jogos_otimizados, analise_otim, pesos_otim, relatorio = _otimizar_pacote(
                 concursos,
                 fn_gerar,
-                limiar_11=93.0,
+                limiar_11=95.0,
                 limiar_media=11.20,
                 max_tentativas=tentativas,
-                n_simulacoes=500,
-                parar_ao_atingir_limiar=False,
+                n_simulacoes=1000,
                 status_cb=self.log_async,
             )
 
             if jogos_otimizados:
                 self.jogos_gerados = jogos_otimizados
+                self.analise = analise_otim
+                self.pesos = pesos_otim
+                self.info_backtest = None
                 met = relatorio.get("metricas", {})
                 self.log_async("=" * 72)
-                self.log_async("✅ Otimizador V22 concluído")
+                self.log_async("✅ Otimizador concluído")
                 self.log_async(f"   Tentativas realizadas : {relatorio.get('tentativas_realizadas')}")
                 self.log_async(f"   Limiar atingido       : {'✅ SIM' if relatorio.get('limiar_atingido') else '⚠️ NÃO — melhor encontrado'}")
                 self.log_async(f"   11+%                  : {met.get('pct_11_mais')}%")
@@ -4171,14 +4315,16 @@ class RoboLotofacilUltraApp:
                 self.log_async("📋 Jogos otimizados:")
                 for i, jogo in enumerate(jogos_otimizados, 1):
                     self.log_async(f"   Jogo {i:02d}: {' '.join(f'{d:02d}' for d in sorted(jogo))}")
-                self.set_status_async("Otimizador V22 concluído.", "green")
+                self.root.after(0, self._atualizar_tabela_jogos)
+                self.root.after(0, self._atualizar_painel_info)
+                self.set_status_async("Otimizador concluído.", "green")
             else:
                 self.log_async("❌ Otimizador não gerou jogos válidos.")
-                self.set_status_async("Erro no Otimizador V22.", "red")
+                self.set_status_async("Erro no Otimizador.", "red")
 
         except Exception as e:
-            self.set_status_async("Erro no Otimizador V22.", "red")
-            self.log_async(f"❌ Erro no Otimizador V22: {e}")
+            self.set_status_async("Erro no Otimizador.", "red")
+            self.log_async(f"❌ Erro no Otimizador: {e}")
             self.log_async(traceback.format_exc())
         finally:
             self._otimizador_v22_ativo = False
@@ -4187,24 +4333,8 @@ class RoboLotofacilUltraApp:
             except Exception:
                 pass
 
-    # V22 — Dashboard Científico + Pipeline Automático
+    # V22 — Pipeline Automático
     # ─────────────────────────────────────────────────────────────────────────
-
-    def iniciar_dashboard_v22(self) -> None:
-        """Exibe o Dashboard Científico V22 no log."""
-        if not _V22_OK:
-            self.log("❌ Módulos V22 não disponíveis.")
-            return
-        self.log("=" * 70)
-        self.log("📊 DASHBOARD CIENTÍFICO V22")
-        self.set_status("Carregando dashboard V22...", "blue")
-        try:
-            dash = DashboardV22()
-            self.log(dash.resumo_texto())
-            self.set_status("Dashboard V22 carregado.", "green")
-        except Exception as e:
-            self.log(f"❌ Erro no dashboard V22: {e}")
-            self.set_status("Erro no dashboard V22.", "red")
 
     def iniciar_pipeline_v22(self) -> None:
         """Dispara o Pipeline Automático V22 em thread separada."""
@@ -4275,11 +4405,16 @@ class RoboLotofacilUltraApp:
                 if isinstance(v, (int, float))
             ]
             if len(resultados) < 2:
+                # Bootstrap IC lê especificamente self.info_backtest — só
+                # "📊 Backtest" preenche esse atributo. "🤖 BT Automático"
+                # guarda seu resultado em self.info_backtest_automatico (sem
+                # "acertos_por_passo"), então recomendá-lo aqui não resolvia
+                # nada (achado de auditoria, ver 2026-07-23 no ARQUITETURA.md).
                 self.log_async(
                     "⚠️ Bootstrap IC: nenhuma série de acertos por passo disponível "
                     "no último backtest (ou com menos de 2 pontos) — não é possível "
-                    "calcular variância real. Execute 📊 Backtest ou 🤖 BT Automático "
-                    "novamente antes de tentar de novo."
+                    "calcular variância real. Execute 📊 Backtest novamente antes de "
+                    "tentar de novo."
                 )
                 self.set_status_async("Bootstrap IC: dados insuficientes.", "red")
                 return
@@ -4335,7 +4470,8 @@ class RoboLotofacilUltraApp:
                     f"Mediana (boot.) : {ic['mediana_bootstrap']:.4f}",
                     f"Amostras        : {ic['n_amostras']}",
                 ]
-                self._abrir_janela_resultado_bootstrap("\n".join(linhas))
+                texto_resultado = "\n".join(linhas)
+                self.root.after(0, lambda t=texto_resultado: self._abrir_janela_resultado_bootstrap(t))
             except Exception:
                 pass
 

@@ -274,8 +274,12 @@ def calcular_scores_tendencia(analise: dict) -> dict:
 
 def calcular_scores_neural_leve(analise: dict) -> dict:
     """
-    Modelo 5: mini rede neural heurística, sem dependência externa.
-    Usa uma função sigmoide sobre sinais normalizados de frequência, recente, atraso e repetição.
+    Modelo 5: perceptron de um único neurônio, sem dependência externa.
+    Aplica uma sigmoide sobre uma combinação linear de 4 sinais normalizados
+    (frequência, recência, atraso, repetição no último concurso), mas os
+    pesos (1.10, 0.85, 0.55, 0.25) e o bias (-0.35) são fixos/hardcoded —
+    não há treinamento nem ajuste a partir de dados (o nome "neural" não
+    deve sugerir uma rede treinada; é um perceptron estático de uma camada).
     """
     freq = analise["freq"]
     recentes = analise["recentes"]
@@ -297,43 +301,56 @@ def calcular_scores_neural_leve(analise: dict) -> dict:
 def calcular_scores_pares_trios(analise: dict) -> dict:
     """
     Modelo 7: pares e trios frequentes.
-    Identifica dezenas que aparecem juntas com frequência acima do esperado
-    pela probabilidade pura — combinações estatisticamente relevantes no histórico.
+    Identifica dezenas que aparecem juntas — em pares E em trios — com
+    frequência acima do esperado pela probabilidade hipergeométrica pura
+    (combinações estatisticamente relevantes no histórico, não populares
+    por acaso).
+
+    Até 2026-07-27 o "bônus de trio" nunca calculava trios de verdade
+    (nenhum `combinations(..., 3)`) — era só a contagem bruta de quantos
+    pares cada dezena participava, aplicada sem filtrar por "acima do
+    esperado" (contradizendo o próprio comentário do código). Corrigido
+    pra usar `combinations(..., 3)` com sua própria probabilidade
+    esperada hipergeométrica, filtrando os dois bônus (par e trio) só
+    para combinações que de fato excedem a expectativa (ver
+    ARQUITETURA.md).
     """
     hist = analise["hist_usado"]
     n_concursos = len(hist)
     if n_concursos < 20:
         return {n: 1.0 / 25 for n in NUMEROS}
 
-    # Conta frequência de cada par com itertools.combinations.
-    # Mantém a mesma lógica, mas reduz código manual e evita custo extra em loops aninhados Python puro.
+    # Conta frequência de cada par/trio com itertools.combinations.
     freq_pares = Counter()
-    freq_dezena = Counter()
+    freq_trios = Counter()
     for jogo in hist:
         jogo_ordenado = tuple(sorted(set(jogo)))
-        freq_dezena.update(jogo_ordenado)
         freq_pares.update(combinations(jogo_ordenado, 2))
+        freq_trios.update(combinations(jogo_ordenado, 3))
 
-    # Probabilidade esperada de um par por sorteio: C(15,2)/C(25,2) = 105/300 ≈ 0.35
-    p_par_esperado = 105.0 / 300.0
+    # Probabilidades esperadas por sorteio (hipergeométrica, 15-de-25):
+    #   par:  C(15,2)/C(25,2)  = 105/300  ≈ 0.3500
+    #   trio: C(15,3)/C(25,3)  = 455/2300 ≈ 0.1978
+    p_par_esperado  = 105.0 / 300.0
+    p_trio_esperado = 455.0 / 2300.0
     scores = {n: 0.0 for n in NUMEROS}
 
-    participacao_pares = Counter()
     for (a, b), cnt in freq_pares.items():
-        # Frequência observada vs esperada
         p_obs = cnt / n_concursos
         excesso = max(0.0, p_obs - p_par_esperado)
-        bonus = math.log1p(excesso * 10)  # log suaviza extremos
-        scores[a] += bonus
-        scores[b] += bonus
-        participacao_pares[a] += cnt
-        participacao_pares[b] += cnt
+        if excesso > 0.0:
+            bonus = math.log1p(excesso * 10)  # log suaviza extremos
+            scores[a] += bonus
+            scores[b] += bonus
 
-    # Adiciona bônus para trios — dezenas que participam de muitos pares acima do esperado.
-    # Antes isso varria todos os pares para cada dezena; agora usa contador acumulado.
-    for n in NUMEROS:
-        pares_do_n = participacao_pares.get(n, 0)
-        scores[n] += math.log1p(pares_do_n / max(1, n_concursos) * 2)
+    for (a, b, c), cnt in freq_trios.items():
+        p_obs = cnt / n_concursos
+        excesso = max(0.0, p_obs - p_trio_esperado)
+        if excesso > 0.0:
+            bonus = math.log1p(excesso * 10)
+            scores[a] += bonus
+            scores[b] += bonus
+            scores[c] += bonus
 
     return normalizar_scores(scores)
 

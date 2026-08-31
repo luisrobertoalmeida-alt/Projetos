@@ -399,24 +399,7 @@ def db_limiar_dinamico(percentil: float = 20.0) -> float:
     return float(scores[lo] + (scores[hi]-scores[lo])*(pos-lo))
 
 
-
-def db_salvar_peso_modelo(model_id:str, peso:float, concurso:int=None):
-    conn=get_db()
-    with conn:
-        conn.execute(
-            "INSERT INTO pesos_modelos (model_id,peso,concurso,atualizado_em) VALUES (?,?,?,?)",
-            (model_id,peso,concurso,_now())
-        )
-
-def db_ultimos_pesos():
-    conn=get_db()
-    rows=conn.execute(
-        '''
-        SELECT model_id,peso
-        FROM pesos_modelos
-        WHERE id IN (
-            SELECT MAX(id) FROM pesos_modelos GROUP BY model_id
-        )
-        '''
-    ).fetchall()
-    return {r["model_id"]: r["peso"] for r in rows}
+# Nota (2026-07-19): db_salvar_peso_modelo/db_ultimos_pesos foram removidas
+# — nunca tinham nenhum chamador real (só v21_3_1_dashboard_real.py, também
+# removido por ser código órfão). A tabela pesos_modelos segue existindo no
+# schema, mas nada grava nela; ver ARQUITETURA.md.

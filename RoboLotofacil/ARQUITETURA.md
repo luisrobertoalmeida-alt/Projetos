@@ -11,7 +11,7 @@ a suite de testes completa antes de liberar.
 | `historico.py` | Leitura e análise do histórico CSV |
 | `analise.py` | Modelos de IA (bayesiano, markov, neural_leve, etc.) |
 | `genetico.py` | Algoritmo genético de otimização de jogos |
-| `apostas.py` | Pipeline principal: gerar_apostas(), calcular_configuracao_assistida() |
+| `apostas.py` | Pipeline principal: gerar_apostas(), gerar_apostas_dual_perfil() |
 | `aprendizado.py` | Memória adaptativa e aprendizado permanente |
 | `backtest.py` | Calibração, backtest científico V11, laboratório histórico |
 | `persistencia.py` | Leitura/escrita de arquivos CSV e JSON |
@@ -28,20 +28,27 @@ a suite de testes completa antes de liberar.
 | `ui.py` | Interface gráfica principal (Tkinter) |
 | `fechamento.py` | Fechamento combinatório de garantia total (wheeling). Botão "🔒 Fechamento" na UI (linha "Operação principal"), campo "Pool Fecht." (16-20). Garantia matemática condicional — ver docstring do módulo e `VALIDACAO_ESCALA_REAL_2026-07-14.md`. |
 | `auditoria_cientifica.py` | Auditoria científica contínua para scripts de validação (`auditoria_experimento`, `corrigir_multiplas_comparacoes`, `consolidar_rodada_experimentos`). Não tem botão de UI (é infraestrutura de validação, não feature de produto) — mesmo status de `v20_6_bootstrap.py`, do qual depende. Ver seção "Decisão de arquitetura" abaixo e `test_auditoria_cientifica.py`. |
-| `execucao_paralela.py` | Execução paralela por PROCESSOS (não threads) do walk-forward para scripts de validação standalone — `ThreadPoolExecutor` não acelera o algoritmo genético (GIL, Python puro); `ProcessPoolExecutor` dá speedup real (medido: 3,77x com 4 processos). Uso restrito a scripts standalone, NÃO à UI. Requisito não-negociável (testado): mesma seed_base ⇒ resultado idêntico entre `modo="processos"` e `modo="sequencial"`. `fn_gerar` precisa ser função top-level (não closure) — ver docstring do módulo. Ver `test_execucao_paralela.py`. |
+
+**Removido em 2026-07-19**: `execucao_paralela.py` — apesar do próprio
+docstring afirmar que era usado por `validacao_gp.py`/`reanalise_pareada.py`,
+nenhum desses scripts (nem qualquer outro arquivo do repositório) de fato
+o chamava; cada script standalone reimplementava sua própria lógica de
+`ProcessPoolExecutor`. Ver auditoria completa mais abaixo.
 
 ## 🟡 MÓDULOS EXPERIMENTAIS (usar com cuidado)
 | Módulo | Status | Observação |
 |--------|--------|------------|
-| `v21_5_meta_competitivo.py` | Experimental | Não integrado à UI |
-| `v21_5_montecarlo_cientifico.py` | Experimental | Não integrado à UI |
-| `v21_5_walkforward_profissional.py` | Experimental | Substituído pelo v20_8 |
-| `v21_5_auto_poda_full.py` | Experimental | Derivado do v21_0_auto_poda |
-| `v21_3_1_dashboard_real.py` | Experimental | Dashboard alternativo |
+| `v21_5_meta_competitivo.py` | Ativo | ELO por concurso, integrado ao pipeline real de poda/ELO (`alimentar_poda_e_elo()` em backtest.py) e ao ranking do "⚗️ Painel Científico" (`analise.py`). Tabela corrigida em 2026-07-23 — estava listada como "não integrado", desatualizado. |
+| `v21_5_montecarlo_cientifico.py` | Ativo (corrigido 2026-07-19) | Integrado ao "⚗️ Painel Científico"; agora usa dados reais do Backtest Científico quando disponíveis (antes sempre usava dados sintéticos) |
+| `v21_5_walkforward_profissional.py` | Ativo (corrigido 2026-07-19/21) | Complementa (não substitui) o v20_8: agora alimentado a cada Walk-Forward real, sem recomputar o algoritmo genético (ver Sétima rodada) |
+| `v21_5_auto_poda_full.py` | Ativo (corrigido 2026-07-21) | Poda 4-estados, integrada ao pipeline real de poda/ELO (`alimentar_poda_e_elo()`). Tabela corrigida em 2026-07-23 — estava listada como "Experimental", desatualizado (ver Sexta rodada). |
 | `v21_3_1_hall_fama_auto.py` | Experimental | Não integrado à UI |
-| `v21_3_1_historico_combinacoes.py` | Experimental | Não integrado à UI |
 | `v21_0_auto_poda.py` | Experimental | Substituído pelo v21_5_auto_poda_full |
-| `v21_0_meta_aprendizado.py` | Experimental | Não integrado à UI |
+| `v21_0_meta_aprendizado.py` | Ativo (reduzido 2026-07-23) | Só `probabilidade_recuperacao()` restou — é chamada de verdade por `analise.py`; as outras 4 funções do módulo nunca tinham chamador real e foram removidas. |
+
+**Removidos em 2026-07-19**: `v21_3_1_dashboard_real.py`,
+`v21_3_1_historico_combinacoes.py` — nunca tinham nenhum chamador real
+fora de si mesmos.
 
 ## 🔴 MÓDULOS LEGADOS (candidatos à remoção futura)
 
@@ -151,14 +158,17 @@ confirma o mesmo padrão em toda a faixa — `média_melhor` varia só entre
 11.24 e 11.35 (spread de ~0.11), bem dentro da margem de equivalência do
 TOST (±0.3). Não há vale estrutural em nenhum ponto testado.
 
-**Decisão: G=35/P=27 fixo, removido da tela principal.** Como G/P não
+**Decisão: G=16/P=40 fixo, removido da tela principal.** Como G/P não
 tem efeito prático mensurável nessa faixa, expor como parâmetro manual só
 cria a falsa impressão de que vale a pena ajustar. `ui.py` fixa
-`self.geracoes`/`self.pop_size` em 35/27 (margem de segurança sobre o
-ponto mais barato testado, G=16) e não exibe mais os campos na tela
-(`config_v22.yaml` atualizado com os mesmos valores). Continua ajustável
+`self.geracoes`/`self.pop_size` em 16/40 (`config_v22.yaml` atualizado com
+os mesmos valores) e não exibe mais os campos na tela. Continua ajustável
 por quem quiser reabrir a investigação, via `estrategia_override` ou
 rodando `mapa_gp_custom.py` diretamente.
+
+*Atualizado em 2026-07-18: valor fixo trocado de G=35/P=27 para G=16/P=40
+— ambos já confirmados estatisticamente equivalentes acima (linha 144),
+sem mudança de racional, só o ponto escolhido dentro da faixa validada.*
 
 ## 🗺️ Mapa G×P com grade customizada — `mapa_gp_custom.py`
 
@@ -185,7 +195,8 @@ equivalentes, desfazendo o benefício do fix de G=35/P=27:
 - **`calcular_configuracao_assistida()`** (`apostas.py`) não recalcula
   mais gerações/população a partir de quantidade de jogos, desempenho
   recente ou banco técnico — repassa os valores fixos. Consequência: o
-  checkbox **"🧭 Assistente Auto Config"** (ligado por padrão) e o botão
+  checkbox **"🧭 Assistente Auto Config"** (desligado por padrão desde
+  2026-07-18 — antes ligado) e o botão
   **"🧭 Auto Ajuste"** pararam de sobrescrever `self.geracoes`/
   `self.pop_size` a cada geração de jogos.
 - **`aplicar_conhecimento_cientifico_na_configuracao()`** (`backtest.py`)
@@ -204,13 +215,190 @@ equivalentes, desfazendo o benefício do fix de G=35/P=27:
   "G=88 validado com 5 rodadas" já derrubado. A guarda de ratio foi
   removida.
 - **`montar_configuracoes_laboratorio()`/`gerar_apostas_laboratorio_inteligente()`**
-  simplificadas: não testam mais variantes de G/P (não há mais nada
-  para comparar), geram direto com a configuração fixa (35/27). O botão
-  "🔬 Laboratório" continua funcionando, mas não roda mais a bateria de
-  configurações nem exibe "resultado do laboratório" no log (campo
-  `analise["laboratorio_inteligente"]["ativo"]` passa a `False`).
+  simplificadas em 2026-07-17, **removidas por completo em 2026-07-18**
+  (ver seção "Segunda limpeza" abaixo) — geravam exatamente o mesmo
+  resultado que "🎲 Gerar Jogos" já entrega.
 - `config_v22.yaml`: removida a chave duplicada e nunca lida por
   nenhum código, `genetico.passos_calibracao`.
+
+## 🧹 Segunda limpeza — 2026-07-18 (pós fix de G=16/P=40)
+
+Levantada pelo usuário durante uma sessão de revisão da tela: com G/P
+fixo, vários mecanismos que existiam para *decidir* ou *testar* G/P
+tinham virado casca vazia — rodavam, mas sempre chegavam na mesma
+configuração fixa, sem gerar informação nova. Removidos/simplificados:
+
+- **Botão "🔬 Laboratório"** (`gerar_jogos_laboratorio`) e
+  `gerar_apostas_laboratorio_inteligente()`/`montar_configuracoes_laboratorio()`
+  (`apostas.py`) — geravam o pacote com o mesmo G/P fixo que "🎲 Gerar
+  Jogos" já usa, só que **sem** a injeção de impopularidade
+  (`estrategia_override`). Ou seja, virou um subconjunto pior do botão
+  principal, não uma alternativa. Removido; "🎲 Gerar Jogos" cobre o caso.
+- **Checkbox "Modo Laboratório Inteligente"** (`self.modo_laboratorio`) —
+  a variável nunca era lida em lugar nenhum (`.get()` não aparecia em
+  nenhum condicional); só existia o `.set()`. Marcar ou desmarcar não
+  tinha efeito algum. Removida.
+- **Botão "🏆 Lab Histórico"** e `calibrar_laboratorio_historico_vs_aleatorio()`/
+  `salvar_relatorio_laboratorio_historico()` (`backtest.py`) — desde que
+  `montar_configuracoes_laboratorio()` passou a devolver sempre 1 config
+  fixa, esse botão rodava a **mesma simulação** do "🎯 Calibrar IA" (mesmo
+  G/P, mesma janela, mesmos passos, mesmos testes estatísticos), só
+  embrulhada num formato de "ranking de 1 posição". Removido por completo.
+- **Auto Diagnóstico** (`executar_auto_diagnostico_lotofacil`) rodava
+  Calibração → Laboratório Histórico → Comparador — a etapa do meio era a
+  duplicata acima, dobrando o tempo de execução para o mesmo resultado.
+  Reduzido para 2 etapas (Calibração → Comparador); relatório renumerado.
+- **Auto Ajuste / Assistente Auto Config** (`calcular_configuracao_assistida`,
+  `apostas.py`) — calculava desempenho real (média do melhor acerto, taxa
+  12+/13+, ajustes de memória) só para exibir como "motivo" no log; nada
+  disso influenciava janela, passos ou G/P (que são fixos). Simplificada
+  para só o que de fato é aplicado: janela (por tamanho do histórico) e
+  passos de backtest (por quantidade de jogos). Tooltip do botão "🧭 Auto
+  Ajuste" atualizado para não prometer mais do que isso.
+- **Botão "📊 Dashboard Comparativo"** (`DashboardV22`/`v22_dashboard.py`) —
+  auditado e tinha 3 problemas: (1) a seção "tendência de
+  acertos"/"estabilidade" lia o mesmo arquivo
+  (`lotofacil_desempenho_historico.json`) que o botão "📊 Desempenho" já
+  mostra; (2) as seções "evolução por versão" e "histórico de
+  calibrações" dependem de `historico_relatorios.json`, escrito só pelo
+  Pipeline V22 (`RelatorioV22`) — e nenhum botão da tela dispara esse
+  pipeline (`iniciar_pipeline_v22` existe mas está órfão), então essas
+  seções sempre apareciam vazias; (3) só a seção "ranking de modelos"
+  trazia algo que "📊 Desempenho" não tinha. Removido o botão e o módulo
+  `v22_dashboard.py` (zero outros usos no projeto); a seção "ranking de
+  modelos" foi incorporada em `gerar_dashboard_desempenho_historico()`
+  (`backtest.py`), então nada de útil se perdeu.
+- **Botão "🧠 Ver Aprendizado"** removido da tela a pedido do usuário
+  (método `ver_aprendizado` mantido no código, sem botão vinculado).
+- **Reorganização de botões** (a pedido do usuário): "📊 Backtest" e "🤖 BT
+  Automático" moveram de "Operação principal" para "Inteligência,
+  diagnóstico e calibração"; "🧪 Simulador" e "✅ Conferir Jogos" moveram
+  de "Conferência, relatórios e arquivos" para "Operação principal",
+  logo após "🎲 Gerar Jogos" — seguindo o fluxo de uso real (Atualizar →
+  Carregar → Gerar Jogos → Simular → Conferir).
+- **Bug corrigido de passagem**: `v22_pipeline.py` monitorava
+  `laboratorio_historico_ativo` para saber se a etapa "calibracao" do
+  Pipeline V22 tinha terminado — um flag que nunca era setado por
+  `iniciar_calibracao_vs_aleatorio` (que usa `calibracao_ativa`). Como
+  a remoção do Lab Histórico eliminaria esse atributo, o mapeamento foi
+  corrigido para `calibracao_ativa`.
+- **Bug real encontrado pelo usuário: "📊 Backtest" não testava o G/P do
+  robô e contaminava os pesos do ensemble.** `backtest_basico()` tinha
+  `geracoes=20, pop_size=40` **hardcoded** no código (não os 16/40 reais),
+  e `backtest_ultra_massivo()` comparava 3 configs inventadas ("Ultra
+  Rápido" G=16/P=36, "Ultra Equilibrado" G=24/P=52, "Ultra Forte"
+  G=34/P=70) — nenhuma delas a config real. Mais grave: `backtest_basico()`
+  alimenta a poda inteligente (`avaliar_e_podar_modelos`), que grava
+  direto em `pesos_modelos.json` — os pesos que "🎲 Gerar Jogos" usa de
+  verdade. Ou seja, cada "📊 Backtest" reajustava o ensemble real com base
+  no desempenho de modelos sob uma config diferente da que o robô
+  realmente usa. "🤖 BT Automático" nunca teve esse problema (já lia
+  `self.geracoes`/`self.pop_size`). Corrigido: as duas funções agora
+  recebem `geracoes`/`pop_size` como parâmetro e a UI passa os valores
+  reais; `backtest_ultra_massivo()` parou de comparar 3 variantes de G/P
+  (mesmo motivo do Mapa G×P — são estatisticamente equivalentes) e roda
+  uma simulação só, com a config real.
+- **Removido "🧭 Auto Ajuste" e "🧭 Assistente Auto Config"** — depois da
+  simplificação acima, restava só ajustar janela e passos de backtest por
+  2 regras fixas (tamanho do histórico e quantidade de jogos), sem
+  nenhuma inteligência real por trás. O usuário considerou sem serventia
+  suficiente para justificar dois pontos de entrada na tela; removidos
+  o botão, o checkbox, `calcular_configuracao_assistida()`/
+  `explicar_configuracao_assistida()` (`apostas.py`) e todos os call
+  sites. Janela e passos de backtest continuam editáveis manualmente.
+
+## 🧹 Terceira limpeza — 2026-07-18 (poda/ELO e reorganização de tela)
+
+Discussão com o usuário sobre Backtest/BT Automático/Backtest Científico
+revelou uma peça de infraestrutura que não estava documentada: "📊
+Backtest" não é só diagnóstico — ele alimenta a poda inteligente V20.2
+(`pesos_modelos.json`, pesos reais usados por "🎲 Gerar Jogos") e o
+ELO/4-fases V21.5-FULL (exibido em "⚗️ Painel Científico" → aba "🥇
+Campeão"). Isso levantou duas perguntas do usuário, respondidas assim:
+
+- **"Não seria melhor o Científico alimentar a poda/ELO?"** — Sim,
+  metodologicamente: o Científico V11 isola cada modelo rodando o
+  pipeline completo com `forcar_modelo` (zera a confiança dos outros 6),
+  medição mais fiel do que a aproximação barata do `backtest_basico`
+  (extrai um top-15 bruto do score do modelo, sem passar pelo
+  refinamento genético). Mas o Científico custa ~7x mais gerações só na
+  fase de campeonato — não dá pra ser a única fonte sem deixar poda/ELO
+  desatualizados na maior parte do tempo. Solução adotada: `_alimentar_poda_e_elo()`
+  (`backtest.py`) virou uma função compartilhada; `backtest_basico`/
+  `backtest_ultra_massivo` continuam alimentando a cada rodada (barato,
+  frequente), e `executar_backtest_cientifico_massivo` (fase 2, campeonato
+  de modelos) agora também alimenta com sua medição mais rigorosa — uma
+  correção periódica por cima da atualização contínua.
+- **"Inconsistência dos 120 passos"** — `backtest_ultra_massivo` (modo
+  ativado automaticamente com ≥120 passos) não calculava `acertos_modelo`
+  nem chamava a poda/ELO, diferente de `backtest_basico` (<120 passos).
+  Ou seja, o mesmo botão "📊 Backtest" afetava o robô real ou não, só
+  pela quantidade de passos digitada. Corrigido: `backtest_ultra_massivo`
+  agora calcula `acertos_modelo` do mesmo jeito e chama
+  `_alimentar_poda_e_elo()` também.
+
+Reorganização de tela adicional (a pedido do usuário):
+- "🧪 Backtest Científico" saiu de "Investigação avançada" para ficar em
+  sequência com "📊 Backtest"/"🤖 BT Automático" (linha de inteligência/
+  diagnóstico).
+- "⚡ Otimizador" e "🗺️ Mapa G×P" saíram de "Investigação avançada" para
+  "Operação principal" — linha "Investigação avançada" removida (ficou
+  vazia).
+- Otimizador: limiar de aceite de 11+ subiu de 93% para 95%
+  (`limiar_11` em `iniciar_otimizador_v22`, `ui.py`).
+
+## 🧹 Quarta rodada — 2026-07-19 (bugs reportados pelo usuário)
+
+- **Registro da seed nos relatórios.** Usuário rodou o mesmo teste com
+  "Seed fixo" ligado e desligado para comparar, e notou que os relatórios
+  (calibração, auto diagnóstico, backtest ultra massivo, backtest
+  científico, BT Automático) não registravam se a seed usada era fixa ou
+  aleatória — dependia de lembrar o que estava marcado na tela.
+  `_descricao_seed()` (`backtest.py`) lê `config.SEED` (atualizado por
+  `seed_global()`/`_aplicar_seed_configurada()` logo antes de cada
+  operação) e agora aparece como uma linha "Seed: fixa (N)" ou "Seed:
+  aleatória" em todos esses relatórios.
+- **Bug real: jogos do Otimizador não apareciam na aba "Jogos Gerados".**
+  `_executar_otimizador_v22` setava `self.jogos_gerados` mas nunca chamava
+  `_atualizar_tabela_jogos()` — e mesmo chamando, a tabela ficaria vazia,
+  porque `otimizar_pacote()` (`v22_otimizador.py`) descartava a
+  `analise`/`pesos` do pacote vencedor (só retornava a lista de jogos),
+  e `_atualizar_tabela_jogos()`/`avaliar_jogos()` exigem os três.
+  Consequência colateral: como "Conferir Jogos" só registra aprendizado
+  quando `self.analise`/`self.pesos` não são `None` (ver próxima seção),
+  conferir um pacote gerado pelo Otimizador também não estava alimentando
+  o aprendizado permanente. Corrigido: `otimizar_pacote()` agora retorna
+  `(jogos, analise, pesos, relatorio)` do candidato vencedor; a UI seta
+  `self.analise`/`self.pesos` e atualiza a tabela e o painel de info,
+  igual às outras rotinas de geração.
+
+**Pergunta do usuário: "Conferir Jogos" alimenta o aprendizado?** Sim —
+`conferir_jogos_gerados()` chama `registrar_resultado_aprendizado()`
+(memória permanente, `lotofacil_aprendizado_permanente.json`, usada por
+`calcular_bonus_aprendizado()` para ajustar diversidade/mutação/elite na
+próxima geração) e `registrar_desempenho_historico_robo()` (banco de
+auditoria, `lotofacil_desempenho_historico.json`, mostrado em "📊
+Desempenho") — mas **só se `self.analise` e `self.pesos` não forem
+`None`**. Isso só acontece depois de rodar alguma rotina de geração
+(Gerar Jogos, Dual-Perfil, Otimizador, Laboratório...) na sessão atual;
+se você reiniciar o app e for direto em "Conferir Jogos" sem gerar nada
+antes, a conferência roda normalmente mas **não** registra aprendizado
+(fica só o TXT da conferência).
+
+**Critério de aceite do Otimizador (11+ vs. 12+/13+).** Usuário perguntou
+se o filtro principal do Otimizador (`limiar_11`) deveria usar 12+ em vez
+de 11+. Resposta implementada em `v22_otimizador.py`: manter 11+ como
+gate de aceite (evento quase saturado no aleatório — ~85-98% com 20-30
+jogos por pacote só por volume — serve bem como filtro de sanidade
+grosseiro), mas rebalancear o *score* que compara candidatos entre si
+para pesar mais 12+/13+ e a média do melhor jogo, que discriminam melhor
+"candidato bom" de "mediano" por serem mais raros. Score antigo
+(`pct_11*0.6 + media*3.0 + pct_12*0.4`, sem 13+) → novo
+(`pct_11*0.2 + media*3.5 + pct_12*0.8 + pct_13*1.5`). Como pesar mais um
+evento raro aumenta a sensibilidade a ruído da simulação Monte Carlo,
+`n_simulacoes` subiu de 500 para 1000 (o próprio docstring do módulo já
+prometia 1000 sem que o código cumprisse — inconsistência corrigida de
+brinde).
 
 **✅ CORRIGIDO (2026-07-14): `mapear_vale_gp()` agora faz teste estatístico
 pareado de verdade** — `vale_confirmado` é decidido por Cohen's d pareado,
@@ -225,3 +413,964 @@ nem outra — amostra insuficiente, aumentar `passos`). Testes em
 `test_estatistica_pareada.py`.
 
 Reexecutar `validacao_escala_real.py` reproduz este resultado.
+
+## 🔍 Quinta rodada — Auditoria completa — 2026-07-19
+
+Usuário pediu uma auditoria completa do robô ("não tem bug?"). Foram
+lançados 7 agentes paralelos (read-only, em worktree isolado) cobrindo
+todo `lotofacil_pkg/` — pipeline core, backtest/execução paralela/
+fechamento, módulos legados v17–v20, módulos v21, módulos v22 + plugins,
+e os dois grandes blocos de handlers de `ui.py` (geração/backtest e
+relatórios/diversos). Cada um verificou achados via grep/rastreamento de
+chamadas reais antes de reportar. Achados verificados e corrigidos:
+
+**Bugs de comportamento real:**
+- **Dual-Perfil ignorava o slider de Impopularidade em 0%**
+  (`ui.py`, `_executar_dual_perfil`): só passava `estrategia_override`
+  quando `peso_imp_ui > 0`; em 0% passava `None`, e como
+  `analise.py` embute um padrão de 30% em todo `estrategia` dict, zerar
+  o slider nesse modo não desligava nada. Corrigido para sempre passar o
+  override (igual ao modo single-perfil), com log explícito de
+  "desligada" quando 0%.
+- **Dual-Perfil nunca salvava em "últimos jogos gerados"**: faltava a
+  chamada a `self.salvar_ultimos_jogos_gerados()` que todo outro fluxo de
+  geração faz — pacotes do Dual-Perfil nunca eram conferidos
+  automaticamente contra o sorteio seguinte nem entravam como
+  aprendizado. Corrigido.
+- **Backtest Científico ainda ignorava o G/P real** — terceiro
+  "irmão" do bug já corrigido em `backtest_basico`/`backtest_ultra_massivo`
+  nesta mesma sessão: `montar_configuracoes_cientificas()` aceitava
+  `geracoes_base`/`pop_base` mas nunca os usava (candidatos sempre
+  G=16/P=40 fixo — decisão de 2026-07-16, documentada, e que hoje
+  coincide com a config real fixa). Removidos os parâmetros mortos da
+  assinatura para não sugerir que o G/P da tela influencia o teste.
+- **Dual-Perfil "Exploração" usava só 2 de 7 modelos declarados**
+  (`apostas.py`, `gerar_apostas_dual_perfil`): o `fn_map` buscava scores em
+  `ensemble_exp["scores_modelos"]`/`analise_exp["scores_estatistico"]`,
+  chaves que `calcular_ensemble_multi_ia()` nunca escreve (a chave real é
+  `"modelos"`). Só cobertura/pares_trios (que chamavam a função direto,
+  sem passar por essa busca) realmente contribuíam; os outros 5 pesos de
+  `_PESOS_EXPLORACAO` sempre voltavam vazios. Corrigido: lookup direto em
+  `ensemble_exp["modelos"][nome]`.
+- **Auto-otimização por "padrões vencedores" nunca funcionou**
+  (`analise.py`, `analisar_padroes_vencedores`): lia `pares_medios`/
+  `soma_media` dos registros de aprendizado, chaves que
+  `registrar_resultado_aprendizado()` (`aprendizado.py`) nunca gravava —
+  sempre caía no valor-padrão (soma=195), então o gatilho de recalibração
+  de `aplicar_auto_otimizacao()` (só dispara se média ≥198 ou ≤192) nunca
+  ativava, silenciosamente, desde sempre. Corrigido: o registro agora
+  calcula pares/soma médios reais do pacote conferido.
+- **Monte Carlo Científico sempre usava dados sintéticos**, nunca o
+  Backtest Científico real, apesar do próprio docstring do módulo e do
+  comentário no `ui.py` afirmarem o contrário — os dois pontos de chamada
+  nunca passavam `resultados_backtest`. P(Robô > Aleatório), IC 95%,
+  Cohen's d e p-value no "⚗️ Painel Científico" eram sempre calculados
+  sobre `rng.gauss(0.3, 0.25)`. Corrigido: novo helper
+  `_obter_resultados_backtest_reais_para_montecarlo()` (`ui.py`) busca a
+  última execução real do Backtest Científico em
+  `conhecimento_cientifico.json`; a tela agora rotula explicitamente se
+  os números são reais ou (na ausência de qualquer execução prévia)
+  sintéticos.
+- **Walk-Forward Profissional (V21.5) nunca era alimentado** —
+  `executar_walkforward_profissional()` existia, tinha lógica sólida e
+  persistia em SQLite (tabela `walkforward_indicadores`, já existente no
+  schema), mas nenhum caller real chamava essa função em lugar nenhum do
+  robô; o painel "Walk-Forward Profissional" sempre mostrava "nenhuma
+  execução registrada". Em vez de remover o módulo, foi conectado ao
+  fluxo real: `_executar_walkforward` (`ui.py`) agora também chama
+  `executar_walkforward_profissional()` com o mesmo `fn_gerar`/janelas do
+  Walk-Forward V20.8 já em uso, como camada extra de indicadores
+  acumulados (não substitui o V20.8, complementa).
+- **Thread-safety: "⬆ Atualizar" e "📂 Carregar"** — os dois botões mais
+  usados chamavam `self.log`/`self.set_status`/`_iniciar_progresso`/
+  `_parar_progresso` diretamente de dentro da thread de fundo, em vez das
+  versões `_async`/`root.after` usadas no resto do arquivo. Corrigido em
+  `atualizar_resultados_reais`, `carregar_historico`,
+  `avaliar_ultimo_sorteio_automatico` e
+  `iniciar_aprendizado_automatico_pos_carga`. **Nota honesta**: ao
+  corrigir isso, foi constatado que o padrão "self.log direto dentro de
+  thread" na verdade aparece também no corpo principal de praticamente
+  todo outro handler threaded do arquivo (`_executar_gerar_jogos`,
+  calibração, fechamento, etc.) — só os blocos de `except` usam
+  consistentemente as versões `_async`. Converter tudo teria escopo e
+  risco bem maiores que o corrigido aqui; fica registrado como
+  característica arquitetural conhecida, não resolvida por completo.
+- **Bootstrap IC criava uma janela (Toplevel) fora da thread principal**
+  — `_executar_bootstrap_ic` chamava `_abrir_janela_resultado_bootstrap`
+  direto, sem `root.after`. Corrigido.
+- **"Conferir resultado" manual não atualizava gráfico/painel** —
+  `registrar_resultado`'s `confirmar()` não chamava
+  `_atualizar_grafico_acertos()`/`_atualizar_painel_info()` como
+  `conferir_jogos_gerados`/`ver_aprendizado` fazem. Corrigido.
+- **Gráfico do Comparador com o mesmo padrão do bug já corrigido no
+  gráfico de Acertos** (canvas sem `<Configure>`, podendo desenhar em
+  1x1 antes do notebook mapear a aba). Corrigido com o mesmo binding,
+  redesenhando com `self._resultados_comp` (já armazenado).
+- **Tooltip de "💾 Salvar TXT" enganoso** — prometia "o relatório atual",
+  mas a função só salva os números nus dos jogos. Texto corrigido.
+
+**Limpeza de código órfão** (confirmado por grep em todo o repositório —
+zero chamadores reais fora de si mesmos e de seus próprios testes —
+suíte completa rodada depois, sem regressão):
+- Removidos por inteiro: `v18_meta_otimizador.py`, `v18_1c_meta_ensemble.py`,
+  `v18_2_montecarlo.py`, `v18_2b_auditor_cientifico.py`,
+  `v19_1_benchmark.py`, `v19_1_cache_inteligente.py`,
+  `v19_1_estabilidade.py`, `v19_1_telemetria.py`, `v20_3_ablation.py`,
+  `v20_4_backtest_massivo.py`, `execucao_paralela.py`,
+  `v21_3_1_dashboard_real.py`, `v21_3_1_historico_combinacoes.py`.
+- **Sistema de plugins V22 removido por inteiro**: `v22_plugins.py`
+  (`PluginManager`) nunca era instanciado em lugar nenhum — `plugins/
+  frequencia.py` e `plugins/impopularidade.py` nunca chegavam a rodar.
+  Removidos os dois arquivos, o diretório `plugins/`, a seção `plugins:`
+  de `config_v22.yaml` e os acessores `ConfigV22.plugins()`/
+  `plugins_ativos` (mortos junto).
+- `v18_1b_ia_adaptativa.py` reduzido a só `carregar_pesos_modelos()` (a
+  única função de fato usada, por `analise.py`) — as outras 5 funções
+  (`registrar_resultado_modelo`, `calcular_rating_modelo`,
+  `recalcular_pesos_adaptativos`, `gerar_hall_da_fama`,
+  `salvar_pesos_modelos`) nunca tinham chamador: quem de fato escreve
+  `pesos_modelos.json`/`historico_modelos.json` é
+  `v20_2_poda_inteligente.py`, que por coincidência usa os mesmos nomes
+  de arquivo.
+- `v21_0_sqlite.db_registrar_geracao()` — o docstring afirmava ser
+  "chamado por `apostas.registrar_performance_geracao()`", mas isso nunca
+  foi verdade. Em vez de remover, foi conectado de fato (espelhamento
+  best-effort no SQLite, mesmo padrão já usado para aprendizado). Já
+  `db_salvar_peso_modelo`/`db_ultimos_pesos` foram removidas — não tinham
+  nenhum chamador real, nem mesmo o módulo experimental que as usava
+  (também removido).
+- Testes reorganizados para acompanhar: `test_v19_modulos.py` →
+  `test_v17_4_features.py` (só o que sobrou de válido: `v17_4_features`,
+  que é usado de verdade por `backtest.py`/`genetico.py`);
+  `test_v20_modulos.py` → `test_v20_2_poda_inteligente.py` (idem, só
+  `v20_2_poda_inteligente`, que é usado de verdade por `backtest.py`);
+  `test_execucao_paralela.py` removido junto com o módulo.
+
+**Confirmado limpo, sem achados**: `genetico.py`, `historico.py`,
+`utils.py`, `config.py`, `persistencia.py`, `fechamento.py`,
+`v17_4_features.py`, `v20_2_poda_inteligente.py`, `v20_6_bootstrap.py`,
+`v20_8_walkforward.py`, `v22_otimizador.py` (rebalanceamento de score
+desta sessão confirmado internamente consistente), `v22_pipeline.py`
+(flags de conclusão, já corrigidas antes, continuam corretas).
+
+**Identificado mas deliberadamente não alterado nesta rodada** (achado
+real, mas de menor risco/impacto — documentado para decisão futura, não
+uma pendência esquecida): `v20_5_validacao_cientifica.py` tem só 2 de 6
+funções públicas realmente chamadas pela UI (`benchmark_vs_aleatorio`,
+`ganho_estatistico`); o próprio consolidador do módulo
+(`gerar_relatorio_validacao`) nunca é usado — a UI reimplementa uma
+fatia mais simples do relatório. A maior parte de `config_v22.yaml`
+(seções `validacao`, `dashboard`, `caminhos`) também nunca é lida por
+código real, porque o único consumidor completo dessas seções
+(`v22_relatorio.py`/`v22_pipeline.py`) só é alcançável pelo Pipeline V22,
+que já está documentado como órfão desde a rodada anterior.
+
+## 🐛 Sexta rodada — 2026-07-21 (bug real achado pelo usuário no uso diário)
+
+**Poda 4-Estados (V21.5-FULL) suspendia TODOS os modelos, sempre, com
+passos suficientes — bug de calibração de limiares, não um veredito real
+sobre os modelos.**
+
+Usuário rodou o Backtest Científico com 150 passos e viu o relatório de
+Poda 4-Fases mostrar os 7 modelos em SUSPENSO (fator 0.10, o mínimo).
+Investigação em `v21_5_auto_poda_full.py`:
+
+- Os limiares eram **absolutos**: observação < 9.10, quarentena < 9.00,
+  suspenso < 8.90, recuperação ≥ 9.20 — numa escala onde o próprio
+  comentário do código já dizia "9 = aleatório".
+- A média real de QUALQUER modelo em Lotofácil gira em torno de 9.0
+  (estatisticamente empatada com o acaso — confirmado por "Calibrar IA
+  vs. Aleatório": vantagem média de score de -0.086, p-valor=1.0, Cohen's
+  d=-0.024/desprezível). Ou seja: **nenhum modelo, mesmo o melhor
+  possível, consegue ficar de forma sustentada acima de 9.10**, e
+  praticamente nenhum passo individual chega a 9.20.
+- Resultado: `rodadas_abaixo` (contador de degradação) incrementava em
+  quase todo passo do backtest; `rodadas_acima` (contador de
+  recuperação) quase nunca incrementava. Com passos suficientes (150,
+  no caso do usuário), **todo modelo** descia inevitavelmente
+  ATIVO→OBSERVAÇÃO→QUARENTENA→SUSPENSO e ficava preso lá — a
+  recuperação exigia 2 rodadas seguidas ≥9.20, que na prática nunca
+  acontece. O sistema não estava medindo desempenho *relativo* entre os
+  7 modelos (que é o único sinal que faz sentido nesse domínio) — estava
+  medindo "supera o acaso de forma absoluta", uma barra que nenhum
+  modelo consegue sustentar. Zero testes cobriam este módulo antes desta
+  correção, o que explica por que passou despercebido até o usuário
+  notar no uso real.
+
+**Correção**: os limiares viraram deltas **relativos à média do grupo
+(dos 7 modelos) naquele mesmo passo**, não valores absolutos:
+`DELTA_OBSERVACAO=-0.05`, `DELTA_SUSPENSO=-0.15`, `DELTA_RECUPERACAO=+0.05`.
+`avaliar_estados_modelos()` agora calcula a média do grupo a cada
+chamada e `_transicao()` compara cada modelo a essa média, não a um
+número fixo. Isso restaura o propósito real do sistema: só modelos
+consistentemente piores que os outros 6 degradam; só os
+consistentemente melhores recuperam. `LIMIAR_QUARENTENA` (que já era
+morto — nunca era checado na lógica, só aparecia no relatório) foi
+removido; o relatório de limiares (`relatorio_poda_full()`/aba "✂️ Poda
+4-Fases" no `ui.py`) foi atualizado para refletir os deltas relativos.
+
+Adicionados 8 testes em `test_v21_5_auto_poda_full.py` (módulo não tinha
+nenhum teste antes) cobrindo o cenário exato do bug (modelo empatado com
+o grupo não pode degradar para sempre) e o comportamento correto
+(modelo consistentemente pior degrada sozinho, sem arrastar os outros).
+
+**Nota para quem já rodou backtests antes desta correção**: o arquivo
+`estados_modelos_v21.json` (na pasta `dados/` do usuário) pode ter
+modelos presos em SUSPENSO pelo bug antigo. Não precisa apagar/resetar
+manualmente — a partir da próxima rodada de backtest, a avaliação já
+passa a ser relativa ao grupo, e qualquer modelo com desempenho
+realmente acima da média dos outros 6 volta a acumular `rodadas_acima`
+e se recupera normalmente em algumas rodadas (2 rodadas por nível:
+SUSPENSO→QUARENTENA→OBSERVAÇÃO→ATIVO).
+
+## 🐛 Sétima rodada — 2026-07-21 (regressão da própria correção anterior)
+
+**A correção da "Quinta rodada" (wiring do Walk-Forward Profissional)
+dobrava o tempo de execução do botão "🔀 Walk-Forward" — e escondia um
+segundo bug pré-existente que só aparecia quando a função era chamada de
+verdade.**
+
+Usuário reportou que, depois de rodar Walk-Forward, o relatório
+"Walk-Forward Profissional" continuava vazio, e o app parecia travado
+("ainda tá rodando", sem nenhuma linha nova no log). Investigação:
+
+1. **Computação duplicada.** `executar_walkforward_profissional()` (a
+   função que eu tinha conectado na Quinta rodada) roda `fn_gerar` — o
+   algoritmo genético completo (G=16/P=40) — de novo, do zero, em CADA
+   janela. Só que o Walk-Forward V20.8 (`relatorio_walkforward`, chamado
+   logo antes na mesma tela) já tinha acabado de rodar exatamente as
+   mesmas ~180 janelas com o mesmo `fn_gerar`. Ou seja: meu wiring
+   dobrava silenciosamente o tempo do botão, sem avisar o usuário, e sem
+   nenhum log de progresso por janela nessa função — por isso parecia
+   travado, mas só estava recalculando tudo de novo.
+2. **Bug pré-existente escondido pelo módulo estar órfão.** Ao chegar ao
+   fim do cálculo (depois de esperar o dobro do tempo), a função
+   quebrava com `TypeError: '<' not supported between instances of
+   'float' and 'list'` — `detectar_overfitting_wf(scores_robo, [])`
+   passava `[]` como segundo argumento posicional
+   (`limiar_degradacao`, que deveria ser um float, ex. 0.85), erro que
+   existia desde que o módulo foi escrito, mas nunca tinha sido
+   detectado porque a função nunca tinha sido chamada de verdade antes
+   da Quinta rodada (módulo órfão).
+
+**Correção**: `v21_5_walkforward_profissional.py` ganhou
+`registrar_walkforward_profissional(concursos, resultado_v20_8,
+qtd_jogos)` — versão leve que REAPROVEITA as janelas e os scores do
+robô já calculados por `relatorio_walkforward()` (só gera o baseline
+aleatório por janela, que é barato — sem rodar o algoritmo genético de
+novo). A lógica de cálculo dos indicadores foi extraída para
+`_montar_indicadores()`, compartilhada entre a função antiga
+(`executar_walkforward_profissional`, mantida para uso em scripts
+standalone sem um resultado V20.8 pronto) e a nova. `ui.py` passou a
+chamar `registrar_walkforward_profissional()` em vez de
+`executar_walkforward_profissional()`. O bug do `detectar_overfitting_wf(...,
+[])` foi corrigido para `detectar_overfitting_wf(scores_robo)` (usa o
+padrão `limiar_degradacao=0.85`).
+
+Adicionados 5 testes em `test_v21_5_walkforward_profissional.py`
+(módulo também não tinha nenhum teste antes), incluindo um teste que
+confirma explicitamente que `registrar_walkforward_profissional` NÃO
+chama `fn_gerar` — a regressão de performance exata que motivou a
+correção.
+
+## 🔍 Oitava rodada — 2026-07-23 (nova varredura completa)
+
+Usuário pediu uma segunda auditoria completa, focada em três perguntas
+específicas: (1) ainda há inconsistências no código? (2) todas as
+etapas de calibração realmente alimentam o ensemble? (3) o algoritmo
+genético realmente influencia o aprendizado do robô? Lançados 4 agentes
+paralelos read-only: rastreamento completo do pipeline
+calibração→ensemble, verificação do algoritmo genético,
+re-auditoria dos arquivos remendados nesta sessão, e varredura de áreas
+não cobertas antes.
+
+**Pergunta 2 e 3 — respostas confirmadas:**
+- O algoritmo genético **realmente usa** `pesos_finais`: confirmado por
+  rastreamento de código E por execução real — dobrar (triplicar, no
+  teste automatizado) o peso de uma dezena elevou sua taxa de aparição
+  de ~55% para ~92% nos jogos finais. Mutação (sempre 20-68%) e elitismo
+  (sempre 12-34%) nunca zeram a evolução. Nenhum atalho contorna isso.
+  Antes só verificado manualmente pela auditoria; agora coberto por 2
+  testes novos em `test_analise_genetico.py`
+  (`TestSensibilidadeAoPeso`, `TestEvoluir.test_populacao_nao_fica_identica_entre_geracoes`).
+- Das etapas de calibração: 📊 Backtest, 🧪 Backtest Científico e (a
+  partir desta rodada) 🤖 BT Automático alimentam poda/ELO; ⚡ Aprender
+  e Conferir Jogos/Registrar Resultado alimentam a memória de
+  aprendizado permanente; 🎯 Calibrar IA, 🩺 Auto Diagnóstico, ⚖️
+  Comparador e o Otimizador são, por desenho, só medição/seleção (não
+  alimentam nada, e não fingem alimentar).
+
+**Bugs reais corrigidos:**
+
+1. **🤖 BT Automático nunca alimentava poda inteligente/ELO**, apesar
+   de fazer exatamente o mesmo tipo de trabalho que "📊 Backtest" (gera
+   jogos de histórico passado, confere contra o resultado real
+   seguinte). `executar_backtest_automatico()` (`ui.py`) agora monta
+   `acertos_modelo` por passo (mesmo cálculo de `backtest_basico`) e
+   chama `alimentar_poda_e_elo()` no final.
+2. **Falha silenciosa na atualização do ELO.** A função que alimenta
+   poda+ELO (renomeada de `_alimentar_poda_e_elo` para
+   `alimentar_poda_e_elo`, agora pública — passou a ser usada também
+   por `ui.py`) envolvia a parte do ELO num `except Exception: pass`
+   sem log nenhum, enquanto a poda (bloco separado) podia funcionar e
+   ser logada como sucesso, mascarando uma falha real do ELO. Agora
+   retorna `(poda_resultado, erro_elo)`; todo call site loga
+   `erro_elo` quando não é `None`.
+3. **Perda silenciosa de dados no banco de desempenho histórico.**
+   `salvar_ultimos_jogos_gerados()` (`ui.py`) persistia um `analise_min`
+   sem as chaves `ensemble.ranking`/`ensemble.consenso`, que
+   `registrar_desempenho_historico_robo()` (`backtest.py`) precisa pra
+   calcular `top5/10/15_acertos` e `top_consenso`. Resultado: toda vez
+   que o usuário fechava o app e no dia seguinte conferia um pacote
+   restaurado do disco (fluxo comum), esses campos ficavam vazios sem
+   nenhum aviso. Corrigido incluindo as duas chaves no `analise_min`.
+4. **Exportação em PDF implementada mas sem nenhum botão na tela.**
+   `exportar_apostas_pdf()` (`backtest.py`) já existia pronta (volante
+   visual da Lotofácil via reportlab, com fallback pra TXT se a
+   biblioteca não estiver instalada), mas nunca tinha wiring na UI.
+   Adicionado botão "🖨️ Exportar PDF" na linha de relatórios. De
+   brinde: corrigido o docstring/type hint da função, que afirmavam
+   "retorna caminho do arquivo" (`str | None`) quando na verdade sempre
+   retorna um dict (`{"arquivo", "formato", "jogos", ...}`).
+5. **Pacote restaurado ao abrir o app não aparecia na aba "Jogos
+   Gerados"** — 5ª instância do mesmo bug já corrigido 4 vezes esta
+   sessão (falta de chamar `_atualizar_tabela_jogos()` depois de setar
+   `self.jogos_gerados`/`analise`/`pesos`). Causa raiz: esse método tem
+   o efeito colateral de trocar de aba automaticamente
+   (`self._notebook_corpo.select(1)`), o que provavelmente levou
+   alguém a evitar chamá-lo na inicialização pra não roubar o foco da
+   tela. Corrigido com um parâmetro `mudar_aba: bool = True` — a
+   restauração inicial agora popula a tabela sem trocar de aba.
+
+**Correções menores:**
+
+6. `selecionar_csv()` usava a caixa de diálogo de "salvar" (necessário,
+   já que o campo também é usado por "⬆ Atualizar" pra apontar um CSV
+   que ainda não existe) mas sem suprimir o aviso de "sobrescrever?" —
+   adicionado `confirmoverwrite=False`.
+7. Mensagem de erro do Bootstrap IC recomendava rodar "🤖 BT Automático"
+   pra resolver a falta de dados, mas essa função nunca preenche
+   `self.info_backtest` (usa `self.info_backtest_automatico`, sem
+   `acertos_por_passo`) — recomendação corrigida pra só "📊 Backtest".
+8. `v21_0_meta_aprendizado.py` reduzido a só `probabilidade_recuperacao()`
+   (a única função com chamador real, em `analise.py`) —
+   `recomendar_status()`, `avaliar_todos()`, `score_estabilidade()` e
+   `calcular_peso_contextual()` nunca tinham chamador fora do próprio
+   arquivo.
+9. Tabela de módulos experimentais corrigida: `v21_5_meta_competitivo.py`
+   e `v21_5_auto_poda_full.py` estavam listados como "Experimental —
+   não integrado" quando na verdade ambos alimentam o pipeline real de
+   poda/ELO; `v21_0_meta_aprendizado.py` atualizado pra refletir a
+   redução do item 8.
+
+**Confirmado limpo nesta rodada**: `_atualizar_tabela_jogos`/
+`_atualizar_grafico_acertos`/`_atualizar_painel_info` (sem dados
+obsoletos), chaves do `TEMA` (todas existem), nenhum TODO/FIXME
+esquecido, `v21_5_meta_competitivo.py` (fórmulas de ELO corretas),
+callsites de todas as funções com assinatura alterada nesta sessão,
+nenhuma referência viva a módulos/constantes já removidos.
+
+## 🐛 Nona rodada — 2026-07-26 (crash real reportado pelo usuário)
+
+**A correção da "Oitava rodada" (item 5 — restaurar o pacote na aba
+"Jogos Gerados" ao abrir o app) tinha uma lacuna não coberta pelos
+agentes de auditoria: crashava com `KeyError: 'soma_media'`.**
+
+Usuário reportou o traceback completo do Tkinter. Causa raiz:
+`salvar_ultimos_jogos_gerados()` (`ui.py`) persiste um `analise_min`
+deliberadamente reduzido (só `estrategia`, `ensemble.*`,
+`cobertura_global`) — mas `score_jogo()` (`genetico.py`), chamado por
+`avaliar_jogos()` toda vez que a aba "Jogos Gerados" é desenhada,
+precisa também de `analise["soma_media"]` (indexação direta, sem
+`.get()`) e `analise["hist_usado"]` (idem). Enquanto
+`_atualizar_tabela_jogos()` nunca era chamada na inicialização (bug já
+corrigido), esse gap nunca era exercitado — a correção anterior expôs
+um problema pré-existente que estava "adormecido" há mais tempo.
+
+**Correção em duas camadas** (a segunda é a que resolve o problema pra
+quem já tem um arquivo salvo do jeito antigo, sem precisar apagar nada):
+1. `salvar_ultimos_jogos_gerados()` agora também persiste
+   `soma_media` e os últimos 30 concursos de `hist_usado` (suficiente
+   pra `score_repeticao_recente`, que só olha os últimos 10, e pra
+   impopularidade — evita persistir a janela histórica inteira).
+2. `score_jogo()` (`genetico.py`) trocou `analise["soma_media"]`/
+   `analise["hist_usado"]` por `.get(..., padrão)` — defensivo contra
+   qualquer `analise` incompleto, incluindo arquivos já salvos antes
+   desta correção (o usuário não precisa apagar nada; assim que gerar
+   um novo pacote, o arquivo passa a ter os campos completos).
+
+Adicionados 2 testes em `test_analise_genetico.py`
+(`TestScoreJogoComAnaliseRestaurada`) replicando exatamente o cenário
+do crash — `analise` mínimo sem `soma_media`/`hist_usado`, tanto via
+`score_jogo()` direto quanto via `avaliar_jogos()` (o caminho real
+usado pela tela).
+
+## 🗺️ Mapa G×P — grade padrão troca G=300 por G=16 (config real) — 2026-07-27
+
+A pedido do usuário, o último ponto da grade padrão de
+`mapear_vale_gp()` (`v21_5_melhorias_cientificas.py`), que era
+G=300/P=230 (o extremo teórico do estudo original de 2026-07-14),
+virou **G=16/P=40 — a configuração real e fixa do sistema desde
+2026-07-18**. Grade padrão agora: `[80, 100, 120, 140, 160, 200, 250,
+16]`. Objetivo: em vez de mapear um extremo puramente teórico que
+ninguém roda de verdade, o Mapa passa a comparar diretamente a
+configuração de produção contra a grade de valores mais altos.
+
+Detalhe de implementação: o P de cada ponto é calculado
+proporcionalmente ao G (`P ≈ G × 0.767`, ratio do estudo original) —
+mas para G=16 isso daria P=12 (`round(16*0.767)`), um valor que o robô
+nunca usa de verdade. Por isso G=16 tem um caso especial na função:
+sempre usa P=40 (o real), não o proporcional. Isso vale tanto pra grade
+padrão quanto pra qualquer `pontos_g` customizado passado via
+`mapa_gp_custom.py` — um G=16 na lista sempre usa P=40.
+
+Efeito colateral esperado (não é bug, é o objetivo da mudança): como a
+comparação pareada usa o menor e o maior valor de G como "extremos" de
+referência (`g_min`/`g_max` depois de ordenar `pontos_g`), G=16 agora
+assume o papel de extremo inferior no lugar de G=80 — a análise passa a
+comparar diretamente "config real (G=16)" vs. "config mais alta com
+maior score", em vez de "extremo baixo (G=80)" vs. "extremo alto
+(G=300)" como antes.
+
+`mapa_gp_custom.py` (script standalone, sempre passa seu próprio
+`pontos_g` via linha de comando) não é afetado pela mudança do default,
+mas seu docstring foi atualizado para não descrever a grade antiga como
+atual.
+
+## 🔬 Auditoria matemática das fórmulas de cálculo — 2026-07-27
+
+Todas as auditorias anteriores desta sessão verificaram arquitetura,
+integração e fiação entre módulos — nenhuma tinha verificado se as
+próprias **fórmulas matemáticas/estatísticas** batem com suas
+definições padrão. A pedido do usuário, 4 agentes paralelos (em
+worktrees isolados, só leitura) reconferiram, com exemplos numéricos
+concretos (não só leitura de código): Cohen's d (independente e
+pareado), bootstrap percentile CI, TOST, testes de permutação
+sign-flip, ELO (fórmula logística + atualização por K-factor), os 7
+modelos do ensemble em `analise.py`, entropia de Shannon/score
+estrutural do genético, e a combinatória de fechamento. **Resultado:
+~90% das fórmulas conferem exatamente com a literatura/definição
+padrão.** Foram encontrados 2 bugs reais e 2 imprecisões de
+documentação, todos corrigidos nesta rodada:
+
+1. **Bug: p-valor de teste de permutação podia dar exatamente 0.0**
+   (`v20_6_bootstrap.py`, `teste_significancia()` e
+   `teste_significancia_pareado()`). A fórmula era
+   `contagem_extremos / n_reamostras`, mas a estatística observada é
+   sempre uma das `n_reamostras + 1` permutações possíveis (a original
+   está incluída) — então p=0.0 é logicamente impossível (afirmaria
+   certeza absoluta de que o efeito é real). Corrigido para a correção
+   +1 padrão da literatura de testes de permutação/randomização
+   (Davison & Hinkley, 1997; North et al., 2002):
+   `p_value = (contagem_extremos + 1) / (n_reamostras + 1)`. Não
+   quebra nenhum teste existente (só há uma asserção de `p_value==1.0`
+   exata, no caminho separado de "sem_dados", não afetado).
+
+2. **Bug: `calcular_scores_pares_trios()` (`analise.py`, Modelo 7)
+   nunca calculava trios de verdade.** Apesar do nome da função, do
+   docstring e do comentário interno, só existia `combinations(jogo,
+   2)` — o "bônus de trio" era, na real, a contagem bruta de quantos
+   pares cada dezena participava (sem checar se o par excedia a
+   expectativa hipergeométrica), aplicado incondicionalmente. Corrigido
+   para calcular `combinations(jogo_ordenado, 3)` de verdade, com sua
+   própria probabilidade esperada hipergeométrica
+   (`C(15,3)/C(25,3) = 455/2300 ≈ 0.1978`), e para os dois bônus (par e
+   trio) só serem aplicados quando a frequência observada realmente
+   excede a esperada (`excesso > 0.0`) — antes o bônus de par era
+   aplicado mesmo com `excesso == 0`.
+
+3. **Documentação: docstring de `fator_elo()` (`v21_5_meta_competitivo.py`)
+   tinha exemplos numéricos errados.** Afirmava ELO 1700 → fator ≈1.38
+   e ELO 1300 → fator ≈0.72; a fórmula real (`10^((elo-1500)/800)`) dá
+   1.7783 e 0.5623 respectivamente. Corrigido, e adicionados os valores
+   nos extremos do clamp (ELO 1000/2500) mostrando o valor que a
+   fórmula pura daria antes do `_clipar` entrar em ação.
+
+4. **Documentação: docstring de `calcular_scores_neural_leve()`
+   (`analise.py`, Modelo 5) sugeria uma rede neural treinada.** Na
+   real é um perceptron de um único neurônio com pesos e bias
+   *fixos/hardcoded* (1.10, 0.85, 0.55, 0.25, bias -0.35) — não há
+   treinamento nem ajuste a partir de dados. Docstring corrigido para
+   descrever o modelo honestamente.
+
+Suite completa (368+ testes) reexecutada após as 4 correções — nenhuma
+regressão.
+
+## 🔬 Correção para múltiplas comparações no Mapa G×P — 2026-07-29
+
+A pedido do usuário, `mapear_vale_gp()` (`v21_5_melhorias_cientificas.py`)
+agora corrige seus p-valores para múltiplas comparações antes de decidir
+o veredito `POSSIVEL_VALE`.
+
+**Problema**: cada rodada do Mapa testa vários pontos de G (hoje, 7) ao
+mesmo tempo contra a mesma referência, cada comparação usando o limiar
+de significância padrão (5%) isoladamente. Testar várias hipóteses
+simultaneamente infla a chance de pelo menos um "POSSIVEL_VALE" aparecer
+só por acaso — o clássico problema de múltiplas comparações. O projeto
+já tinha essa lógica implementada e testada em
+`corrigir_multiplas_comparacoes()`/`consolidar_rodada_experimentos()`
+(`auditoria_cientifica.py`, usada por `reanalise_pareada.py`), mas
+`mapear_vale_gp()` nunca a chamava.
+
+**Correção**: depois de calcular cohen_d/sig/TOST pareados para cada
+comparação da rodada, os p-valores brutos são passados juntos para
+`corrigir_multiplas_comparacoes()` (método Holm por padrão, mesmo
+método já usado em `consolidar_rodada_experimentos()`), e o veredito
+`POSSIVEL_VALE` passa a exigir `p_ajustado<0.05` em vez de `p_value<0.05`
+bruto. Novo parâmetro opcional `metodo_correcao` ("holm" ou
+"bonferroni"). Cada comparação em `comparacoes_pareadas` agora expõe os
+dois valores (`p_value` bruto e `p_ajustado`) para transparência —
+atualizado em `ui.py` e `mapa_gp_custom.py`.
+
+Sem efeito no comportamento em nenhum caso já observado até aqui: o
+único ponto que já cruzou o limiar bruto (5%) num mapa real (G=250,
+p=0.0117 vs. G=16) tinha efeito "desprezível" e já não gerava
+`POSSIVEL_VALE`; a correção só reforça essa margem de segurança contra
+falsos positivos daqui pra frente. Testes adicionados em
+`test_estatistica_pareada.py` (`TestMapearValeGp`): verificam que
+`p_ajustado>=p_value` sempre (propriedade matemática de Holm/Bonferroni)
+e que `vale_confirmado` é consistente com os vereditos reportados
+mesmo quando uma configuração é deliberadamente favorecida no teste.
+
+## 🔧 Configuração real fixa trocada de G=16/P=40 para G=100/P=77 — 2026-07-31
+
+A pedido do usuário ("deixa o robô fixo com o G=100 e P=77"), a
+configuração real e fixa do sistema — usada por "Gerar Jogos", Dual-Perfil,
+Fechamento, 📊 Backtest, 🤖 BT Automático, Backtest Científico V11 e
+Calibração vs. Aleatório — mudou de **G=16/P=40** (fixo desde 2026-07-18)
+para **G=100/P=77**.
+
+**Base para a decisão, não uma recomendação estatística**: todas as
+rodadas do Mapa G×P feitas até aqui (incluindo com correção Holm para
+múltiplas comparações, ver seção anterior) confirmaram repetidamente que
+G=100/P=77 é estatisticamente **equivalente** a G=16/P=40 e a qualquer
+outro ponto testado entre G=16 e G=300 — não há vale estrutural nessa
+faixa. Ou seja, a troca não é uma correção de um problema nem uma
+melhoria de desempenho esperada; é uma preferência do usuário sobre uma
+faixa onde qualquer ponto já testado é equivalente. Efeito colateral
+esperado: G=100×P=77 = 7.700 avaliações do genético por pacote, contra
+640 de G=16/P=40 — cerca de 12x mais processamento por geração, sem
+ganho estatístico esperado.
+
+**Arquivos alterados** (todos os pontos que hardcoded a configuração
+"real fixa", localizados por varredura de `G=16`/`P=40`/`value=16`/
+`value=40` no repositório):
+- `ui.py`: `self.geracoes`/`self.pop_size` (IntVars sem campo editável na
+  tela, decisão de 2026-07-18 mantida — ver seção "G=16/P=40 fixo,
+  removido da tela principal"), tooltips e comentários.
+- `config_v22.yaml` e `v22_config.py`: valores e defaults de fallback
+  (`geracoes`/`populacao`).
+- `v21_5_melhorias_cientificas.py` (`mapear_vale_gp`): removido o caso
+  especial que existia só porque G=16 quebrava a fórmula proporcional
+  (`round(16×0.767)=12`, diferente do real 40) — G=100/P=77 já cai
+  naturalmente na grade padrão (`round(100×0.767)=77`, exatamente o
+  real), então a grade voltou a ser `[80,100,120,140,160,200,250]` sem
+  ponto extra, só com G=100 relabelado como "configuração real do
+  sistema".
+- `mapa_gp_custom.py`: docstring atualizado (mesma simplificação).
+- `backtest.py`: `montar_configuracoes_cientificas()` (candidato
+  "Configuração validada"), defaults de `backtest_basico`,
+  `backtest_ultra_massivo` e `calibrar_robo_vs_aleatorio`, e docstrings
+  relacionadas.
+- `test_backtest.py`: dois testes que não passavam `geracoes`/`pop_size`
+  explícitos (contando com o default da função) receberam valores
+  pequenos explícitos (G=5/P=15) para não herdar o aumento de ~12x no
+  custo computacional só por causa da troca do default — a suite de
+  testes deve continuar rápida independente da configuração real.
+
+Documentação histórica (`VALIDACAO_MAPA_GP_2026-07-14.md`, entradas
+antigas deste arquivo) não foi reescrita — continua descrevendo
+corretamente o que foi validado com G=16/P=40 na época.
+
+## 💾 Persistência do pacote gerado passa a ser manual (só no Salvar TXT) — 2026-08-01
+
+A pedido do usuário: `salvar_ultimos_jogos_gerados()` (`ui.py`) — que
+grava `dados/lotofacil_ultimos_jogos_gerados.json`, usado para (1)
+restaurar a aba "Jogos Gerados" ao reabrir o app e (2) avaliar
+automaticamente o pacote contra o próximo sorteio real assim que ele
+sair — disparava sozinha a cada geração (🎲 Gerar Jogos, 🔒 Fechamento,
+Dual-Perfil, Otimizador) e também ao fechar o app.
+
+**Problema relatado**: o usuário gera vários pacotes só para ver o
+resultado no Simulador (auditoria estrutural, não geração "de verdade")
+— e cada uma dessas gerações descartáveis sobrescrevia o JSON, virando
+"o pacote atual" sem ele ter escolhido isso. Na prática, o pacote
+restaurado ao reabrir o app, ou avaliado automaticamente contra o
+próximo concurso, podia ser um teste qualquer, não o que o usuário
+realmente pretendia acompanhar.
+
+**Correção**: removidas as 5 chamadas automáticas (4 após gerações +
+1 ao fechar o app). `salvar_ultimos_jogos_gerados()` agora só é chamada
+por `salvar_txt()` — ou seja, o pacote só vira "o atual" quando o
+usuário explicitamente clica em "💾 Salvar TXT". Tooltip do botão e
+docstrings atualizados para deixar esse acoplamento explícito. Nenhuma
+mudança em `carregar_ultimos_jogos_gerados()`/`avaliar_ultimo_sorteio_automatico()`
+— continuam lendo o mesmo arquivo, só que agora ele reflete uma escolha
+explícita do usuário, não a última geração (mesmo que descartável).
+
+## 🔒 Fechamento ignorava o campo "Dezenas por jogo" (sempre 15) — 2026-08-03
+
+Achado do usuário: o Fechamento sempre gerava jogos de 15 dezenas, mesmo
+alterando o campo "✦ Dezenas" (que no "Gerar Jogos" normal já aceitava
+15-18) para 16, 17 ou 18.
+
+**Causa raiz, dupla**:
+1. `fechamento.py` importava `TAMANHO_JOGO` com `from .config import
+   TAMANHO_JOGO` — uma cópia congelada no momento do import. Diferente de
+   `genetico.py`, que corretamente usa `_cfg.TAMANHO_JOGO` (atributo do
+   módulo, lido em tempo real) em todo lugar, `fechamento.py` usava o
+   nome congelado como valor padrão de parâmetro (`tamanho_jogo: int =
+   TAMANHO_JOGO`) — e valores padrão de parâmetro são avaliados uma única
+   vez, na definição da função, não a cada chamada. Mesmo a UI mudando
+   `config.TAMANHO_JOGO` em tempo de execução (`_executar_gerar_jogos()`),
+   `fechamento.py` nunca via essa mudança.
+2. Mais grave: `gerar_apostas_fechamento()` nem tinha parâmetro
+   `tamanho_jogo` — nunca repassava nada para
+   `gerar_fechamento_garantia_total()`, então mesmo corrigindo o item 1
+   sozinho não resolveria nada.
+
+**Correção**:
+- `fechamento.py` agora importa o módulo `config` inteiro (`from . import
+  config as _cfg`) e todas as funções (`qtd_jogos_fechamento`,
+  `garantia_minima`, `gerar_fechamento_garantia_total`,
+  `gerar_apostas_fechamento`) usam `tamanho_jogo: int | None = None`,
+  resolvendo para `_cfg.TAMANHO_JOGO` (lido em tempo real) só quando não
+  informado explicitamente.
+- `gerar_apostas_fechamento()` ganhou o parâmetro `tamanho_jogo`, repassa
+  para `gerar_fechamento_garantia_total()` e inclui o valor efetivo no
+  dict de retorno.
+- Nova função `tamanho_pool_minimo(tamanho_jogo)` — o pool mínimo válido
+  passa a ser `tamanho_jogo + 1`, não mais o `TAMANHO_POOL_MINIMO=16`
+  fixo (que só era válido para `tamanho_jogo=15`).
+- `ui.py` (`iniciar_fechamento`/`_executar_fechamento`): lê `self.tamanho_jogo`
+  (mesmo clamp 15-18 do "Gerar Jogos"), valida o pool contra o mínimo
+  dinâmico, e repassa `tamanho_jogo` para `gerar_apostas_fechamento()`.
+
+**Bug matemático adicional encontrado e corrigido no caminho**: a fórmula
+de `garantia_minima()` era `2*tamanho_jogo - tamanho_pool`. Isso só está
+certo quando `tamanho_jogo==15` (o único caso já usado de verdade, por
+causa do bug acima) — a fórmula geral confunde "tamanho de cada jogo
+apostado" com "tamanho do sorteio real" (que na Lotofácil é **sempre**
+15, independente de quantas dezenas você aposta por jogo). A fórmula
+correta, derivada e verificada (docstring de `garantia_minima()` e nova
+classe de testes `TestTamanhoJogoDiferenteDe15`): `tamanho_jogo +
+TAMANHO_SORTEIO - tamanho_pool` (com `max(0, ...)` de segurança), onde
+`TAMANHO_SORTEIO=15` é uma nova constante fixa em `config.py`,
+deliberadamente separada de `TAMANHO_JOGO` (que é o tamanho de cada
+aposta, configurável 15-18/20). As duas fórmulas coincidem exatamente
+quando `tamanho_jogo=15` — por isso o bug nunca dava resultado visivelmente
+errado antes (o parâmetro nunca chegava a ser diferente de 15).
+
+Testes novos em `test_fechamento.py` (`TestTamanhoJogoDiferenteDe15`):
+verificam `tamanho_pool_minimo()`, a fórmula corrigida de
+`garantia_minima()` (inclusive a propriedade de que a garantia no pool
+mínimo é sempre 14, independente de `tamanho_jogo`), geração de
+fechamento com `tamanho_jogo=16`, a propriedade matemática central do
+fechamento (garantia real via simulação, não só a fórmula) para
+`tamanho_jogo` 16 e 17, e que `gerar_apostas_fechamento()` de fato
+repassa e valida `tamanho_jogo` corretamente.
+
+## 🐛 3 bugs achados pelo usuário em relatórios reais — 2026-08-08
+
+O usuário mandou vários relatórios reais do robô (Banco Histórico de
+Desempenho, Hall da Fama, Dashboard) pra análise. Três continham dados
+incorretos, todos com causa raiz encontrada e corrigida.
+
+**1. Banco Histórico de Desempenho registrava resultado impossível.**
+Dois registros do concurso 3753 mostravam `melhor_acerto=0/média=0.0` —
+matematicamente impossível: com jogos de 15 dezenas contra um sorteio de
+15 (de 25), o mínimo de acertos garantido é 5 (só existem 10 dezenas
+"erradas" no total). Causa: `registrar_desempenho_historico_robo()`
+(`backtest.py`) filtrava `if len(set(j)) == 15` antes de calcular
+acertos — se o campo "Dezenas por jogo" estivesse em 16/17/18 no momento
+da geração (bem provável, coincide com os testes do Fechamento da mesma
+semana), TODOS os jogos eram descartados, sobrava lista vazia, e a
+função registrava o zero como se fosse real em vez de avisar "nenhum
+jogo válido". Confirmado com dado concreto: um CSV de calibração enviado
+pelo usuário mostra o resultado *real* do concurso 3753 sendo
+`melhor_acerto=11`, não 0.
+
+Corrigido: aceita qualquer tamanho de jogo válido na Lotofácil (15-20,
+não só 15 fixo) e levanta `ValueError` explícito quando nenhum jogo
+sobra após a limpeza, em vez de prosseguir com uma lista vazia. Os 3
+callers em `ui.py` já tratavam exceção dessa função com try/except e log
+de aviso, então o comportamento visível pro usuário é só a mensagem de
+erro ficar mais clara — não silenciosamente poluir o banco.
+
+**2 e 3. Hall da Fama com porcentagens e ELO errados** (mesma raiz: uma
+convenção de escala, `pct_11_mais`/`pct_12_mais` em 0-100, não 0-1).
+`relatorio_hall_fama()` (`v21_3_1_hall_fama_auto.py`) multiplicava esses
+valores por 100 de novo na exibição, produzindo "9200.0%"/"3667.0%" em
+vez de "92.0%"/"36.7%". `_score_composto()` tinha o mesmo problema na
+fórmula (`taxa_premio = 0.50*pct_11 + ...` sem dividir por 100), o que
+inflava esse termo em ~100x e fazia o score composto ser dominado quase
+inteiramente por ele — ELO e média de acertos praticamente não pesavam
+na prática, apesar da intenção documentada de ser um blend equilibrado.
+
+Separadamente: `registrar_hall_fama()` sempre mostrava ELO=1500 fixo
+para todos os 7 modelos, mesmo com ELOs reais bem diferentes entre si
+(1747 a 1603, visíveis no relatório "Modelo Campeão"). Causa: o
+campeonato de modelos isolados nomeia as entradas como `"Modelo isolado:
+{modelo}"` (`backtest.py`), mas o banco de ELO usa só o nome puro do
+modelo — `elos.get(nome, 1500.0)` nunca batia com nada, caindo sempre no
+default. Corrigido com nova função `_nome_para_elo()` que remove esse
+prefixo antes de buscar no banco de ELO.
+
+Nova suíte `test_hall_fama.py` (7 testes) cobre as 3 correções sem tocar
+o SQLite real (`registrar_hall_fama()`/`get_hall_fama()` persistem via
+`get_db()`, que usa `config.PASTA_DADOS` sem nenhum isolamento de teste
+— diferente de `ROBOLOTOFACIL_DADOS_DIR`, que só `v18_1b_ia_adaptativa.py`/
+`v20_2_poda_inteligente.py` respeitam; ver nota em `tests/__init__.py`.
+Ficou fora do escopo desta correção resolver esse gap de isolamento —
+os testes novos testam a lógica pura e mockam `get_hall_fama()`).
+
+**Verificação extra pedida pelo usuário**: as tabelas SQLite `modelos` e
+`pesos_modelos` (0 registros no status do banco) foram confirmadas como
+mortas — nenhum lugar do código faz `INSERT` nelas. Provavelmente schema
+de uma versão anterior, substituído por `elo_modelos` (tabela) e
+`dados/pesos_modelos.json` (arquivo, usado por `v20_2_poda_inteligente.py`).
+Não removidas nesta rodada — é só schema não usado, não um bug ativo.
+
+## 🧪 Mapa de Diversidade — primeiro passo do "Nível 4" (Meta-Cientista) — 2026-08-08
+
+O usuário trouxe uma proposta de 5 níveis de "meta-aprendizado" pro robô,
+do nível 1 (memória + ajustes automáticos, já existente) até o nível 5
+(hipótese + experimentação + validação automatizada). Discussão completa
+não repetida aqui (ver histórico da conversa), mas o resumo da análise:
+
+- Níveis 1-2 já existem (memória, ensemble, ELO, autocalibração).
+- Nível 4 ("Meta-Cientista" rodando pequenos experimentos e só mantendo
+  o que sobrevive fora da amostra) já existe parcialmente — é exatamente
+  o que o Mapa G×P + `auditoria_cientifica.py` fazem, só que aplicado a
+  um parâmetro (G/P).
+- Níveis 3 e 5 (o robô "explicando por que" uma estratégia ganhou/perdeu,
+  em linguagem natural) foram desaconselhados: como não há sinal real
+  nesse domínio (confirmado repetidamente por todas as calibrações), um
+  sistema assim tende a gerar explicações plausíveis para puro ruído.
+- Risco identificado no próprio Nível 4 se rodar sem controle: um
+  "Cientista" testando vários hiperparâmetros continuamente, ao longo do
+  tempo, acumula tentativas sem correção — a correção Holm que já existe
+  corrige uma *rodada*, não o acumulado de todas as rodadas já feitas na
+  vida do robô. Sem orçamento fixo de experimentos e sem holdout nunca
+  tocado durante a busca, o sistema eventualmente "descobre" uma melhoria
+  falsa só pelo volume de tentativas.
+
+**Passo concreto implementado** (usuário autorizou "faça o que achar
+melhor"): `mapear_vale_diversidade()` (`v21_5_melhorias_cientificas.py`),
+espelhando `mapear_vale_gp()` linha por linha na metodologia estatística
+(Cohen's d pareado, sign-flip, TOST, correção Holm/Bonferroni) — só que
+varrendo `diversidade` (parâmetro estratégico interno do algoritmo
+genético, `estrategia.get("diversidade", 0.75)` em `genetico.py`) em vez
+de G/P, que ficam FIXOS na configuração real (G=100/P=77). A variação é
+injetada via `estrategia_override={"diversidade": d}` — mecanismo que já
+existia em `gerar_apostas()`, usado antes só internamente.
+
+Diferença chave em relação a G×P: `diversidade` não tem uma "config real
+fixa" única (é recalibrada automaticamente por `aplicar_aprendizado_na_estrategia()`
+a cada geração — ver "Ajustes atuais: diversidade=+0.019" no Dashboard
+Analítico), então não há ponto de grade especial como o antigo G=100.
+Grade padrão: `[0.5, 0.6, 0.7, 0.75, 0.8, 0.9]` (0.75 é o fallback
+hardcoded histórico).
+
+Script standalone `mapa_diversidade_custom.py` (mesmo padrão de
+`mapa_gp_custom.py`) permite rodar com grade customizada via linha de
+comando. **Não integrado à tela ainda** — mesma decisão de
+`mapa_gp_custom.py` originalmente: prototipar fora da UI primeiro, só
+integrar depois de uso e validação.
+
+**Disciplina documentada na própria função e no script** (não é só nota
+de arquitetura — está no código): grade de valores deve ser fixada a
+priori e mantida entre rodadas; qualquer "POSSIVEL_VALE" deve ser tratado
+como hipótese a confirmar numa amostra nova, não como conclusão
+definitiva — a correção Holm já embutida só protege contra múltiplas
+comparações *dentro* de uma rodada.
+
+4 testes novos em `test_estatistica_pareada.py`
+(`TestMapearValeDiversidade`), mesmo padrão de `TestMapearValeGp`.
+Testado também end-to-end com dados reais (script rodado manualmente com
+grade pequena) — funciona e produz resultado plausível. Nenhuma rodada
+com grade completa/estatisticamente poderosa foi executada nesta sessão
+(fica pra quando o usuário quiser rodar de verdade).
+
+## 🔒 Fechamento reduzido (wheel "m-k-t-g") — 2026-08-08
+
+A pedido do usuário ("pode executar tudo"), implementado o fechamento
+REDUZIDO que a docstring de `fechamento.py` já citava como pendência.
+Diferente da garantia total (todas as C(m,k) combinações do pool), o
+reduzido joga um subconjunto bem menor, com uma garantia mais fraca e
+mais condicional: **SE pelo menos `t` das dezenas sorteadas estiverem no
+pool de `m` escolhidas, então GARANTIDAMENTE pelo menos UM jogo do
+fechamento acerta pelo menos `g` dessas `t` dezenas** (nomenclatura
+clássica "wheel m-k-t-g" da literatura de loteria). Exemplo real testado:
+m=18,k=15,t=13,g=11 usa só 5 jogos, contra 816 da garantia total do
+mesmo pool.
+
+**Construção**: heurística gulosa de cobertura de conjuntos (greedy set
+cover, representação por bitmask + `int.bit_count()` pra velocidade) —
+não é garantida ótima (pode não achar o menor número de jogos possível),
+mas **toda garantia é verificada por força bruta antes de ser aceita**
+(`_verificar_garantia_reduzida()`, testando literalmente cada subconjunto
+de `t` dezenas do pool contra cada jogo construído). Se a verificação
+falhar, levanta `RuntimeError` em vez de devolver uma garantia falsa —
+decisão deliberada: uma garantia matemática incorreta seria um bug grave
+pra este projeto, não um detalhe de acabamento.
+
+**Limite prático**: pool até 19 dezenas (`TAMANHO_POOL_MAXIMO_REDUZIDO`),
+um a menos que a garantia total (20). A verificação exaustiva cresce
+rápido com o pool — testado empiricamente: m=18 leva <1s, m=19 leva até
+~12s (dependendo de t/g), m=20 já passa de 1-2 minutos em Python puro
+pra várias combinações — não compensou o custo agora.
+
+**Novo na API** (`fechamento.py`): `gerar_fechamento_reduzido()` (função
+pura), `gerar_apostas_fechamento_reduzido()` (pipeline completo, escolhe
+pool pelo ranking do ensemble — mesmo padrão de `gerar_apostas_fechamento()`),
+`_verificar_garantia_reduzida()` (a verificação de força bruta),
+`TAMANHO_POOL_MAXIMO_REDUZIDO`.
+
+**Integrado à tela** (diferente do Mapa de Diversidade, que ficou só
+como script): checkbox "Fechamento Reduzido (t/g)" + campos t/g na linha
+de checkboxes, ao lado do "Pool Fecht." já existente. Quando marcado,
+`iniciar_fechamento()`/`_executar_fechamento()` chamam
+`gerar_apostas_fechamento_reduzido()` em vez de `gerar_apostas_fechamento()`,
+com mensagens de log específicas explicando a garantia mais fraca
+(diferente da garantia total: aqui vale só pra PELO MENOS UM jogo, não
+todos, e a condição é sobre `t` dezenas, não as 15 todas).
+
+9 testes novos em `test_fechamento.py`: verificação de força bruta
+isolada (aceita/rejeita casos conhecidos), caso pequeno exaustivamente
+reconferido de fora da função, o wheel 18-15-13-11 conhecido na
+literatura, validações de parâmetro (pool/t/g fora do intervalo,
+`max_jogos` insuficiente) e o pipeline completo.
+
+## 🧹 Quality pass — cobertura de testes (parcial, deliberadamente) — 2026-08-08
+
+Parte da lista de "mais qualidade" discutida com o usuário. Varredura
+identificou 11 módulos sem nenhum teste: `persistencia.py`,
+`v21_0_auto_poda.py`, `v21_0_meta_aprendizado.py`, `v21_0_sqlite.py`,
+`v21_5_meta_competitivo.py`, `v21_5_montecarlo_cientifico.py`,
+`v21_6_impopularidade.py`, `v22_config.py`, `v22_otimizador.py`,
+`v22_pipeline.py`, `v22_relatorio.py`.
+
+**Coberto nesta rodada**: `persistencia.py` — só as funções puras
+(`resposta_parece_html`, `normalizar_df_resultados`); as demais
+(`salvar_csv_blindado`, `criar_backup_do_arquivo`, download da API
+CAIXA) fazem I/O real em `PASTA_DADOS`/`PASTA_BACKUP` — caminhos fixos
+de produção **sem isolamento via `ROBOLOTOFACIL_DADOS_DIR`** (diferente
+de outros módulos do projeto). Testar essas funções escreveria arquivos
+de verdade na pasta de produção de quem rodar a suíte — não fiz isso
+sem antes adicionar isolamento adequado, que é um trabalho à parte.
+
+**Deliberadamente NÃO coberto nesta rodada** (ficam como próximos
+passos, não como "esquecido"):
+- `v21_0_sqlite.py`: mesmo problema de isolamento — `get_db()` sempre
+  abre o SQLite real de produção, sem parâmetro de override nem respeito
+  a `ROBOLOTOFACIL_DADOS_DIR` (é a mesma causa raiz por trás dos testes
+  de `test_hall_fama.py` terem que mockar `get_hall_fama()` em vez de
+  testar `registrar_hall_fama()` direto).
+- `v22_config.py`/`v22_otimizador.py`/`v22_pipeline.py`/`v22_relatorio.py`:
+  status de uso ainda misto (parte confirmada ativa em auditorias
+  anteriores, parte historicamente marcada como órfã/experimental —
+  ver seção "🟡 MÓDULOS EXPERIMENTAIS" mais acima). Cobrir com testes
+  sem antes confirmar o que está realmente vivo arriscaria formalizar
+  comportamento de código morto.
+- `v21_5_meta_competitivo.py` (ELO), `v21_6_impopularidade.py`,
+  `v21_0_auto_poda.py`, `v21_0_meta_aprendizado.py`: código ativo e
+  testável sem grandes obstáculos, mas ficaram de fora só por escopo de
+  tempo desta rodada — bons candidatos pra uma próxima passada.
+
+**Fora de escopo por decisão deliberada** (risco alto, não por
+dificuldade): consolidar os sistemas paralelos de persistência (Hall da
+Fama/ELO em SQLite, `pesos_modelos.json`, aprendizado permanente, banco
+histórico de desempenho — a causa raiz por trás de mais de um bug já
+corrigido nesta sessão) e otimizar performance do algoritmo genético.
+Ambos tocam dado de produção real do usuário e/ou mudam comportamento
+observável — merecem sessão dedicada com escopo explícito, não um
+refactor silencioso dentro de uma resposta "faça tudo".
+
+## 🧹 Os 5 itens pendentes do fechamento do projeto — 2026-08-09
+
+Depois da rodada anterior ("já dá pra fechar o projeto?"), o usuário
+pediu pra resolver os 5 itens que eu tinha deixado deliberadamente em
+aberto. Nenhum deles mexe na parte preditiva (essa está mesmo fechada,
+ver rodada anterior) — são todos de qualidade/robustez de engenharia.
+
+**1. Oscilação da poda 4-estados** — `RODADAS_DEGRADAR`/`RODADAS_RECUPERAR`
+subiram de 2 para 3 em `v21_5_auto_poda_full.py`. Achado do próprio
+usuário: o log de "Eventos" mostrava dezenas de transições de estado em
+poucos segundos. Causa: como nenhum modelo tem vantagem real persistente
+em Lotofácil, o delta de cada modelo contra a média do grupo por rodada
+é essencialmente ruído — 2 rodadas seguidas abaixo da média bastavam pra
+degradar por puro acaso. 3 rodadas reduz a chance disso sem eliminar a
+poda de casos genuinamente ruins. Teste de regressão novo em
+`test_v21_5_auto_poda_full.py` (`test_duas_rodadas_seguidas_nao_bastam_mais_para_degradar`).
+
+**2. Registros impossíveis no Banco Histórico** — `limpar_registros_impossiveis.py`
+(raiz do projeto), script standalone que identifica e remove (com backup
+automático antes) registros com `melhor_acerto < 5` — matematicamente
+impossível pra qualquer jogo válido de Lotofácil (princípio da casa dos
+pombos: só existem 10 dezenas "erradas" no sorteio, um jogo de 15+ não
+consegue evitar todas). São os registros gerados pelo bug corrigido em
+2026-08-08. Roda em modo dry-run por padrão (`python
+limpar_registros_impossiveis.py`); só remove de fato com `--aplicar`.
+6 testes em `test_limpar_registros_impossiveis.py`.
+
+**3. Cobertura de testes para ELO/impopularidade/auto-poda/meta-aprendizado**
+— os 4 módulos ativos que tinham ficado de fora da rodada anterior de
+qualidade por escopo de tempo, agora cobertos:
+- `v21_0_auto_poda.py` (15 testes) — confirmado ativo (`calcular_limiares`
+  usado por `ui.py`, `decidir_poda_adaptativa` usado por `analise.py`).
+  `db_limiar_dinamico`/`db_prob_recuperacao` mockados (tocam SQLite real).
+- `v21_5_meta_competitivo.py` (24 testes) — ranking ELO. SQLite isolado
+  via mock de `get_db`; a camada de fallback JSON isolada redirecionando
+  `_ARQ_ELO` pra um arquivo temporário (mesma técnica já usada em
+  `_ARQ_ESTADOS` da poda 4-estados).
+- `v21_6_impopularidade.py` (23 testes) — módulo 100% puro, sem
+  necessidade de isolamento.
+- `v21_0_meta_aprendizado.py` (7 testes) — só `probabilidade_recuperacao()`,
+  a única função viva depois da limpeza de 2026-07-23.
+
+Nenhum desses módulos tinha teste antes. Todos os testes tocam apenas
+dados sintéticos/mockados — nenhum lê ou escreve nos arquivos reais de
+produção do usuário.
+
+**4. Registro canônico de nomes de modelo** — auditoria por outros bugs
+da mesma classe do ELO da Hall da Fama (nome com prefixo != nome usado
+como chave em outro lugar): achado apenas um outro ponto com esse
+padrão (`f"Modelo isolado: {modelo}"` em `backtest.py`, usado só pro
+nome de exibição no ranking científico) e ele já alimenta poda/ELO
+através da chave `modelo` sem prefixo — não é um bug, é o mesmo caso já
+corrigido. Como fatia seguramente isolável de "consolidar persistência"
+(que continua fora de escopo — ver seção anterior), criei uma única
+fonte de verdade pros 7 nomes de modelo do ensemble:
+`config.MODELOS_ENSEMBLE`. Antes essa lista de 7 strings estava
+redigitada em pelo menos 3 lugares (`v21_5_meta_competitivo.MODELOS_PADRAO`,
+o campeonato de modelos isolados em `backtest.py`, e implicitamente nos
+dicts de peso de `analise.py`/`apostas.py`). Migrei os dois primeiros
+(listas literais de nomes) pra importar de `config.MODELOS_ENSEMBLE` —
+os dicts de peso calibrado em `analise.py`/`apostas.py` ficaram de fora
+por decisão deliberada: não são listas de nomes, são valores numéricos
+ajustados a dedo por modelo, reescrever a chave de acesso ali é uma
+mudança de escopo maior e mais arriscada do que o pedido justificava.
+
+**5. Investigação de performance** — profiling com `cProfile` de um
+`gerar_apostas()` em escala de produção (G=100/P=77, histórico de 300
+concursos) achou um gargalo real e seguro de corrigir:
+`coef_variacao()` dentro de `detectar_equilíbrio_forcado()`
+(`v21_6_impopularidade.py`) usava `statistics.mean`/`statistics.stdev`,
+que internamente fazem aritmética exata com `Fraction` — muito mais
+lenta que float puro — pra calcular a média/desvio-padrão de listas de
+exatamente 5 inteiros (contagem por linha/coluna do volante 5×5). Como
+essa função roda uma vez por jogo candidato avaliado pelo algoritmo
+genético (dezenas de milhares de chamadas por execução), era o maior
+gargalo real de todo o pipeline: no profiling, sozinha respondia por
+~10s de ~24s de tempo de CPU. Reescrita em float puro (mesma fórmula de
+desvio-padrão amostral, `ddof=1`, resultado numericamente equivalente —
+os 23 testes de `test_v21_6_impopularidade.py` continuam batendo sem
+nenhuma mudança de valor esperado). Medição fim-a-fim antes/depois do
+mesmo `gerar_apostas()`: **~24s → ~5,5s** (cerca de 4,3× mais rápido).
+Não mexi no próximo maior consumidor de tempo
+(`sample_ponderado_sem_reposicao()`/`gerar_jogo_base()` em
+`genetico.py`) — é lógica central do algoritmo genético em si, não uma
+função auxiliar isolada; otimizá-la com segurança exigiria entender e
+preservar o comportamento probabilístico exato, o que é trabalho de
+escopo maior do que "um ganho seguro".

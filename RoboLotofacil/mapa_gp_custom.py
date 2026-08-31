@@ -6,10 +6,14 @@ Mapa G x P com grade de valores de G customizavel via linha de comando.
 A tela principal (ui.py -> _executar_mapa_gp) sempre chama mapear_vale_gp()
 sem passar `pontos_g`, entao a grade fica presa no default hardcoded em
 mapear_vale_gp() (v21_5_melhorias_cientificas.py): G=[80,100,120,140,160,
-200,250,300]. Nao ha campo na UI para reduzir o G minimo. Este script
-chama a mesma funcao, mesmos dados reais e mesma metodologia (estatistica
-PAREADA: Cohen's d pareado, sign-flip, TOST -- ver v20_6_bootstrap.py),
-mas com `pontos_g` livre.
+200,250] -- G=100/P=77 e a configuracao real e fixa do sistema desde
+2026-07-31 (antes G=16/P=40, trocado a pedido do usuario -- ver
+ARQUITETURA.md) e ja cai naturalmente nessa grade, sem precisar de ponto
+extra nem caso especial. Nao ha campo na UI para customizar a grade. Este
+script chama a mesma funcao, mesmos dados reais e mesma metodologia
+(estatistica PAREADA: Cohen's d pareado, sign-flip, TOST, com correcao
+Holm para multiplas comparacoes -- ver v20_6_bootstrap.py e
+auditoria_cientifica.py), mas com `pontos_g` livre.
 
 Uso:
     python mapa_gp_custom.py <janela> <passos> <qtd_jogos> <g1,g2,g3,...>
@@ -94,6 +98,7 @@ for c in resultado.get("comparacoes_pareadas", []):
     print(
         f"  G={c['g']}: {c['veredito']} | d_z={c['cohen_d_pareado']:.3f} "
         f"({c['magnitude']}) | p={c['p_value']:.4f} | "
+        f"p_ajustado={c.get('p_ajustado', c['p_value']):.4f} | "
         f"IC90%={c['ic_90']} | n={c['n']}"
     )
 

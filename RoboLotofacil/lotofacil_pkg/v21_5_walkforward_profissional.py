@@ -16,7 +16,8 @@ Indicadores gerados:
   - trend_robustez:     "MELHORANDO" / "ESTAVEL" / "PIORANDO"
 
 Funções exportadas:
-  executar_walkforward_profissional   — executa e persiste
+  executar_walkforward_profissional   — roda fn_gerar do zero em cada janela e persiste (scripts standalone)
+  registrar_walkforward_profissional  — reaproveita um resultado do V20.8 já pronto e persiste (uso pela UI)
   get_indicadores_permanentes         — lê o histórico acumulado do SQLite
   relatorio_walkforward_profissional  — relatório completo para o dashboard
 """
@@ -117,6 +118,72 @@ def _calcular_trend(historico: list[dict]) -> str:
     return "ESTAVEL"
 
 
+def _montar_indicadores(
+    resultados_wf: list[dict],
+    scores_robo: list[float],
+    scores_baseline: list[float],
+    concurso_inicio: int,
+    concurso_fim: int,
+) -> dict:
+    """
+    Calcula os indicadores permanentes a partir de scores já apurados
+    (robô vs. baseline) por janela — não roda nenhuma simulação, só
+    agrega. Compartilhado por `executar_walkforward_profissional()` e
+    `registrar_walkforward_profissional()`.
+    """
+    janelas_supera = sum(1 for r in resultados_wf if r["supera_base"])
+    robustez_temporal = round(janelas_supera / len(resultados_wf), 4)
+
+    dp = stdev(scores_robo) if len(scores_robo) > 1 else 0.0
+    cv = dp / mean(scores_robo) if mean(scores_robo) > 0 else 1.0
+    estabilidade = round(max(0.0, min(1.0, 1.0 - cv)), 4)
+
+    score_robustez_raw = score_robustez_walkforward(scores_robo)
+
+    # Overfitting via degradação treino → teste
+    deltas = [r["delta"] for r in resultados_wf]
+    delta_medio = mean(deltas) if deltas else 0.0
+    # Bug pré-existente (2026-07-21, ver ARQUITETURA.md): passava `[]` como
+    # segundo argumento posicional (limiar_degradacao), o que quebrava com
+    # TypeError assim que esta função passou a ser realmente chamada — nunca
+    # tinha sido exercitada antes porque o módulo era órfão.
+    ov_info = detectar_overfitting_wf(scores_robo)
+    overfitting_nivel = ov_info.get("severidade", "BAIXO")
+
+    # Tendência histórica
+    hist_anterior = _carregar_historico_walkforward(limit=10)
+    trend = _calcular_trend(hist_anterior + [{"robustez_temporal": robustez_temporal}])
+
+    # Veredito de robustez
+    if robustez_temporal >= 0.80:
+        veredito = "ROBUSTO"
+    elif robustez_temporal >= 0.60:
+        veredito = "ACEITÁVEL"
+    else:
+        veredito = "INSTÁVEL"
+
+    return {
+        "robustez_temporal":  robustez_temporal,
+        "robustez_pct":       round(robustez_temporal * 100, 1),
+        "estabilidade":       estabilidade,
+        "estabilidade_pct":   round(estabilidade * 100, 1),
+        "overfitting_nivel":  overfitting_nivel,
+        "trend_robustez":     trend,
+        "veredito":           veredito,
+        "score_robustez_raw": round(score_robustez_raw, 4),
+        "delta_vs_baseline":  round(delta_medio, 4),
+        "n_janelas":          len(resultados_wf),
+        "janelas_supera":     janelas_supera,
+        "media_robo":         round(mean(scores_robo), 4),
+        "media_baseline":     round(mean(scores_baseline), 4) if scores_baseline else 0.0,
+        "desvio_robo":        round(dp, 4),
+        "concurso_inicio":    concurso_inicio,
+        "concurso_fim":       concurso_fim,
+        "detalhes_janelas":   resultados_wf,
+        "versao":             "V21.5-FULL",
+    }
+
+
 def executar_walkforward_profissional(
     concursos: list,
     fn_gerar,
@@ -126,7 +193,17 @@ def executar_walkforward_profissional(
     qtd_jogos:      int = 10,
 ) -> dict:
     """
-    Executa o Walk-Forward completo com baseline, persiste e retorna indicadores.
+    Executa o Walk-Forward completo do zero (roda `fn_gerar` — o
+    algoritmo genético — em cada janela) com baseline, persiste e
+    retorna indicadores.
+
+    Uso pretendido: scripts standalone de validação, onde não existe um
+    resultado do Walk-Forward V20.8 já pronto para reaproveitar. Se você
+    já tem esse resultado (ex.: dentro do robô, logo após rodar
+    `relatorio_walkforward()`), use `registrar_walkforward_profissional()`
+    em vez desta — evita rodar o algoritmo genético duas vezes seguidas
+    nas mesmas janelas (achado de uso real: dobrava o tempo do botão
+    "🔀 Walk-Forward" sem aviso — ver 2026-07-21 no ARQUITETURA.md).
 
     Args:
         concursos:       lista de sorteios históricos (mais antigo → mais recente)
@@ -190,55 +267,84 @@ def executar_walkforward_profissional(
             "n_janelas":         0,
         }
 
-    # ── Indicadores ────────────────────────────────────────────────────────
-    janelas_supera = sum(1 for r in resultados_wf if r["supera_base"])
-    robustez_temporal = round(janelas_supera / len(resultados_wf), 4)
+    indicadores = _montar_indicadores(
+        resultados_wf, scores_robo, scores_baseline,
+        concurso_inicio=janelas[0]["treino_inicio"],
+        concurso_fim=janelas[-1]["teste_fim"],
+    )
+    _salvar_indicadores_sqlite(indicadores)
+    return indicadores
 
-    dp = stdev(scores_robo) if len(scores_robo) > 1 else 0.0
-    cv = dp / mean(scores_robo) if mean(scores_robo) > 0 else 1.0
-    estabilidade = round(max(0.0, min(1.0, 1.0 - cv)), 4)
 
-    score_robustez_raw = score_robustez_walkforward(scores_robo)
+def registrar_walkforward_profissional(
+    concursos: list,
+    resultado_walkforward_v20_8: dict,
+    qtd_jogos: int = 10,
+) -> dict:
+    """
+    Versão leve: reaproveita as janelas e os scores do robô já calculados
+    por `relatorio_walkforward()` (V20.8) em vez de rodar `fn_gerar`
+    de novo — só gera o baseline aleatório por janela (barato, sem
+    algoritmo genético) e calcula os indicadores permanentes em cima.
 
-    # Overfitting via degradação treino → teste
-    deltas = [r["delta"] for r in resultados_wf]
-    delta_medio = mean(deltas) if deltas else 0.0
-    ov_info = detectar_overfitting_wf(scores_robo, [])
-    overfitting_nivel = ov_info.get("severidade", "BAIXO")
+    Use esta função (não `executar_walkforward_profissional`) sempre que
+    já existir um resultado do Walk-Forward V20.8 na mesma sessão —
+    evita dobrar o tempo de execução do botão "🔀 Walk-Forward".
 
-    # Tendência histórica
-    hist_anterior = _carregar_historico_walkforward(limit=10)
-    trend = _calcular_trend(hist_anterior + [{"robustez_temporal": robustez_temporal}])
+    Args:
+        concursos: lista de sorteios históricos (para recortar as janelas de teste)
+        resultado_walkforward_v20_8: dict retornado por `relatorio_walkforward()`
+        qtd_jogos: apostas usadas para o baseline aleatório por janela
 
-    # Veredito de robustez
-    if robustez_temporal >= 0.80:
-        veredito = "ROBUSTO"
-    elif robustez_temporal >= 0.60:
-        veredito = "ACEITÁVEL"
-    else:
-        veredito = "INSTÁVEL"
+    Returns:
+        dict com os indicadores permanentes (mesmo formato de
+        `executar_walkforward_profissional`)
+    """
+    janelas_v20_8 = ((resultado_walkforward_v20_8 or {}).get("walkforward") or {}).get("janelas") or []
 
-    indicadores = {
-        "robustez_temporal":  robustez_temporal,
-        "robustez_pct":       round(robustez_temporal * 100, 1),
-        "estabilidade":       estabilidade,
-        "estabilidade_pct":   round(estabilidade * 100, 1),
-        "overfitting_nivel":  overfitting_nivel,
-        "trend_robustez":     trend,
-        "veredito":           veredito,
-        "score_robustez_raw": round(score_robustez_raw, 4),
-        "delta_vs_baseline":  round(delta_medio, 4),
-        "n_janelas":          len(resultados_wf),
-        "janelas_supera":     janelas_supera,
-        "media_robo":         round(mean(scores_robo), 4),
-        "media_baseline":     round(mean(scores_baseline), 4) if scores_baseline else 0.0,
-        "desvio_robo":        round(dp, 4),
-        "concurso_inicio":    janelas[0]["treino_inicio"] if janelas else 0,
-        "concurso_fim":       janelas[-1]["teste_fim"]    if janelas else 0,
-        "detalhes_janelas":   resultados_wf,
-        "versao":             "V21.5-FULL",
-    }
+    if not janelas_v20_8:
+        return {
+            "robustez_temporal":  0.0,
+            "estabilidade":       0.0,
+            "overfitting_nivel":  "INDEFINIDO",
+            "trend_robustez":     "ESTAVEL",
+            "n_janelas":          0,
+            "erro":               "Sem janelas do Walk-Forward V20.8 para reaproveitar",
+        }
 
+    scores_robo     = []
+    scores_baseline = []
+    resultados_wf   = []
+
+    for jan in janelas_v20_8:
+        teste = concursos[jan["teste_inicio"]: jan["teste_fim"]]
+        media_r = jan.get("media_acertos", 0.0)
+        sc_base = _gerar_baseline_janela(teste, qtd_jogos=max(1, qtd_jogos))
+        media_b = sc_base.get("media_acertos", 0.0)
+
+        scores_robo.append(media_r)
+        scores_baseline.append(media_b)
+        resultados_wf.append({
+            "janela":       jan.get("janela"),
+            "score_robo":   round(media_r, 4),
+            "score_base":   round(media_b, 4),
+            "delta":        round(media_r - media_b, 4),
+            "supera_base":  media_r > media_b,
+        })
+
+    if not scores_robo:
+        return {
+            "robustez_temporal": 0.0,
+            "estabilidade":      0.0,
+            "overfitting_nivel": "INDEFINIDO",
+            "n_janelas":         0,
+        }
+
+    indicadores = _montar_indicadores(
+        resultados_wf, scores_robo, scores_baseline,
+        concurso_inicio=janelas_v20_8[0].get("treino_inicio", 0),
+        concurso_fim=janelas_v20_8[-1].get("teste_fim", 0),
+    )
     _salvar_indicadores_sqlite(indicadores)
     return indicadores
 

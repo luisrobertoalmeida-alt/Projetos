@@ -256,7 +256,13 @@ def teste_significancia(
         if delta_perm >= delta_obs:
             contagem_extremos += 1
 
-    p_value = round(contagem_extremos / n_reamostras, 4)
+    # Correção +1 padrão de testes de permutação/randomização (Davison &
+    # Hinkley, 1997; North et al., 2002): a estatística observada é sempre
+    # uma das n_reamostras+1 permutações possíveis (a original incluída),
+    # então p=0.0 é logicamente impossível — sem a correção,
+    # contagem_extremos=0 relatava p=0.0 (certeza absoluta), quando o
+    # correto é 1/(n_reamostras+1) (ver 2026-07-27 no ARQUITETURA.md).
+    p_value = round((contagem_extremos + 1) / (n_reamostras + 1), 4)
     rejeita = p_value < 0.05
 
     if p_value < 0.01:
@@ -571,7 +577,8 @@ def teste_significancia_pareado(
         if mean(invertidas) >= obs:
             contagem_extremos += 1
 
-    p_value = round(contagem_extremos / n_reamostras, 4)
+    # Mesma correção +1 de teste_significancia() — ver comentário lá.
+    p_value = round((contagem_extremos + 1) / (n_reamostras + 1), 4)
     rejeita = p_value < 0.05
     if p_value < 0.01:
         nivel = "p<0.01"

@@ -28,6 +28,7 @@ Backtesting, calibração vs. aleatório, laboratório histórico,
 módulo científico V11, relatórios, dashboard e auditoria de pacotes.
 """
 import os
+import json
 import math
 import time
 import random
@@ -42,7 +43,7 @@ from .config import (
     NUMEROS, MIN_HIST, PASTA_EXPORT, PASTA_DADOS, TAMANHO_JOGO,
     ARQUIVO_DESEMPENHO_HISTORICO, ARQUIVO_CONHECIMENTO_CIENTIFICO,
     ARQUIVO_PERFORMANCE_ESTRATEGIA, ARQUIVO_APRENDIZADO,
-    VERSAO_ROBO,
+    VERSAO_ROBO, MODELOS_ENSEMBLE,
 )
 from .utils import (
     formatar_jogo, intersecao, contar_pares, soma_jogo,
@@ -51,10 +52,7 @@ from .utils import (
     normalizar_scores, definir_rng_thread, limpar_rng_thread,
 )
 from .persistencia import salvar_csv_blindado
-from .apostas import (
-    gerar_apostas, gerar_apostas_laboratorio_inteligente,
-    montar_configuracoes_laboratorio,
-)
+from .apostas import gerar_apostas
 from .genetico import (
     analisar_estrutura_jogo_cached, analisar_estrutura_jogo,
     calcular_mapa_cobertura, resumo_estrutural_pacote,
@@ -70,7 +68,6 @@ from .aprendizado import carregar_memoria_aprendizado, gerar_resumo_aprendizado
 from .apostas import (
     carregar_performance_estrategias, salvar_performance_estrategias,
     registrar_performance_geracao,
-    calcular_configuracao_assistida, explicar_configuracao_assistida,
     gerar_relatorio_evolucao_aprendizado,
 )
 
@@ -121,8 +118,6 @@ def resumir_configuracao_robo(configuracao: dict | None = None, analise: dict | 
         "populacao": configuracao.get("populacao"),
         "passos_backtest": configuracao.get("passos_backtest"),
         "modo_turbo": configuracao.get("modo_turbo"),
-        "modo_laboratorio": configuracao.get("modo_laboratorio"),
-        "assistente_auto_config": configuracao.get("assistente_auto_config"),
         "modo_estrategico": estrategia.get("modo"),
         "indice_confianca": estrategia.get("indice_confianca"),
         "ciclo_principal": estrategia.get("ciclo_principal"),
@@ -140,7 +135,23 @@ def registrar_desempenho_historico_robo(jogos: list, resultado_real: list[int], 
     if len(resultado) != 15:
         raise ValueError("Resultado real inválido para registro de desempenho.")
 
-    jogos_limpos = [sorted(set(int(n) for n in j)) for j in jogos if len(set(j)) == 15]
+    # Aceita qualquer tamanho de jogo válido na Lotofácil (15-20 -- apostas
+    # "estendidas" via o campo "Dezenas por jogo" da tela, 15-18 hoje), não
+    # só 15 fixo. Até 2026-08-08 o filtro exigia `len(set(j)) == 15`
+    # exatamente: se "Dezenas por jogo" estivesse configurado com 16, 17 ou
+    # 18 no momento da geração, TODOS os jogos do pacote eram descartados
+    # aqui silenciosamente, e a função seguia adiante calculando
+    # melhor_acerto=0/media_acertos=0.0 sobre uma lista vazia -- um
+    # resultado matematicamente impossível (o mínimo de acertos possível
+    # para um jogo de 15 dezenas contra um sorteio de 15 é 5, não 0),
+    # registrado como se fosse real (achado do usuário, ver ARQUITETURA.md).
+    jogos_limpos = [sorted(set(int(n) for n in j)) for j in jogos]
+    jogos_limpos = [j for j in jogos_limpos if 15 <= len(j) <= 20]
+    if not jogos_limpos:
+        raise ValueError(
+            "Nenhum jogo com 15-20 dezenas válidas para registrar desempenho "
+            f"(pacote recebido tinha {len(jogos)} jogo(s), nenhum no tamanho esperado)."
+        )
     acertos = [intersecao(j, resultado) for j in jogos_limpos]
     dist = dict(sorted(Counter(acertos).items()))
     melhor = max(acertos) if acertos else 0
@@ -244,6 +255,26 @@ def gerar_resumo_banco_desempenho(banco: dict | None = None, ultimos: int = 30) 
     }
 
 
+def _ranking_modelos_historico() -> list[dict]:
+    """Ranking de modelos do ensemble a partir de historico_modelos.json (Poda Inteligente V20.2)."""
+    arq = os.path.join(PASTA_DADOS, "historico_modelos.json")
+    if not os.path.exists(arq):
+        return []
+    try:
+        with open(arq, "r", encoding="utf-8") as f:
+            historico = json.load(f)
+        ranking = []
+        for modelo, dados in historico.items():
+            ranking.append({
+                "modelo": modelo,
+                "media": round(dados.get("media", 0), 4),
+                "concursos": dados.get("concursos", 0),
+            })
+        return sorted(ranking, key=lambda x: x["media"], reverse=True)
+    except Exception:
+        return []
+
+
 def gerar_dashboard_desempenho_historico() -> str:
     resumo = gerar_resumo_banco_desempenho()
     banco = carregar_banco_desempenho()
@@ -261,17 +292,30 @@ def gerar_dashboard_desempenho_historico() -> str:
                 f"11+={r.get('qtd_11_mais')} | 12+={r.get('qtd_12_mais')} | 13+={r.get('qtd_13_mais')} | "
                 f"J={cfg.get('qtd_jogos')} G={cfg.get('geracoes')} P={cfg.get('populacao')} H={cfg.get('janela_historica')}"
             )
+    ranking_modelos = _ranking_modelos_historico()
+    if ranking_modelos:
+        linhas.append("")
+        linhas.append("RANKING DE MODELOS DO ENSEMBLE")
+        linhas.append("-" * 72)
+        for i, m in enumerate(ranking_modelos[:10], start=1):
+            linhas.append(f"{i}. {m['modelo']}: média={m['media']} | concursos={m['concursos']}")
     return "\n".join(linhas)
 
 
 # =========================================================
 # EXPORTAÇÃO DE APOSTAS EM PDF
 # =========================================================
-def exportar_apostas_pdf(jogos: list, caminho_saida: str | None = None, titulo: str = "Robô Lotofácil Ultra") -> str | None:
+def exportar_apostas_pdf(jogos: list, caminho_saida: str | None = None, titulo: str = "Robô Lotofácil Ultra") -> dict:
     """
     Gera PDF com os jogos marcados visualmente no volante da Lotofácil.
     Usa apenas a biblioteca reportlab se disponível; caso contrário, exporta TXT formatado.
-    Retorna caminho do arquivo gerado.
+
+    Retorna um dict `{"arquivo": caminho, "formato": "pdf"|"txt_fallback",
+    "jogos": int, "aviso": str (só no fallback)}` — não uma string (o
+    docstring/type hint antigos diziam "retorna caminho do arquivo",
+    incoerente com o `return {...}` de ambos os ramos; corrigido em
+    2026-07-23, ver ARQUITETURA.md, junto com o wiring do botão que
+    faltava na UI).
     """
     garantir_estrutura_pastas()
     if caminho_saida is None:
@@ -495,11 +539,85 @@ def comparar_estrategias(concursos: list, janela: int, passos: int, qtd_jogos: i
 # =========================================================
 # BACKTEST
 # =========================================================
-def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 50) -> dict:
+def alimentar_poda_e_elo(registros: list[dict]) -> tuple[list[dict], str | None]:
+    """
+    Alimenta a poda inteligente V20.2 (pesos_modelos.json) e o ELO/4-fases
+    V21.5-FULL a partir de uma série de passos, cada um com pelo menos
+    `concurso_idx` e `acertos_modelo` (dict modelo -> acertos nesse passo).
+
+    Compartilhado por `backtest_basico`, `backtest_ultra_massivo`,
+    `executar_backtest_cientifico_massivo` e (2026-07-23)
+    `executar_backtest_automatico` (ui.py) — até 2026-07-18 só
+    `backtest_basico` alimentava esses dois sistemas, e até 2026-07-23
+    "🤖 BT Automático" não alimentava nenhum dos dois apesar de fazer o
+    mesmo tipo de trabalho de `backtest_basico` (ver ARQUITETURA.md).
+
+    Retorna `(poda_resultado, erro_elo)`: `poda_resultado` é a lista de
+    resultados de poda (ou `[]`); `erro_elo` é `None` se o ELO atualizou
+    normalmente, ou uma mensagem de erro se falhou — antes esse segundo
+    bloco engolia a exceção silenciosamente (`except: pass`), então uma
+    falha real no ELO (ex.: `salvar_elo` sem permissão de escrita) nunca
+    aparecia pro usuário, mesmo com a poda tendo funcionado e sido
+    logada como sucesso (ver 2026-07-23 no ARQUITETURA.md).
+    """
+    poda_resultado: list[dict] = []
+    try:
+        acum: dict[str, list[float]] = {}
+        for r in registros:
+            for nome, val in (r.get("acertos_modelo") or {}).items():
+                acum.setdefault(nome, []).append(val)
+
+        if acum:
+            media_por_modelo = {
+                nome: round(sum(vals) / len(vals), 4)
+                for nome, vals in acum.items()
+            }
+            registrar_resultado_modelo_backtest(media_por_modelo)
+            poda_resultado = avaliar_e_podar_modelos(
+                modelos_ativos=list(media_por_modelo.keys())
+            )
+            if poda_resultado:
+                for r in poda_resultado:
+                    db_registrar_evento_poda(
+                        r.get("nome", ""),
+                        r.get("estado", "ATIVO"),
+                        r.get("score_sobrevivencia", 0.0),
+                        r.get("peso_novo", 1.0),
+                    )
+    except Exception:
+        pass
+
+    erro_elo: str | None = None
+    try:
+        from .v21_5_meta_competitivo import atualizar_elo_concurso
+        from .v21_5_auto_poda_full import avaliar_estados_modelos
+
+        for idx, r in enumerate(registros):
+            acertos_passo = r.get("acertos_modelo")
+            if not acertos_passo:
+                continue
+            concurso_num = r.get("concurso_idx", idx + 1)
+            elo_result = atualizar_elo_concurso(acertos_passo, concurso=concurso_num)
+            elos_atuais = elo_result.get("elos_novos", {})
+            avaliar_estados_modelos(acertos_passo, elos=elos_atuais, concurso=concurso_num)
+    except Exception as e:
+        erro_elo = str(e)
+
+    return poda_resultado, erro_elo
+
+
+def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 50, geracoes: int = 100, pop_size: int = 77) -> dict:
     """
     Backtest basico blindado com execucao paralela para maior velocidade.
     Ao final, registra a media de acertos de cada modelo no historico e
     aciona a poda inteligente V20.2 para ajustar os pesos do ensemble.
+
+    IMPORTANTE: `geracoes`/`pop_size` devem ser a configuração REAL do robô
+    (self.geracoes/self.pop_size na UI). Até 2026-07-18 esta função ignorava
+    esses parâmetros e usava G=20/P=40 fixo no código — ou seja, a poda
+    inteligente estava sendo calibrada com o desempenho de modelos numa
+    config diferente da que "Gerar Jogos" de fato usa, contaminando os
+    pesos reais do ensemble com dados de uma simulação irrelevante.
     """
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
@@ -509,6 +627,8 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
     janela = int(janela)
     passos = int(passos)
     qtd_jogos = int(qtd_jogos)
+    geracoes = int(geracoes)
+    pop_size = int(pop_size)
 
     janela_maxima_segura = max(MIN_HIST, total - 5)
     janela = min(max(MIN_HIST, janela), janela_maxima_segura)
@@ -529,8 +649,8 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
                 base,
                 qtd_jogos=qtd_jogos,
                 janela_analise=min(janela, len(base)),
-                geracoes=20,
-                pop_size=40,
+                geracoes=geracoes,
+                pop_size=pop_size,
             )
             acertos = [intersecao(j, real) for j in jogos]
             melhor = max(acertos) if acertos else 0
@@ -568,56 +688,8 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
     melhores = [r["melhor_acerto"] for r in resumo]
     dist = Counter(melhores)
 
-    # ── V20.2: registra acertos por modelo e executa poda ──────────────────
-    poda_resultado: list[dict] = []
-    try:
-        # Acumula a media de acertos de cada modelo ao longo de todos os passos
-        acum: dict[str, list[float]] = {}
-        for r in resumo:
-            for nome, val in (r.get("acertos_modelo") or {}).items():
-                acum.setdefault(nome, []).append(val)
-
-        # Registra UMA entrada por modelo (media do backtest inteiro)
-        # para não inflar artificialmente o historico com N entradas por rodada
-        if acum:
-            media_por_modelo = {
-                nome: round(sum(vals) / len(vals), 4)
-                for nome, vals in acum.items()
-            }
-            registrar_resultado_modelo_backtest(media_por_modelo)
-            poda_resultado = avaliar_e_podar_modelos(
-                modelos_ativos=list(media_por_modelo.keys())
-            )
-            # V21.1-B/C: espelha eventos de poda no SQLite
-            if poda_resultado:
-                for r in poda_resultado:
-                    db_registrar_evento_poda(
-                        r.get("nome", ""),
-                        r.get("estado", "ATIVO"),
-                        r.get("score_sobrevivencia", 0.0),
-                        r.get("peso_novo", 1.0),
-                    )
-    except Exception:
-        pass
-
-    # ── V21.5-FULL: atualiza ELO e estados 4-fases passo a passo ───────────
-    try:
-        from .v21_5_meta_competitivo import atualizar_elo_concurso, carregar_elo
-        from .v21_5_auto_poda_full import avaliar_estados_modelos
-
-        for idx, r in enumerate(resumo):
-            acertos_passo = r.get("acertos_modelo")
-            if not acertos_passo:
-                continue
-            concurso_num = r.get("concurso_idx", idx + 1)
-            # 1. Atualiza ELO com o resultado deste passo
-            elo_result = atualizar_elo_concurso(acertos_passo, concurso=concurso_num)
-            elos_atuais = elo_result.get("elos_novos", {})
-            # 2. Avalia transição de estado (4 fases) com ELO como contexto
-            avaliar_estados_modelos(acertos_passo, elos=elos_atuais,
-                                    concurso=concurso_num)
-    except Exception:
-        pass
+    # ── V20.2/V21.5-FULL: registra acertos por modelo, poda e ELO ──────────
+    poda_resultado, erro_elo = alimentar_poda_e_elo(resumo)
 
     acertos_por_passo = [r["media_acertos"] for r in resumo]
     return {
@@ -631,6 +703,7 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
         "ultimos": resumo[-10:],
         "acertos_por_passo": acertos_por_passo,
         "poda_modelos": poda_resultado,
+        "erro_elo": erro_elo,
     }
 
 def gerar_jogos_aleatorios(qtd_jogos: int = 10) -> list[list[int]]:
@@ -702,6 +775,17 @@ def resumir_linhas_calibracao(linhas: list, prefixo: str) -> dict:
     }
 
 
+def _descricao_seed() -> str:
+    """
+    Descreve o estado da seed no momento da chamada, para registro nos
+    relatórios (auditoria: permite saber depois se um resultado veio de
+    seed fixa e reproduzível, ou de entropia real). Lê `config.SEED`,
+    atualizado por `seed_global()`/`_aplicar_seed_configurada()` (ui.py)
+    logo antes de cada operação.
+    """
+    return f"fixa ({_cfg.SEED})" if _cfg.SEED is not None else "aleatória"
+
+
 def salvar_relatorio_calibracao(resultado: dict) -> str:
     garantir_estrutura_pastas()
     timestamp = gerar_timestamp_arquivo()
@@ -718,6 +802,7 @@ def salvar_relatorio_calibracao(resultado: dict) -> str:
         f"Jogos por pacote: {resultado.get('qtd_jogos', 0)}",
         f"Geracoes: {resultado.get('geracoes', 0)}",
         f"Populacao: {resultado.get('pop_size', 0)}",
+        f"Seed: {_descricao_seed()}",
         "",
         "ROBO",
         f"Media do melhor jogo: {robo.get('media_melhor', 0)}",
@@ -765,7 +850,7 @@ def salvar_relatorio_calibracao(resultado: dict) -> str:
     return resultado
 
 
-def calibrar_robo_vs_aleatorio(concursos: list, janela: int = 120, qtd_jogos: int = 10, passos: int = 50, geracoes: int = 20, pop_size: int = 40, status_cb=None) -> dict:
+def calibrar_robo_vs_aleatorio(concursos: list, janela: int = 120, qtd_jogos: int = 10, passos: int = 50, geracoes: int = 100, pop_size: int = 77, status_cb=None) -> dict:
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
     if total < MIN_HIST + 10:
@@ -896,218 +981,15 @@ def calibrar_robo_vs_aleatorio(concursos: list, janela: int = 120, qtd_jogos: in
     return salvar_relatorio_calibracao(resultado)
 
 
-def salvar_relatorio_laboratorio_historico(resultado: dict) -> str:
-    garantir_estrutura_pastas()
-    timestamp = gerar_timestamp_arquivo()
-    caminho_txt = os.path.join(PASTA_EXPORT, f"laboratorio_historico_vs_aleatorio_{timestamp}.txt")
-    caminho_csv = os.path.join(PASTA_EXPORT, f"laboratorio_historico_vs_aleatorio_{timestamp}.csv")
-
-    linhas_txt = [
-        "===== LABORATORIO HISTORICO VS ALEATORIO =====",
-        f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-        f"Concursos testados por configuracao: {resultado.get('passos', 0)}",
-        f"Janela historica: {resultado.get('janela', 0)}",
-        f"Jogos por pacote: {resultado.get('qtd_jogos', 0)}",
-        "",
-        "RANKING",
-    ]
-
-    for pos, item in enumerate(resultado.get("ranking", []), start=1):
-        sig = item.get("significancia", {})
-        sig_str = ""
-        if sig:
-            sig_str = (
-                f" | p={sig.get('p_value', 1):.4f} "
-                f"({'✅SIG' if sig.get('significativo') else '⚠️n.sig'})"
-                f" IC95%[{sig.get('ic_95_inferior', 0):.1%},{sig.get('ic_95_superior', 0):.1%}]"
-            )
-        linhas_txt.append(
-            f"#{pos} {item.get('nome', '')} | score={item.get('score_ranking', 0)} | "
-            f"11+={item.get('pct_pacotes_11_mais', 0)}% | 12+={item.get('pct_pacotes_12_mais', 0)}% | "
-            f"13+={item.get('pct_pacotes_13_mais', 0)}% | media_melhor={item.get('media_melhor', 0)} | "
-            f"vantagem_score={item.get('vantagem_media_score', 0)} | G={item.get('geracoes', 0)} | P={item.get('pop_size', 0)}"
-            f"{sig_str}"
-        )
-
-    vencedor = (resultado.get("ranking") or [{}])[0]
-    linhas_txt.extend([
-        "",
-        "CONFIGURACAO RECOMENDADA",
-        f"Nome: {vencedor.get('nome', '')}",
-        f"Geracoes: {vencedor.get('geracoes', 0)}",
-        f"Populacao: {vencedor.get('pop_size', 0)}",
-        f"Score historico: {vencedor.get('score_ranking', 0)}",
-        "",
-        "Observacao: ranking historico nao garante sorteio futuro; use como calibracao, nao como promessa.",
-    ])
-
-    with open(caminho_txt, "w", encoding="utf-8") as f:
-        f.write("\n".join(linhas_txt))
-
-    try:
-        pd.DataFrame(resultado.get("linhas", [])).to_csv(caminho_csv, index=False, encoding="utf-8-sig")
-    except Exception:
-        caminho_csv = ""
-
-    resultado["arquivo_txt"] = caminho_txt
-    resultado["arquivo_csv"] = caminho_csv
-    return resultado
-
-
-def calibrar_laboratorio_historico_vs_aleatorio(  # -> dict
-    concursos,
-    janela=120,
-    qtd_jogos=10,
-    passos=30,
-    geracoes_max=250,
-    pop_size_max=180,
-    status_cb=None,
-    seed=None,
-):
-    treino, validacao, teste = split_temporal(concursos)
-    total = len(concursos or [])
-    if total < MIN_HIST + 10:
-        raise ValueError(f"Historico insuficiente para laboratorio historico: {total} concursos. Use ao menos {MIN_HIST + 10}.")
-
-    # Item 3 — seed reproduzível: se fornecida, fixa o estado global de random
-    # antes de iniciar o laboratório para garantir comparabilidade entre execuções.
-    if seed is not None:
-        random.seed(seed)
-
-    janela = min(max(MIN_HIST, int(janela)), max(MIN_HIST, total - 5))
-    passos = min(max(1, int(passos)), max(1, total - janela))
-    qtd_jogos = min(max(5, int(qtd_jogos)), 50)
-    inicio = max(janela, total - passos)
-    configs = montar_configuracoes_laboratorio(geracoes_max, pop_size_max)
-
-    linhas = []
-    ranking = []
-
-    for idx_cfg, cfg in enumerate(configs, start=1):
-        nome = cfg["nome"]
-        ger = int(cfg["geracoes"])
-        pop = int(cfg["pop_size"])
-        if status_cb:
-            status_cb(f"[{idx_cfg}/{len(configs)}] Laboratorio historico: {nome} | G={ger} | P={pop}")
-
-        # Reinicia seed por configuração para que cada perfil seja comparado
-        # nas mesmas condições aleatórias (elimina viés de ordem de execução).
-        if seed is not None:
-            random.seed(seed)
-
-        linhas_cfg = []
-        t0 = time.time()
-        for pos, i in enumerate(range(inicio, total), start=1):
-            base = concursos[:i]
-            real = sorted(concursos[i])
-            jogos_robo, analise, pesos = gerar_apostas(
-                base,
-                qtd_jogos=qtd_jogos,
-                janela_analise=min(janela, len(base)),
-                geracoes=ger,
-                pop_size=pop,
-            )
-            jogos_aleatorios = gerar_jogos_aleatorios(qtd_jogos)
-
-            resumo_robo = resumir_acertos_pacote([intersecao(j, real) for j in jogos_robo])
-            resumo_aleatorio = resumir_acertos_pacote([intersecao(j, real) for j in jogos_aleatorios])
-            score_robo = score_calibracao_pacote(resumo_robo)
-            score_aleatorio = score_calibracao_pacote(resumo_aleatorio)
-            linha = {
-                "configuracao": nome,
-                "geracoes": ger,
-                "pop_size": pop,
-                "teste": pos,
-                "concurso_idx": i + 1,
-                "resultado_real": formatar_jogo(real),
-                "melhor_robo": resumo_robo["melhor"],
-                "media_robo": resumo_robo["media"],
-                "qtd_11_mais_robo": resumo_robo["qtd_11_mais"],
-                "qtd_12_mais_robo": resumo_robo["qtd_12_mais"],
-                "qtd_13_mais_robo": resumo_robo["qtd_13_mais"],
-                "score_robo": score_robo,
-                "melhor_aleatorio": resumo_aleatorio["melhor"],
-                "media_aleatorio": resumo_aleatorio["media"],
-                "qtd_11_mais_aleatorio": resumo_aleatorio["qtd_11_mais"],
-                "qtd_12_mais_aleatorio": resumo_aleatorio["qtd_12_mais"],
-                "qtd_13_mais_aleatorio": resumo_aleatorio["qtd_13_mais"],
-                "score_aleatorio": score_aleatorio,
-                "vantagem_score_robo": round(score_robo - score_aleatorio, 3),
-            }
-            linhas.append(linha)
-            linhas_cfg.append(linha)
-
-            if status_cb and (pos == 1 or pos % 5 == 0 or pos == passos):
-                status_cb(
-                    f"  {nome} {pos}/{passos} | robo melhor={resumo_robo['melhor']} | "
-                    f"aleatorio melhor={resumo_aleatorio['melhor']}"
-                )
-
-        resumo_robo = resumir_linhas_calibracao(linhas_cfg, "robo")
-        vantagens = [float(r["vantagem_score_robo"]) for r in linhas_cfg]
-        score_ranking = round(
-            float(resumo_robo.get("media_score", 0))
-            + float(resumo_robo.get("pct_pacotes_11_mais", 0)) * 0.10
-            + float(resumo_robo.get("pct_pacotes_12_mais", 0)) * 0.25
-            + float(resumo_robo.get("pct_pacotes_13_mais", 0)) * 0.60
-            + (sum(vantagens) / len(vantagens) if vantagens else 0),
-            3,
-        )
-        item = {
-            "nome": nome,
-            "geracoes": ger,
-            "pop_size": pop,
-            "score_ranking": score_ranking,
-            "tempo_s": round(time.time() - t0, 2),
-            "vantagem_media_score": round(sum(vantagens) / len(vantagens), 3) if vantagens else 0,
-            "robo_venceu_score": sum(1 for v in vantagens if v > 0),
-            "aleatorio_venceu_score": sum(1 for v in vantagens if v < 0),
-            **resumo_robo,
-        }
-        # Item 1 — p-value por configuração: testa se a vantagem observada é
-        # estatisticamente significativa ou pode ser explicada por acaso.
-        sig = teste_significancia_calibracao(
-            item["robo_venceu_score"],
-            item["aleatorio_venceu_score"],
-            empates=sum(1 for v in vantagens if v == 0),
-        )
-        item["significancia"] = sig
-        ranking.append(item)
-        if status_cb:
-            status_cb(
-                f"  Resultado {nome}: score={score_ranking} | 11+={item.get('pct_pacotes_11_mais', 0)}% | "
-                f"12+={item.get('pct_pacotes_12_mais', 0)}% | vantagem={item.get('vantagem_media_score', 0)}"
-            )
-            status_cb(
-                f"  Significância: p={sig['p_value']:.4f} | "
-                f"{'✅ SIGNIFICATIVO' if sig['significativo'] else '⚠️ não significativo'} | "
-                f"IC95% [{sig['ic_95_inferior']:.1%}, {sig['ic_95_superior']:.1%}]"
-                + (f" | ~{sig['passos_extras_para_significancia']} passos extras para p<0.05" if sig.get('passos_extras_para_significancia') else "")
-            )
-
-    ranking = sorted(ranking, key=lambda r: r["score_ranking"], reverse=True)
-    resultado = {
-        "tipo": "laboratorio_historico_vs_aleatorio",
-        "passos": passos,
-        "janela": janela,
-        "qtd_jogos": qtd_jogos,
-        "ranking": ranking,
-        "linhas": linhas,
-    }
-    return salvar_relatorio_laboratorio_historico(resultado)
-
-
 def salvar_relatorio_auto_diagnostico(resultado: dict) -> str:
     garantir_estrutura_pastas()
     timestamp = gerar_timestamp_arquivo()
     caminho_txt = os.path.join(PASTA_EXPORT, f"auto_diagnostico_lotofacil_{timestamp}.txt")
 
     calibracao = resultado.get("calibracao") or {}
-    lab = resultado.get("laboratorio_historico") or {}
     comparador = resultado.get("comparador") or []
     robo = calibracao.get("resumo_robo", {})
     aleatorio = calibracao.get("resumo_aleatorio", {})
-    vencedor_lab = (lab.get("ranking") or [{}])[0]
     vencedor_comp = comparador[0] if comparador else {}
 
     linhas = [
@@ -1117,6 +999,7 @@ def salvar_relatorio_auto_diagnostico(resultado: dict) -> str:
         f"Janela historica: {resultado.get('janela', 0)}",
         f"Passos: {resultado.get('passos', 0)}",
         f"Jogos por pacote: {resultado.get('qtd_jogos', 0)}",
+        f"Seed: {_descricao_seed()}",
         "",
         "1) CALIBRACAO ROBO VS ALEATORIO",
         f"Robo pacotes 11+: {robo.get('pct_pacotes_11_mais', 0)}%",
@@ -1127,16 +1010,7 @@ def salvar_relatorio_auto_diagnostico(resultado: dict) -> str:
         f"Vantagem media de score: {calibracao.get('vantagem_media_score', 0)}",
         f"Arquivo calibracao: {calibracao.get('arquivo_txt', '')}",
         "",
-        "2) LABORATORIO HISTORICO",
-        f"Vencedor: {vencedor_lab.get('nome', '')}",
-        f"Geracoes recomendadas: {vencedor_lab.get('geracoes', 0)}",
-        f"Populacao recomendada: {vencedor_lab.get('pop_size', 0)}",
-        f"Score historico: {vencedor_lab.get('score_ranking', 0)}",
-        f"Pacotes 11+: {vencedor_lab.get('pct_pacotes_11_mais', 0)}%",
-        f"Pacotes 12+: {vencedor_lab.get('pct_pacotes_12_mais', 0)}%",
-        f"Arquivo laboratorio: {lab.get('arquivo_txt', '')}",
-        "",
-        "3) COMPARADOR DE ESTRATEGIAS",
+        "2) COMPARADOR DE ESTRATEGIAS",
         f"Estrategia vencedora: {vencedor_comp.get('nome', '')}",
         f"Score: {vencedor_comp.get('score_ponderado', 0)}",
         f"Media do melhor jogo: {vencedor_comp.get('media_melhor', 0)}",
@@ -1147,11 +1021,6 @@ def salvar_relatorio_auto_diagnostico(resultado: dict) -> str:
     ]
 
     recomendacao = []
-    if vencedor_lab:
-        recomendacao.append(
-            f"Use como ponto de partida a configuracao '{vencedor_lab.get('nome', '')}' "
-            f"(G={vencedor_lab.get('geracoes', 0)}, P={vencedor_lab.get('pop_size', 0)})."
-        )
     if vencedor_comp:
         recomendacao.append(f"No comparador, a estrategia mais forte foi '{vencedor_comp.get('nome', '')}'.")
     if float(calibracao.get("vantagem_media_score", 0) or 0) <= 0:
@@ -1192,7 +1061,7 @@ def executar_auto_diagnostico_lotofacil(  # -> dict
     pop_size = max(20, int(pop_size))
 
     if status_cb:
-        status_cb("Auto Diagnostico 1/3: calibrando robo vs aleatorio...")
+        status_cb("Auto Diagnostico 1/2: calibrando robo vs aleatorio...")
     calibracao = calibrar_robo_vs_aleatorio(
         concursos,
         janela=janela,
@@ -1204,19 +1073,7 @@ def executar_auto_diagnostico_lotofacil(  # -> dict
     )
 
     if status_cb:
-        status_cb("Auto Diagnostico 2/3: rodando Laboratorio Historico...")
-    laboratorio = calibrar_laboratorio_historico_vs_aleatorio(
-        concursos,
-        janela=janela,
-        qtd_jogos=qtd_jogos,
-        passos=passos,
-        geracoes_max=geracoes,
-        pop_size_max=pop_size,
-        status_cb=status_cb,
-    )
-
-    if status_cb:
-        status_cb("Auto Diagnostico 3/3: comparando estrategias...")
+        status_cb("Auto Diagnostico 2/2: comparando estrategias...")
     comparador = comparar_estrategias(
         concursos,
         janela=janela,
@@ -1234,7 +1091,6 @@ def executar_auto_diagnostico_lotofacil(  # -> dict
         "geracoes": geracoes,
         "pop_size": pop_size,
         "calibracao": calibracao,
-        "laboratorio_historico": laboratorio,
         "comparador": comparador,
     })
 
@@ -1274,6 +1130,7 @@ def salvar_relatorio_backtest_ultra(resultado: dict) -> str:
     linhas.append("=" * 78 + "\n")
     linhas.append(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     linhas.append(f"Passos: {resultado.get('passos')} | Janela: {resultado.get('janela')} | Jogos por rodada: {resultado.get('qtd_jogos')}\n")
+    linhas.append(f"Seed: {_descricao_seed()}\n")
     linhas.append(f"Configuração vencedora: {resultado.get('configuracao_vencedora', {}).get('nome', '')}\n\n")
 
     linhas.append("RANKING DAS CONFIGURAÇÕES\n")
@@ -1300,11 +1157,22 @@ def salvar_relatorio_backtest_ultra(resultado: dict) -> str:
     return caminho
 
 
-def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 200, status_cb=None) -> dict:
+def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 20, passos: int = 200, status_cb=None, geracoes: int = 100, pop_size: int = 77) -> dict:
     """
-    Backtest pesado blindado.
-    Compara configurações evolutivas e gera ranking textual, campeonato entre modelos
-    e relatório .txt em exportações.
+    Backtest pesado blindado, com a configuração G/P real do robô.
+
+    Até 2026-07-18 esta função comparava 3 variantes que só diferiam por
+    escala de gerações/população ("Ultra Rápido" G=16/P=36, "Ultra
+    Equilibrado" G=24/P=52, "Ultra Forte" G=34/P=70) — nenhuma delas era a
+    configuração fixa de verdade, e o Mapa G×P já confirmou equivalência
+    estatística nessa faixa toda, então a comparação só custava tempo (3x
+    as simulações) para declarar um "vencedor" arbitrário entre configs que
+    sabemos indistinguíveis. Pior: esse resultado (baseado em G/P que não é
+    o do robô) não alimentava a poda de modelos — mas dava a falsa
+    impressão de estar validando "o robô". Reduzido para uma única
+    simulação com a configuração real (`geracoes`/`pop_size`, parâmetros
+    repassados por quem chama — normalmente `self.geracoes`/`self.pop_size`
+    da UI; G=16/P=40 até 2026-07-18, G=100/P=77 desde 2026-07-31).
     """
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
@@ -1314,6 +1182,8 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
     janela = int(janela)
     passos = int(passos)
     qtd_jogos = int(qtd_jogos)
+    geracoes = int(geracoes)
+    pop_size = int(pop_size)
 
     # A janela precisa deixar concursos posteriores para simulação.
     janela_maxima_segura = max(MIN_HIST, total - 5)
@@ -1324,70 +1194,76 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
     qtd_jogos = min(max(5, qtd_jogos), 30)
     inicio = max(janela, total - passos)
 
-    configs = [
-        {"nome": "Ultra Rápido", "geracoes": 16, "pop_size": 36},
-        {"nome": "Ultra Equilibrado", "geracoes": 24, "pop_size": 52},
-        {"nome": "Ultra Forte", "geracoes": 34, "pop_size": 70},
-    ]
-
     def avisar(msg: str) -> None:
         if status_cb:
             status_cb(msg)
 
-    resultados_config = []
     acumulador_modelos = Counter()
     presenca_modelos = Counter()
+    registros = []
 
-    total_tarefas = len(configs) * (total - inicio)
-    tarefa = 0
+    total_tarefas = total - inicio
+    avisar(f"Backtest ultra massivo: G={geracoes} | P={pop_size} (configuração real do robô)")
+    for tarefa, i in enumerate(range(inicio, total), start=1):
+        base = concursos[:i]
+        real = concursos[i]
+        jogos, analise, pesos = gerar_apostas(
+            base,
+            qtd_jogos=qtd_jogos,
+            janela_analise=min(janela, len(base)),
+            geracoes=geracoes,
+            pop_size=pop_size,
+        )
+        acertos = [intersecao(j, real) for j in jogos]
+        melhor = max(acertos) if acertos else 0
+        media_acertos = round(sum(acertos) / len(acertos), 3) if acertos else 0
+        modo = (analise.get("estrategia") or {}).get("modo", "")
+        confianca_modelos = ((analise.get("ensemble") or {}).get("confianca_modelos") or {})
+        for modelo, peso in confianca_modelos.items():
+            acumulador_modelos[modelo] += float(peso)
+            presenca_modelos[modelo] += 1
 
-    for cfg in configs:
-        registros = []
-        avisar(f"Testando configuração: {cfg['nome']} | gerações={cfg['geracoes']} | população={cfg['pop_size']}")
-        for i in range(inicio, total):
-            tarefa += 1
-            base = concursos[:i]
-            real = concursos[i]
-            jogos, analise, pesos = gerar_apostas(
-                base,
-                qtd_jogos=qtd_jogos,
-                janela_analise=min(janela, len(base)),
-                geracoes=cfg["geracoes"],
-                pop_size=cfg["pop_size"],
-            )
-            acertos = [intersecao(j, real) for j in jogos]
-            melhor = max(acertos) if acertos else 0
-            media_acertos = round(sum(acertos) / len(acertos), 3) if acertos else 0
-            modo = (analise.get("estrategia") or {}).get("modo", "")
-            confianca_modelos = ((analise.get("ensemble") or {}).get("confianca_modelos") or {})
-            for modelo, peso in confianca_modelos.items():
-                acumulador_modelos[modelo] += float(peso)
-                presenca_modelos[modelo] += 1
-            registros.append({
-                "concurso_idx": i + 1,
-                "melhor_acerto": melhor,
-                "media_acertos": media_acertos,
-                "modo": modo,
-            })
-            if tarefa % 10 == 0 or tarefa == total_tarefas:
-                avisar(f"Backtest ultra: {tarefa}/{total_tarefas} simulações concluídas.")
+        # Mesmo calculo de acertos por modelo que backtest_basico usa para
+        # alimentar poda inteligente/ELO (ver alimentar_poda_e_elo) — antes
+        # só o modo <120 passos fazia isso, deixando o robô real sem
+        # atualização de pesos sempre que "Ultra Massivo" era acionado.
+        acertos_modelo: dict[str, float] = {}
+        try:
+            modelos_scores = ((analise.get("ensemble") or {}).get("modelos") or {})
+            for nome, scores_dez in modelos_scores.items():
+                if not scores_dez:
+                    continue
+                top15 = sorted(scores_dez, key=lambda n: scores_dez[n], reverse=True)[:15]
+                acertos_modelo[nome] = float(intersecao(top15, real))
+        except Exception:
+            pass
 
-        resumo = resumir_serie_backtest(registros)
-        resumo.update({
-            "nome": cfg["nome"],
-            "geracoes": cfg["geracoes"],
-            "pop_size": cfg["pop_size"],
-            "ultimos": registros[-20:],
-            # Serie completa por passo (mesma convencao de backtest_basico) --
-            # sem isso, Bootstrap IC nao tem como calcular variancia real e
-            # cai num fallback degenerado (media replicada, erro padrao 0).
-            "acertos_por_passo": [r["media_acertos"] for r in registros],
+        registros.append({
+            "concurso_idx": i + 1,
+            "melhor_acerto": melhor,
+            "media_acertos": media_acertos,
+            "modo": modo,
+            "acertos_modelo": acertos_modelo,
         })
-        resultados_config.append(resumo)
-        avisar(f"Resultado {cfg['nome']}: score={resumo['score']} | média melhor={resumo['media_melhor']} | máx={resumo['max_melhor']}")
+        if tarefa % 10 == 0 or tarefa == total_tarefas:
+            avisar(f"Backtest ultra: {tarefa}/{total_tarefas} simulações concluídas.")
 
-    ranking = sorted(resultados_config, key=lambda r: r.get("score", 0), reverse=True)
-    vencedor = ranking[0] if ranking else {}
+    _poda_resultado_ultra, _erro_elo_ultra = alimentar_poda_e_elo(registros)
+    if _erro_elo_ultra:
+        avisar(f"⚠️ ELO/4-fases não pôde ser atualizado: {_erro_elo_ultra}")
+
+    resumo = resumir_serie_backtest(registros)
+    resumo.update({
+        "nome": f"Configuração validada (G={geracoes}/P={pop_size})",
+        "geracoes": geracoes,
+        "pop_size": pop_size,
+        "ultimos": registros[-20:],
+        # Serie completa por passo (mesma convencao de backtest_basico) --
+        # sem isso, Bootstrap IC nao tem como calcular variancia real e
+        # cai num fallback degenerado (media replicada, erro padrao 0).
+        "acertos_por_passo": [r["media_acertos"] for r in registros],
+    })
+    avisar(f"Resultado: score={resumo['score']} | média melhor={resumo['media_melhor']} | máx={resumo['max_melhor']}")
 
     ranking_modelos = []
     for modelo, total_peso in acumulador_modelos.items():
@@ -1404,14 +1280,14 @@ def backtest_ultra_massivo(concursos: list, janela: int = 120, qtd_jogos: int = 
         "passos": total - inicio,
         "janela": janela,
         "qtd_jogos": qtd_jogos,
-        "ranking_configuracoes": ranking,
+        "ranking_configuracoes": [resumo],
         "ranking_modelos": ranking_modelos,
-        "configuracao_vencedora": vencedor,
-        "media_melhor": vencedor.get("media_melhor", 0),
-        "max_melhor": vencedor.get("max_melhor", 0),
-        "distribuicao": vencedor.get("distribuicao", {}),
-        "ultimos": vencedor.get("ultimos", []),
-        "acertos_por_passo": vencedor.get("acertos_por_passo", []),
+        "configuracao_vencedora": resumo,
+        "media_melhor": resumo.get("media_melhor", 0),
+        "max_melhor": resumo.get("max_melhor", 0),
+        "distribuicao": resumo.get("distribuicao", {}),
+        "ultimos": resumo.get("ultimos", []),
+        "acertos_por_passo": resumo.get("acertos_por_passo", []),
     }
     resultado["arquivo_relatorio"] = salvar_relatorio_backtest_ultra(resultado)
     return resultado
@@ -1488,7 +1364,7 @@ def _resumo_cientifico(nome: str, tipo: str, registros: list, extra: dict | None
     }
 
 
-def montar_configuracoes_cientificas(geracoes_base: int, pop_base: int) -> list[dict]:
+def montar_configuracoes_cientificas() -> list[dict]:
     """
     Configurações testadas pelo Backtest Científico V11.
 
@@ -1497,17 +1373,23 @@ def montar_configuracoes_cientificas(geracoes_base: int, pop_base: int) -> list[
     científica", "Exploratória forte", além da base) — o Mapa G x P
     (n=300, TOST margem=0.3) confirmou equivalência estatística entre
     G=16 e G=300, então essa busca comparava configurações que já
-    sabemos indistinguíveis, custando tempo à toa. `geracoes_base`/
-    `pop_base` (parâmetros da função) seguem aceitos por compatibilidade
-    de assinatura, mas não são mais usados para gerar variantes de G/P.
+    sabemos indistinguíveis, custando tempo à toa. A função não recebe
+    mais `geracoes`/`pop_size` do chamador (2026-07-19): recebê-los sem
+    usá-los para nada dava a falsa impressão de que o G/P configurado na
+    tela influenciava as variantes testadas, quando na prática elas
+    sempre foram G/P fixo — que é, coincidentemente, a própria
+    configuração real do robô (G=16/P=40 até 2026-07-18; G=100/P=77
+    desde 2026-07-31, a pedido do usuário — ver ARQUITETURA.md; a
+    equivalência estatística entre os dois vale igual, então a troca não
+    muda o desempenho esperado).
 
-    Mantém só a comparação que ainda faz sentido: G/P fixo (35/27) vs.
+    Mantém só a comparação que ainda faz sentido: G/P fixo (100/77) vs.
     a mesma config com diversidade ampliada (parâmetro não testado até
     agora).
     """
     candidatos = [
-        {"nome": "Configuração validada (G=35/P=27)", "geracoes": 35, "pop_size": 27},
-        {"nome": "Diversidade ampliada", "geracoes": 35, "pop_size": 27, "override": {"diversidade": 0.86, "limite_intersecao": 11}},
+        {"nome": "Configuração validada (G=100/P=77)", "geracoes": 100, "pop_size": 77},
+        {"nome": "Diversidade ampliada", "geracoes": 100, "pop_size": 77, "override": {"diversidade": 0.86, "limite_intersecao": 11}},
     ]
     return candidatos
 
@@ -1519,6 +1401,25 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
     2) Campeonato entre modelos do ensemble.
     3) Autocalibração de gerações/população/diversidade.
     4) Banco de conhecimento histórico do próprio robô.
+
+    Desde 2026-07-18, o campeonato de modelos (fase 2) também alimenta a
+    poda inteligente (`pesos_modelos.json`) e o ELO/4-fases via
+    `alimentar_poda_e_elo()` — a mesma infraestrutura que `backtest_basico`
+    e `backtest_ultra_massivo` alimentam a cada rodada, só que aqui com uma
+    medição mais rigorosa (pipeline completo por modelo isolado via
+    `forcar_modelo`, não uma extração bruta de top-15). Funciona como
+    correção periódica por cima da atualização contínua e barata do
+    "📊 Backtest".
+
+    `geracoes`/`pop_size` (parâmetros desta função) são validados/limitados
+    mas não influenciam mais nenhuma fase: a fase 1
+    (`montar_configuracoes_cientificas()`) sempre testa G/P fixo (G=100/P=77
+    desde 2026-07-31), e a
+    fase 2 (campeonato de modelos) sempre herda G/P do vencedor da fase 1
+    (`vencedor_config`), que também já vem com "geracoes"/"pop_size"
+    preenchidos — o fallback para os parâmetros do caller nunca dispara na
+    prática. Mantidos na assinatura só por estabilidade de chamada externa
+    (ver 2026-07-19 no ARQUITETURA.md).
     """
     treino, validacao, teste = split_temporal(concursos)
     total = len(concursos or [])
@@ -1539,7 +1440,7 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
         if status_cb:
             status_cb(msg)
 
-    def rodar_variante(nome: str, tipo: str, ger: int, pop: int, override: dict | None = None) -> dict:
+    def rodar_variante(nome: str, tipo: str, ger: int, pop: int, override: dict | None = None) -> tuple[dict, list[dict]]:
         override = dict(override or {})
         registros = []
         t0 = time.time()
@@ -1564,34 +1465,57 @@ def executar_backtest_cientifico_massivo(concursos: list, janela: int = 120, qtd
             })
             if pos == 1 or pos % 10 == 0 or pos == len(indices):
                 avisar(f"{nome}: {pos}/{len(indices)} testes concluídos.")
-        return _resumo_cientifico(nome, tipo, registros, {
+        resumo = _resumo_cientifico(nome, tipo, registros, {
             "geracoes": int(ger),
             "pop_size": int(pop),
             "override": override,
             "tempo_s": round(time.time() - t0, 1),
         })
+        return resumo, registros
 
     avisar("Fase 1/4: Backtest científico por configurações...")
-    configs = montar_configuracoes_cientificas(geracoes, pop_size)
+    configs = montar_configuracoes_cientificas()
     resultados_config = []
     for cfg in configs:
-        resultados_config.append(rodar_variante(
+        resumo_cfg, _ = rodar_variante(
             cfg["nome"], "configuracao", cfg["geracoes"], cfg["pop_size"], cfg.get("override")
-        ))
+        )
+        resultados_config.append(resumo_cfg)
     ranking_config = sorted(resultados_config, key=lambda r: r.get("score_cientifico", 0), reverse=True)
     vencedor_config = ranking_config[0] if ranking_config else {}
 
     avisar("Fase 2/4: Campeonato entre modelos do ensemble...")
-    modelos = ["estatistico", "markov", "bayesiano", "tendencia", "neural_leve", "cobertura", "pares_trios"]
+    modelos = list(MODELOS_ENSEMBLE)
     resultados_modelos = []
+    registros_por_modelo: dict[str, list[dict]] = {}
     ger_v = int(vencedor_config.get("geracoes", geracoes) or geracoes)
     pop_v = int(vencedor_config.get("pop_size", pop_size) or pop_size)
     for modelo in modelos:
-        resultados_modelos.append(rodar_variante(
+        resumo_modelo, registros_modelo = rodar_variante(
             f"Modelo isolado: {modelo}", "modelo", ger_v, pop_v, {"forcar_modelo": modelo}
-        ))
+        )
+        resultados_modelos.append(resumo_modelo)
+        registros_por_modelo[modelo] = registros_modelo
     ranking_modelos = sorted(resultados_modelos, key=lambda r: r.get("score_cientifico", 0), reverse=True)
     vencedor_modelo = ranking_modelos[0] if ranking_modelos else {}
+
+    # Alimenta poda inteligente (pesos_modelos.json) e ELO/4-fases com o
+    # campeonato de modelos isolados — metodologia mais rigorosa que a do
+    # backtest_basico (roda o pipeline completo por modelo, não extrai um
+    # top-15 bruto), usada aqui como correção periódica por cima da
+    # atualização contínua e barata que o "📊 Backtest" já faz a cada rodada.
+    try:
+        por_passo: dict[int, dict] = {}
+        for modelo, registros_modelo in registros_por_modelo.items():
+            for r in registros_modelo:
+                idx = r["concurso_idx"]
+                entrada = por_passo.setdefault(idx, {"concurso_idx": idx, "acertos_modelo": {}})
+                entrada["acertos_modelo"][modelo] = r["media_acertos"]
+        _, _erro_elo_cientifico = alimentar_poda_e_elo(list(por_passo.values()))
+        if _erro_elo_cientifico:
+            avisar(f"⚠️ ELO/4-fases não pôde ser atualizado: {_erro_elo_cientifico}")
+    except Exception:
+        pass
 
     avisar("Fase 3/4: Gerando autocalibração...")
     recomendacao = {
@@ -1648,6 +1572,7 @@ def salvar_relatorio_backtest_cientifico(resultado: dict) -> str:
     linhas.append("=" * 82)
     linhas.append(f"Gerado em: {resultado.get('data')}")
     linhas.append(f"Concursos testados: {resultado.get('passos')} | Janela: {resultado.get('janela')} | Jogos: {resultado.get('qtd_jogos')}")
+    linhas.append(f"Seed: {_descricao_seed()}")
     linhas.append("")
     linhas.append("1) RANKING CIENTÍFICO DE CONFIGURAÇÕES")
     linhas.append("-" * 82)

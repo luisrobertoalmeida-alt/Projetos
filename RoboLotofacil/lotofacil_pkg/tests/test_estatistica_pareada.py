@@ -27,7 +27,7 @@ from lotofacil_pkg.v20_6_bootstrap import (
     bootstrap_pareado,
     tost_equivalencia,
 )
-from lotofacil_pkg.v21_5_melhorias_cientificas import mapear_vale_gp
+from lotofacil_pkg.v21_5_melhorias_cientificas import mapear_vale_gp, mapear_vale_diversidade
 
 
 def _dados(vals):
@@ -140,9 +140,12 @@ class TestMapearValeGp(unittest.TestCase):
         for comp in r["comparacoes_pareadas"]:
             self.assertIn("cohen_d_pareado", comp)
             self.assertIn("p_value", comp)
+            self.assertIn("p_ajustado", comp)
             self.assertIn("tost_equivalente", comp)
             self.assertIn("veredito", comp)
             self.assertIn(comp["veredito"], ("POSSIVEL_VALE", "EQUIVALENTE", "INCONCLUSIVO"))
+            # Holm/Bonferroni so pode aumentar (nunca diminuir) o p-valor.
+            self.assertGreaterEqual(comp["p_ajustado"], comp["p_value"])
 
     def test_sem_diferenca_real_nao_confirma_vale(self):
         """Todas as configs geram jogos igualmente aleatorios -- nao deve haver vale real."""
@@ -152,6 +155,92 @@ class TestMapearValeGp(unittest.TestCase):
         r = mapear_vale_gp(self.hist, fn_gerar, janela=100, passos=30, qtd_jogos=10,
                             pontos_g=[20, 50, 80, 100])
         self.assertFalse(r["vale_confirmado"])
+
+    def test_correcao_multiplas_comparacoes_usa_p_ajustado(self):
+        """
+        Config de referencia gera sempre jogos com muitos acertos (real
+        favorecido deliberadamente); as demais, aleatorias -- garante ao
+        menos uma comparacao com p_value bruto baixo. p_ajustado deve ser
+        >= p_value em cada uma (nunca mais "significativo" apos a correcao
+        Holm/Bonferroni) e a decisao final (vale_confirmado) deve ser
+        consistente com o uso de p_ajustado, nao do p_value bruto.
+        """
+        real_ordenado = sorted(self.hist[-1])
+
+        def fn_gerar(hist, g, p, qtd):
+            if g == 999:
+                # "referencia" fortemente favorecida: sempre acerta muito.
+                return [real_ordenado[:15] for _ in range(qtd)]
+            return [sorted(random.sample(list(range(1, 26)), 15)) for _ in range(qtd)]
+
+        r = mapear_vale_gp(self.hist, fn_gerar, janela=100, passos=40, qtd_jogos=10,
+                            pontos_g=[20, 50, 80, 999], metodo_correcao="holm")
+        for comp in r["comparacoes_pareadas"]:
+            if "p_ajustado" in comp:
+                self.assertGreaterEqual(comp["p_ajustado"], comp["p_value"])
+        # A decisao de vale_confirmado tem que bater com o veredito das
+        # comparacoes reportadas (que ja usam p_ajustado internamente).
+        self.assertEqual(
+            r["vale_confirmado"],
+            any(c.get("veredito") == "POSSIVEL_VALE" for c in r["comparacoes_pareadas"]),
+        )
+
+
+class TestMapearValeDiversidade(unittest.TestCase):
+    """mapear_vale_diversidade() -- primeiro passo do 'Nível 4' (2026-08-08)."""
+
+    def setUp(self):
+        random.seed(43)
+        numeros = list(range(1, 26))
+        self.hist = [sorted(random.sample(numeros, 15)) for _ in range(200)]
+
+    def test_estrutura_do_retorno_tem_campos_estatisticos(self):
+        def fn_gerar(hist, diversidade, qtd):
+            return [sorted(random.sample(list(range(1, 26)), 15)) for _ in range(qtd)]
+
+        r = mapear_vale_diversidade(self.hist, fn_gerar, janela=100, passos=20, qtd_jogos=10,
+                                     pontos_diversidade=[0.5, 0.7, 0.9])
+        self.assertIn("resultados", r)
+        self.assertIn("vale_confirmado", r)
+        self.assertIn("comparacoes_pareadas", r)
+        self.assertIn("referencia_extremo", r)
+        for comp in r["comparacoes_pareadas"]:
+            self.assertIn("cohen_d_pareado", comp)
+            self.assertIn("p_value", comp)
+            self.assertIn("p_ajustado", comp)
+            self.assertIn("tost_equivalente", comp)
+            self.assertIn("veredito", comp)
+            self.assertIn(comp["veredito"], ("POSSIVEL_VALE", "EQUIVALENTE", "INCONCLUSIVO"))
+            self.assertGreaterEqual(comp["p_ajustado"], comp["p_value"])
+
+    def test_sem_diferenca_real_nao_confirma_vale(self):
+        """Todas as diversidades geram jogos igualmente aleatorios -- nao deve haver vale real."""
+        def fn_gerar(hist, diversidade, qtd):
+            return [sorted(random.sample(list(range(1, 26)), 15)) for _ in range(qtd)]
+
+        r = mapear_vale_diversidade(self.hist, fn_gerar, janela=100, passos=30, qtd_jogos=10,
+                                     pontos_diversidade=[0.5, 0.6, 0.75, 0.9])
+        self.assertFalse(r["vale_confirmado"])
+
+    def test_fn_gerar_recebe_o_valor_de_diversidade_correto(self):
+        """Garante que o valor de `d` passado para fn_gerar bate com o ponto da grade sendo avaliado."""
+        valores_recebidos = set()
+
+        def fn_gerar(hist, diversidade, qtd):
+            valores_recebidos.add(diversidade)
+            return [sorted(random.sample(list(range(1, 26)), 15)) for _ in range(qtd)]
+
+        mapear_vale_diversidade(self.hist, fn_gerar, janela=100, passos=15, qtd_jogos=5,
+                                 pontos_diversidade=[0.5, 0.6, 0.7])
+        self.assertEqual(valores_recebidos, {0.5, 0.6, 0.7})
+
+    def test_grade_padrao_inclui_075(self):
+        """Padrão documentado: [0.5, 0.6, 0.7, 0.75, 0.8, 0.9] -- 0.75 é o fallback histórico."""
+        def fn_gerar(hist, diversidade, qtd):
+            return [sorted(random.sample(list(range(1, 26)), 15)) for _ in range(qtd)]
+
+        r = mapear_vale_diversidade(self.hist, fn_gerar, janela=100, passos=15, qtd_jogos=5)
+        self.assertEqual(r["parametros"]["pontos_diversidade_testados"], [0.5, 0.6, 0.7, 0.75, 0.8, 0.9])
 
 
 if __name__ == "__main__":

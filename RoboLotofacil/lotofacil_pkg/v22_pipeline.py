@@ -51,7 +51,7 @@ _MAPA_METODOS_UI = {
 _FLAGS_CONCLUSAO = {
     "atualizar_historico":  "_atualizando",
     "aprendizado_continuo": "aprendizado_continuo_ativo",
-    "calibracao":           "laboratorio_historico_ativo",  # calibração usa o mesmo padrão
+    "calibracao":           "calibracao_ativa",
     "walkforward":          "_walkforward_ativo",
     "backtest_v11":         "backtest_cientifico_ativo",
     "gerar_jogos":          "_geracao_ativa",
