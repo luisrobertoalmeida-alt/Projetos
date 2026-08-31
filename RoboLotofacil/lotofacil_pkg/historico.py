@@ -7,7 +7,7 @@ import os
 import pandas as pd
 
 from . import config as _cfg
-from .config import MIN_HIST, ARQUIVO_CSV_PADRAO, NUMEROS, TAMANHO_JOGO
+from .config import MIN_HIST, ARQUIVO_CSV_PADRAO, NUMEROS, TAMANHO_SORTEIO
 from .utils import parse_data_br, contar_pares, soma_jogo, intersecao, distancia_jogos, limitar
 from collections import Counter
 from statistics import mean
@@ -57,7 +57,10 @@ def carregar_concursos_do_csv(caminho_csv: str, limite: int | None = None) -> li
     concursos = []
     for _, row in df.iterrows():
         jogo = sorted(int(row[c]) for c in cols)
-        if len(set(jogo)) == _cfg.TAMANHO_JOGO and all(1 <= n <= 25 for n in jogo):
+        # Cada linha do CSV é um sorteio oficial já realizado -- sempre 15
+        # dezenas (colunas d1..d15), independente do tamanho da aposta
+        # (_cfg.TAMANHO_JOGO) configurado na UI para os jogos a gerar.
+        if len(set(jogo)) == TAMANHO_SORTEIO and all(1 <= n <= 25 for n in jogo):
             concursos.append(jogo)
     if len(concursos) < MIN_HIST:
         raise ValueError(f"Histórico insuficiente: {len(concursos)} concursos válidos. Use ao menos {MIN_HIST}.")
