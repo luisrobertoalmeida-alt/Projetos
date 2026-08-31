@@ -78,13 +78,15 @@ def otimizar_pacote(
     limiar_media: float = 11.20,    # média mínima do melhor jogo
     max_tentativas: int = 10,       # máximo de pacotes gerados
     n_simulacoes: int = 500,        # simulações por candidato (leve)
+    parar_ao_atingir_limiar: bool = True,  # se False, roda sempre max_tentativas
     status_cb: Callable | None = None,
 ) -> tuple[list, dict]:
     """
     Gera até max_tentativas pacotes e retorna o melhor.
 
-    Aceita imediatamente se o pacote atingir limiar_11 E limiar_media.
-    Caso contrário, continua gerando e ao final retorna o melhor encontrado.
+    Se parar_ao_atingir_limiar=True (padrão), aceita imediatamente quando um
+    candidato atinge limiar_11 E limiar_media. Se False, sempre gera os
+    max_tentativas pacotes completos e escolhe o de maior score no final.
 
     Returns:
         (jogos, relatorio) onde relatorio contém métricas e histórico
@@ -145,12 +147,15 @@ def otimizar_pacote(
             melhor_jogos  = jogos
             melhor_metricas = metricas
 
-        # Aceita imediatamente se atingiu os dois limiares
-        if pct_11 >= limiar_11 and media >= limiar_media:
+        # Aceita imediatamente se atingiu os dois limiares (quando habilitado)
+        if parar_ao_atingir_limiar and pct_11 >= limiar_11 and media >= limiar_media:
             log(f"  ✅ Limiar atingido na tentativa {tentativa}!")
             break
     else:
-        log(f"  ⚠️ Limiar não atingido em {max_tentativas} tentativas — usando melhor encontrado")
+        if parar_ao_atingir_limiar:
+            log(f"  ⚠️ Limiar não atingido em {max_tentativas} tentativas — usando melhor encontrado")
+        else:
+            log(f"  🏁 {max_tentativas} tentativas concluídas — escolhendo a de maior score")
 
     log("-" * 60)
     log(f"🏆 Pacote selecionado | 11+={melhor_metricas.get('pct_11_mais')}% | "
