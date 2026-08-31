@@ -29,7 +29,7 @@ import random
 import math
 from typing import Callable, Any
 
-from .config import NUMEROS, TAMANHO_JOGO
+from .config import NUMEROS, TAMANHO_SORTEIO
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -50,7 +50,10 @@ def _simular_pacote(jogos: list, n_simulacoes: int = 500) -> dict:
     eventos_13 = 0
 
     for _ in range(n_simulacoes):
-        sorteio = frozenset(random.sample(numeros, TAMANHO_JOGO))
+        # O sorteio oficial SEMPRE tem 15 dezenas, mesmo quando as apostas
+        # do pacote têm mais (aposta estendida 16-18) -- usar o tamanho da
+        # aposta aqui infla os acertos simulados artificialmente.
+        sorteio = frozenset(random.sample(numeros, TAMANHO_SORTEIO))
         acertos = [len(jogo & sorteio) for jogo in jogos_sets]
         melhor = max(acertos)
         melhores.append(melhor)

@@ -40,7 +40,7 @@ import pandas as pd
 
 from . import config as _cfg
 from .config import (
-    NUMEROS, MIN_HIST, PASTA_EXPORT, PASTA_DADOS, TAMANHO_JOGO,
+    NUMEROS, MIN_HIST, PASTA_EXPORT, PASTA_DADOS, TAMANHO_SORTEIO,
     ARQUIVO_DESEMPENHO_HISTORICO, ARQUIVO_CONHECIMENTO_CIENTIFICO,
     ARQUIVO_PERFORMANCE_ESTRATEGIA, ARQUIVO_APRENDIZADO,
     VERSAO_ROBO, MODELOS_ENSEMBLE,
@@ -707,8 +707,11 @@ def backtest_basico(concursos: list, janela: int = 120, qtd_jogos: int = 20, pas
     }
 
 def gerar_jogos_aleatorios(qtd_jogos: int = 10) -> list[list[int]]:
+    """Gera apostas aleatórias do mesmo tamanho (_cfg.TAMANHO_JOGO, lido em
+    tempo real) usado pelo robô, para que a calibração compare pacotes com
+    o mesmo número de dezenas por aposta -- não o padrão de 15 congelado."""
     qtd_jogos = min(max(1, int(qtd_jogos)), 100)
-    return [sorted(random.sample(NUMEROS, TAMANHO_JOGO)) for _ in range(qtd_jogos)]
+    return [sorted(random.sample(NUMEROS, _cfg.TAMANHO_JOGO)) for _ in range(qtd_jogos)]
 
 
 def resumir_acertos_pacote(acertos: list) -> dict:
@@ -1938,7 +1941,10 @@ def auditar_pacote_jogos(jogos: list, analise: dict | None = None, qtd_simulacoe
     eventos_13_mais = 0
 
     for _ in range(qtd_simulacoes):
-        sorteio = set(random.sample(NUMEROS, _cfg.TAMANHO_JOGO))
+        # O sorteio oficial da Lotofácil SEMPRE tem 15 dezenas -- usar
+        # _cfg.TAMANHO_JOGO aqui (tamanho da aposta, 15-18) inflaria os
+        # acertos simulados quando o usuário aposta com mais de 15 números.
+        sorteio = set(random.sample(NUMEROS, TAMANHO_SORTEIO))
         acertos = [len(set(jogo) & sorteio) for jogo in jogos]
         melhor = max(acertos)
         melhores.append(melhor)
